@@ -1,0 +1,16 @@
+version: '3.8'
+services:
+  tw-autotrader:
+    build: .
+    volumes:
+      - ./logs:/app/logs
+      - ./plots:/app/plots
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      - STRATEGY=${STRATEGY}
+      - INITIAL_CAPITAL=${INITIAL_CAPITAL}
+      - MAX_RISK_PER_TRADE=${MAX_RISK_PER_TRADE}
+      - MAX_DAILY_LOSS=${MAX_DAILY_LOSS}
+      - MAX_DAILY_TRADES=${MAX_DAILY_TRADES}
+    restart: unless-stopped
