@@ -180,3 +180,8 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 create_tw_autotrader.py
+.idea/misc.xml
+.idea/modules.xml
+.idea/tw-autotrader.iml
+.idea/vcs.xml
+.idea/inspectionProfiles/profiles_settings.xml

@@ -1,56 +1,43 @@
 import pandas as pd
 import numpy as np
-import yfinance as yf
 from datetime import datetime, timedelta
 
 class KGIMockAPI:
     def __init__(self):
-        self.positions = {}
         self.order_count = 0
+        self.positions = {}
     
-    def get_today_minute_data(self, symbol: str) -> pd.DataFrame:
-        # 模擬：用 Yahoo 日線 + 隨機分鐘波動
-        yf_symbol = symbol + (".TWO" if symbol == "00632R" else ".TW")
-        today = datetime.now().strftime("%Y-%m-%d")
-        df_daily = yf.download(yf_symbol, start=today, end=today, interval="1d")
+    def get_current_price(self, symbol: str) -> float:
+        """模擬取得當前價格"""
+        # 實際應連接真實 API
+        base_prices = {"2330": 680.0, "0050": 125.5, "2454": 1100.0}
+        base = base_prices.get(symbol, 100.0)
+        # 加入隨機波動
+        return base * (1 + np.random.normal(0, 0.005))
+    
+    def get_historical_data(self, symbol: str, days: int = 30) -> pd.DataFrame:
+        """模擬取得歷史資料（用於實盤累積）"""
+        base_price = self.get_current_price(symbol)
+        dates = [datetime.now() - timedelta(days=i) for i in range(days)][::-1]
         
-        if df_daily.empty:
-            # 若無今日資料，用昨日
-            df_daily = yf.download(yf_symbol, period="1d")
-        
-        if df_daily.empty:
-            return None
-            
-        open_price = df_daily['Open'].iloc[0]
-        close_price = df_daily['Close'].iloc[0]
-        high = df_daily['High'].iloc[0]
-        low = df_daily['Low'].iloc[0]
-        volume = int(df_daily['Volume'].iloc[0] / 390)  # 平均每分鐘
-        
-        # 生成 390 分鐘模擬資料
-        minutes = 390
-        prices = np.random.normal(loc=close_price, scale=(high-low)/10, size=minutes)
-        prices = np.clip(prices, low, high)
-        prices[0] = open_price
-        prices[-1] = close_price
+        prices = [base_price]
+        for _ in range(1, days):
+            prices.append(prices[-1] * (1 + np.random.normal(0, 0.02)))
         
         df = pd.DataFrame({
-            'timestamp': [datetime.now().replace(hour=9, minute=i) for i in range(minutes)],
-            'open': prices,
-            'high': prices * 1.001,
-            'low': prices * 0.999,
+            'date': dates,
+            'open': [p * (1 - np.random.uniform(0, 0.01)) for p in prices],
+            'high': [p * (1 + np.random.uniform(0, 0.02)) for p in prices],
+            'low': [p * (1 - np.random.uniform(0, 0.02)) for p in prices],
             'close': prices,
-            'volume': [volume] * minutes
+            'volume': [np.random.randint(1000000, 5000000) for _ in prices]
         })
-        df.set_index('timestamp', inplace=True)
-        
-        # 計算真實 VWAP（累積）
-        df['cum_value'] = (df['close'] * df['volume']).cumsum()
-        df['cum_volume'] = df['volume'].cumsum()
-        df['VWAP'] = df['cum_value'] / df['cum_volume']
+        df = df.set_index('date')
         return df
     
-    def place_order(self, symbol: str, side: str, quantity: int):
+    def place_order(self, symbol: str, action: str, quantity: int):
+        """模擬下單"""
         self.order_count += 1
-        print(f"📦 模擬下單 #{self.order_count}: {side} {symbol} {quantity} 股")
-        return {"order_id": self.order_count, "status": "filled"}
+        price = self.get_current_price(symbol)
+        print(f"📦 模擬下單 #{self.order_count}: {action} {symbol} {quantity} 股 @ {price:.2f}")
+        return {"order_id": self.order_count, "status": "filled", "price": price}
