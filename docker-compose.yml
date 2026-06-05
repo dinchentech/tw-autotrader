@@ -1,16 +1,15 @@
 version: '3.8'
 services:
-  tw-autotrader:
+  autotrader:
     build: .
+    container_name: tw_autotrader_bot
+    restart: always
+    env_file:
+      - .env
     volumes:
-      - ./logs:/app/logs
-      - ./plots:/app/plots
-    environment:
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
-      - STRATEGY=${STRATEGY}
-      - INITIAL_CAPITAL=${INITIAL_CAPITAL}
-      - MAX_RISK_PER_TRADE=${MAX_RISK_PER_TRADE}
-      - MAX_DAILY_LOSS=${MAX_DAILY_LOSS}
-      - MAX_DAILY_TRADES=${MAX_DAILY_TRADES}
-    restart: unless-stopped
+      - .:/app
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m" # 防止日誌塞爆 DigitalOcean $6 方案硬碟
+        max-file: "3"
