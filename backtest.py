@@ -34,23 +34,78 @@ STRATEGY_CONFIG = {
     }
 }
 
+# 所有策略參數統一定義（用於 argparse）
+STRATEGY_PARAMS = {
+    "vwap": {
+        "sigma_mult": {"default": 1.5,  "type": float, "help": "VWAP 偏離倍數"},
+        "rsi_period": {"default": 5,    "type": int,   "help": "RSI 計算週期"},
+    },
+    "ma_cross": {
+        "fast_period": {"default": 9,   "type": int, "help": "快線週期"},
+        "slow_period": {"default": 21,  "type": int, "help": "慢線週期"},
+    },
+    "bollinger": {
+        "window":   {"default": 20, "type": int,   "help": "布林通道計算週期"},
+        "std_dev":  {"default": 2.0,"type": float, "help": "標準差倍數"},
+        "rsi_period": {"default": 5,  "type": int,   "help": "RSI 計算週期"},
+    },
+    "breakout": {
+        "lookback":   {"default": 20, "type": int,   "help": "突破回溯期間"},
+        "atr_period": {"default": 14, "type": int,   "help": "ATR 計算週期"},
+    },
+}
+
 def get_strategy_from_env_or_args():
-    """從環境變數或命令列取得策略名稱"""
-    parser = argparse.ArgumentParser(description='TW AutoTrader - Backtest Mode')
+    """從環境變數或命令列取得策略名稱與參數"""
+    parser = argparse.ArgumentParser(
+        description='TW AutoTrader - Backtest Mode',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "各策略可用參數：\n"
+            "  vwap:     --sigma_mult, --rsi_period\n"
+            "  ma_cross: --fast_period, --slow_period\n"
+            "  bollinger: --window, --std_dev, --rsi_period\n"
+            "  breakout: --lookback, --atr_period\n"
+            "\n"
+            "範例：\n"
+            "  python backtest.py --strategy ma_cross --fast_period 5 --slow_period 30\n"
+            "  python backtest.py --strategy bollinger --std_dev 2.5 --rsi_period 7\n"
+            "  python backtest.py --strategy breakout --lookback 40\n"
+            "  python backtest.py --strategy vwap --sigma_mult 2.0"
+        )
+    )
     parser.add_argument('--strategy', type=str, default=None,
                         help='選擇策略: vwap, ma_cross, bollinger, breakout')
     parser.add_argument('--start', type=str, default="2023-01-01",
                         help='回測開始日期 (YYYY-MM-DD)')
+
+    # 動態加入所有策略參數（共用參數名不會衝突）
+    for sname, sparam in STRATEGY_PARAMS.items():
+        for pname, popts in sparam.items():
+            parser.add_argument(
+                f'--{pname}',
+                type=popts["type"],
+                default=None,
+                help=f'{sname}: {popts["help"]} (預設 {popts["default"]})'
+            )
+
     args = parser.parse_args()
-    
+
     strategy_name = args.strategy or os.getenv("STRATEGY", "vwap")
     strategy_name = strategy_name.lower()
-    
+
     if strategy_name not in STRATEGY_CONFIG:
         print(f"❌ 無效策略: {strategy_name}，使用預設 'vwap'")
         strategy_name = "vwap"
-    
-    return strategy_name, args.start
+
+    # 只取出當前策略相關的參數，有傳入則覆蓋預設值
+    params = STRATEGY_CONFIG[strategy_name]["params"].copy()
+    for pname in STRATEGY_PARAMS[strategy_name]:
+        cli_val = getattr(args, pname, None)
+        if cli_val is not None:
+            params[pname] = cli_val
+
+    return strategy_name, args.start, params
 
 def calculate_performance(df: pd.DataFrame) -> dict:
     """計算策略績效"""
@@ -123,8 +178,8 @@ def export_results_to_csv(results: list, strategy_name: str):
     print(f"\n✅ 績效結果已匯出: {filename}")
 
 def main():
-    strategy_name, start_date = get_strategy_from_env_or_args()
-    config = STRATEGY_CONFIG[strategy_name]
+    strategy_name, start_date, params = get_strategy_from_env_or_args()
+    config = {"func": STRATEGY_CONFIG[strategy_name]["func"], "params": params}
     
     print(f"📊 開始回測 TW AutoTrader")
     print(f"🎯 使用策略: {strategy_name}")

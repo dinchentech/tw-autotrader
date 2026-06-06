@@ -5,14 +5,31 @@ import pandas as pd
 from datetime import datetime
 
 # ==========================================
-# 1. 核心投資組合配置
+# 1. 核心投資組合配置（從 .env 讀取）
+#    格式：PORTFOLIO=0050:bollinger,2330:ma_cross,2382:breakout,2881:vwap
+#    未設定則使用下方預設值
 # ==========================================
-MY_PORTFOLIO = {
-    "0050": "bollinger",  # 市值型 ETF -> 搭配布林反轉（恐慌抄底）
-    "2330": "ma_cross",   # 台積電 -> 搭配均線交叉（順勢抱大波段）
-    "2382": "breakout",   # 廣達 AI 股 -> 搭配唐奇安突破（抓主力發動）
-    "2881": "vwap"        # 富邦金金融股 -> 搭配 VWAP 偏離（低於法人成本安心存）
-}
+def load_portfolio() -> dict:
+    raw = os.getenv("PORTFOLIO")
+    if raw:
+        portfolio = {}
+        for pair in raw.split(","):
+            pair = pair.strip()
+            if ":" not in pair:
+                continue
+            symbol, strategy = pair.split(":", 1)
+            portfolio[symbol.strip()] = strategy.strip().lower()
+        if portfolio:
+            return portfolio
+    # 預設投資組合（.env 未設定時生效）
+    return {
+        "0050": "bollinger",
+        "2330": "ma_cross",
+        "2382": "breakout",
+        "2881": "vwap",
+    }
+
+MY_PORTFOLIO = load_portfolio()
 
 USE_REAL_API = os.getenv("USE_REAL_API", "false").lower() == "true"
 
@@ -56,10 +73,22 @@ def main():
     )
     
     strategy_instances = {
-        "vwap": VWAPDeviationStrategy(sigma_mult=1.5, rsi_period=5),
-        "ma_cross": MACrossStrategy(fast_period=9, slow_period=21),
-        "bollinger": BollingerReverseStrategy(window=20, std_dev=2.0),
-        "breakout": BreakoutStrategy(lookback=20)
+        "vwap": VWAPDeviationStrategy(
+            sigma_mult=float(os.getenv("VWAP_SIGMA_MULT", 1.5)),
+            rsi_period=int(os.getenv("VWAP_RSI_PERIOD", 5)),
+        ),
+        "ma_cross": MACrossStrategy(
+            fast_period=int(os.getenv("MA_CROSS_FAST_PERIOD", 9)),
+            slow_period=int(os.getenv("MA_CROSS_SLOW_PERIOD", 21)),
+        ),
+        "bollinger": BollingerReverseStrategy(
+            window=int(os.getenv("BOLLINGER_WINDOW", 20)),
+            std_dev=float(os.getenv("BOLLINGER_STD_DEV", 2.0)),
+            rsi_period=int(os.getenv("BOLLINGER_RSI_PERIOD", 5)),
+        ),
+        "breakout": BreakoutStrategy(
+            lookback=int(os.getenv("BREAKOUT_LOOKBACK", 20)),
+        )
     }
     
     portfolio_history = {}

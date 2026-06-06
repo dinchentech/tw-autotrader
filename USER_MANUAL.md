@@ -1,9 +1,10 @@
 # TW AutoTrader 使用手冊
 
-> **版本**：3.0  
-> **最後更新**：2025 年 4 月  
+> **版本**：3.1  
+> **最後更新**：2026 年 6 月  
 > **適用對象**：台灣個人投資者  
-> **核心功能**：✅ 四策略回測 ✅ 真實券商 API ✅ 風險控管 ✅ Telegram 通知
+> **核心功能**：✅ 四策略回測 ✅ 真實券商 API ✅ 風險控管 ✅ Telegram / LINE 通知  
+> **參數調整**：✅ 免改程式碼 — CLI 命令列 / `.env` 環境變數
 
 ---
 
@@ -15,28 +16,37 @@ TW AutoTrader 是一套 **專業級台股自動交易系統**，整合：
 - **真實券商支援**：凱基證券 API（可替換為其他券商）
 - **專業風險控管**：單筆風險、每日虧損上限、交易次數限制
 - **即時監控**：Telegram 通知 + 交易日誌
-- **靈活部署**：本機開發 + Docker 生產部署
+- **低成本部署**：GCP 定時排程（~60 元/月）、Docker、本機開發
 
 ---
 
 ## 📁 專案結構
 
 ```
-tw-autotrader-finmind/
-├── strategies/              # 四種策略實作（FinMind 格式）
+tw-autotrader/
+├── strategies/              # 四種策略實作（函式版 / FinMind class 版）
 ├── core/                    # 核心模組
+│   ├── strategy_engine.py   # 策略執行引擎
 │   └── risk_manager.py      # 風險控管
 ├── data/                    # 資料模組
+│   ├── yahoo_loader.py      # Yahoo Finance 下載器
 │   ├── kgi_mock.py          # 凱基 API 模擬器
 │   └── kgi_real.py          # 真實凱基 API 連接
 ├── utils/                   # 工具模組
 │   └── telegram.py          # Telegram 通知
+├── config/
+│   └── symbols.py           # 可交易標的設定
 ├── tests/                   # 自動化測試
+├── backtest.py              # Yahoo Finance 回測（命令列調參）
 ├── backtest_finmind.py      # FinMind 回測
-├── live_trader_finmind.py   # 實盤交易主程式
+├── live_trader.py           # 實盤交易（函式版策略）
+├── live_trader_finmind.py   # 實盤交易（FinMind class 策略）
+├── live_trader_multi.py     # 多股多策略分流系統
 ├── requirements.txt         # 依賴套件
-├── .env.example             # 環境設定範例
-└── USER_MANUAL.MD           # 本使用手冊
+├── .env.example             # 環境設定範例（含策略參數）
+├── USER_MANUAL.MD           # 本使用手冊
+├── 策略說明.MD               # 四大策略原理解說
+└── 回溯說明.MD              # 回溯（Backtest）操作指南
 ```
 
 ---
@@ -82,11 +92,44 @@ USE_REAL_API=false  # 開發時設為 false，實盤時設為 true
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token
 TELEGRAM_CHAT_ID=your_telegram_chat_id
 
+# LINE Notify 通知
+LINE_NOTIFY_TOKEN=your_line_notify_token
+
 # 風險控管參數
 INITIAL_CAPITAL=1000000      # 初始資金（台幣）
 MAX_RISK_PER_TRADE=0.01      # 單筆最大風險（1%）
 MAX_DAILY_LOSS=0.05          # 每日最大虧損（5%）
 MAX_DAILY_TRADES=3           # 每日最大交易次數
+
+# ==========================================
+# 策略參數（不設定則使用預設值）
+# live_trader_finmind.py / live_trader_multi.py 自動讀取
+# backtest.py 則用 --參數 命令列覆蓋
+# ==========================================
+
+# VWAP 偏離度反轉策略
+VWAP_SIGMA_MULT=1.5          # VWAP 偏離倍數
+VWAP_RSI_PERIOD=5            # RSI 計算週期
+
+# 均線交叉策略
+MA_CROSS_FAST_PERIOD=9       # 快線週期
+MA_CROSS_SLOW_PERIOD=21      # 慢線週期
+
+# 布林通道反轉策略
+BOLLINGER_WINDOW=20          # 布林通道計算週期
+BOLLINGER_STD_DEV=2.0        # 標準差倍數
+BOLLINGER_RSI_PERIOD=5       # RSI 計算週期
+
+# 突破交易策略
+BREAKOUT_LOOKBACK=20         # 突破回溯期間
+BREAKOUT_ATR_PERIOD=14       # ATR 計算週期
+
+# ==========================================
+# 多股組合配置（live_trader_multi.py 專用）
+# 格式：股票代號:策略名稱,股票代號:策略名稱,...
+# 不設定則使用程式內建預設組合
+# ==========================================
+# PORTFOLIO=0050:bollinger,2330:ma_cross,2382:breakout,2881:vwap
 ```
 
 > 💡 **取得 API Token 教學**：
@@ -98,80 +141,167 @@ MAX_DAILY_TRADES=3           # 每日最大交易次數
 
 ## 📊 第二步：回測驗證
 
-### 2.1 執行回測
-```bash
-# 執行 VWAP 策略回測
-python backtest_finmind.py
+### 2.1 執行 Yahoo Finance 回測（快速批次驗證）
 
-# 指定股票和期間
+```bash
+# 使用預設策略（vwap）回測全部標的
+python backtest.py
+
+# 指定策略與開始日期
+python backtest.py --strategy ma_cross --start 2022-01-01
+
+# 調整策略參數（免改程式碼！）
+python backtest.py --strategy ma_cross --fast_period 5 --slow_period 30
+python backtest.py --strategy bollinger --std_dev 2.5 --rsi_period 7
+python backtest.py --strategy breakout --lookback 40
+python backtest.py --strategy vwap --sigma_mult 2.0
+```
+
+> 💡 完整參數列表請參閱 [`回溯說明.MD`](回溯說明.MD)。
+
+### 2.2 執行 FinMind 回測（多策略比較）
+
+```bash
+# 需先註冊 FinMind API Token
 python backtest_finmind.py --symbol 2330 --start 2023-01-01
 ```
 
-### 2.2 回測輸出範例
+### 2.3 回測輸出範例
 ```
-📊 開始 FinMind 回測: 2330
+📊 開始回測 TW AutoTrader
+🎯 使用策略: ma_cross
+⚙️  策略參數: {'fast_period': 5, 'slow_period': 30}
+📅 回測期間: 2023-01-01 ~ 今日
 
-VWAP Deviation 策略績效:
-  最終權益: 1085632.45
-  交易次數: 24
-  勝率: 62.50%
-  平均報酬: 3.57%
+  → 回測 2330 (2330.TW)...
+    ✅ 交易次數: 24, 勝率: 62.5%, 總報酬: 18.32%
+  → 回測 2454 (2454.TW)...
 
-MA Cross 策略績效:
-  最終權益: 1042187.32
-  交易次數: 18
-  勝率: 55.56%
-  平均報酬: 2.34%
+📈 回測總結
+============================================================
+2330   | 交易: 24 次 | 勝率: 62.5% | 報酬: 18.32%
+2454   | 交易: 18 次 | 勝率: 55.6% | 報酬: 12.45%
+...
+------------------------------------------------------------
+平均   | 交易: 42 次 | 勝率: 58.2% | 報酬: 14.88%
+
+✅ 績效結果已匯出: results/backtest_results_ma_cross_20260606_143022.csv
 ```
-
-### 2.3 回測參數說明
-| 參數 | 預設值 | 說明 |
-|------|--------|------|
-| `--symbol` | `2330` | 股票代號 |
-| `--start` | `2023-01-01` | 回測開始日期 |
 
 ---
 
-## 🚀 第三步：實盤交易
+## ⚠️ 第三步：策略暖身所需最少 K 線數
 
-### 3.1 開發測試（模擬模式）
+所有策略都是使用「滑動視窗（rolling window）」計算技術指標。在餵入的歷史資料還不夠多時，指標會是無效值（NaN）或噪聲極大，此時產生的交易訊號**不可靠**。
+
+### 各策略暖身門檻
+
+| 策略 | ⚡ 程式能產出第一個訊號 | 📊 指標真正穩定可靠 |
+|------|----------------------|-------------------|
+| **VWAP 偏離** | 6 根 K 線（RSI 限制） | 20 根（Std 收斂） |
+| **均線交叉** | 2 根 K 線（shift 限制） | 22 根（MA21 完整一輪） |
+| **布林反轉** | 2 根 K 線 | 20 根（通道穩定） |
+| **突破交易** | 2 根 K 線（shift 限制） | 21 根（Donchian 通道滿） |
+
+### 範例解說
+
+以 **均線交叉（ma_cross, fast_period=9, slow_period=21）** 為例：
+
+```
+K 線  1 ~ 21：   MA21 只有部分資料，數值不具代表性
+K 線     22：    MA21 首次涵蓋完整 21 根，交叉判斷才可靠
+           ╰── 在此之前產生的黃金/死亡交叉都是假訊號
+```
+
+以 **VWAP 偏離（vwap, rsi_period=5, sigma_mult=1.5）** 為例：
+
+```
+K 線  1 ~ 5：    RSI 尚未產出有效值（全為 NaN）
+K 線      6：    RSI 首次有效
+K 線  1 ~ 19：   Std 使用 min_periods=1，數值逐漸收斂
+K 線     20：    Std 完全收斂，偏離判斷才真正可靠
+```
+
+### 實戰建議
+
+| 情境 | 建議餵入資料量 |
+|------|--------------|
+| **回測**（`backtest.py`） | 回測期間設為 **1 年以上**（約 250 根交易日 K 線），前 22 根視為 warm-up 即可 |
+| **實盤剛啟動**（`live_trader_finmind.py`） | 程式會自動抓取 **30 天歷史資料**（約 22 根交易日 K 線），足夠所有策略暖身 |
+| **多股實盤剛啟動**（`live_trader_multi.py`） | 同上，自動抓取 **30 天歷史資料** |
+| **手動餵資料測試** | 至少餵 **22 根 K 線** 再開始觀察訊號 |
+
+### 為什麼回測一定要設 `--start` 夠早？
+
 ```bash
-# 使用模擬器測試 VWAP 策略
-python live_trader_finmind.py --symbol 2330 --strategy vwap
+# ❌ 錯誤：只給一個月資料，MA21 連一次交叉都算不準
+python backtest.py --strategy ma_cross --start 2026-05-01
 
-# 測試其他策略
-python live_trader_finmind.py --symbol 0050 --strategy ma_cross
+# ✅ 正確：至少給一年，前 22 根 warm-up 後還有 200+ 根可交易
+python backtest.py --strategy ma_cross --start 2025-01-01
 ```
 
-### 3.2 真實交易（生產模式）
-1. **編輯 `.env` 檔案**：
-   ```env
-   USE_REAL_API=true
-   KGI_API_KEY=your_real_kgi_api_key
-   KGI_API_SECRET=your_real_kgi_api_secret
-   ```
-
-2. **啟動真實交易**：
-   ```bash
-   python live_trader_finmind.py --symbol 2330 --strategy vwap
-   ```
-
-### 3.3 策略參數說明
-| 策略 | 參數 | 預設值 | 說明 |
-|------|------|--------|------|
-| `vwap` | `--sigma_mult` | `1.5` | VWAP 偏離倍數 |
-| | `--rsi_period` | `5` | RSI 週期 |
-| `ma_cross` | `--fast_period` | `9` | 快速均線週期 |
-| | `--slow_period` | `21` | 慢速均線週期 |
-| `bollinger` | `--window` | `20` | 布林通道週期 |
-| | `--std_dev` | `2.0` | 標準差倍數 |
-| `breakout` | `--lookback` | `20` | 突破回溯期間 |
+> 💡 **簡單記法：不管用哪個策略，餵少於 22 根 K 線就開始看訊號，跟擲硬幣沒兩樣。**
 
 ---
 
-## 🛡️ 第四步：風險控管
+## 🚀 第四步：實盤交易
 
-### 4.1 風險參數設定
+### 4.1 單股交易（`live_trader.py` / `live_trader_finmind.py`）
+
+```bash
+# 開發測試（模擬模式）
+python live_trader_finmind.py --symbol 2330 --strategy vwap
+python live_trader_finmind.py --symbol 0050 --strategy ma_cross
+
+# 真實交易（生產模式）
+# 先編輯 .env：USE_REAL_API=true
+python live_trader_finmind.py --symbol 2330 --strategy vwap
+```
+
+### 4.2 多股多策略分流（`live_trader_multi.py`）
+
+同時監控多檔股票，每檔搭配不同策略：
+
+```bash
+# 使用 .env 中的 PORTFOLIO 設定
+python live_trader_multi.py
+```
+
+`.env` 設定範例：
+```env
+PORTFOLIO=0050:bollinger,2330:ma_cross,2382:breakout,2881:vwap
+```
+
+每檔股票會獨立判斷，不會互相干擾。
+
+### 4.3 調整策略參數（免改程式碼）
+
+實盤策略參數透過 `.env` 環境變數設定：
+
+```env
+# 回測找到最佳參數後，直接寫入 .env
+VWAP_SIGMA_MULT=2.0
+MA_CROSS_FAST_PERIOD=5
+MA_CROSS_SLOW_PERIOD=30
+BOLLINGER_STD_DEV=2.5
+BOLLINGER_RSI_PERIOD=7
+BREAKOUT_LOOKBACK=40
+```
+
+三支程式的參數調整方式對照：
+
+| 程式 | 調整方式 | 範例 |
+|------|----------|------|
+| `backtest.py` | CLI 命令列 `--參數` | `--fast_period 5 --slow_period 30` |
+| `live_trader_finmind.py` | `.env` 環境變數 | `MA_CROSS_FAST_PERIOD=5` |
+| `live_trader_multi.py` | `.env` 環境變數 | `MA_CROSS_FAST_PERIOD=5` |
+
+---
+
+## 🛡️ 第五步：風險控管
+
+### 5.1 風險參數設定
 在 `.env` 檔案中設定：
 
 | 參數 | 預設值 | 說明 |
@@ -181,13 +311,13 @@ python live_trader_finmind.py --symbol 0050 --strategy ma_cross
 | `MAX_DAILY_LOSS` | `0.05` | 每日最大可接受虧損（5%） |
 | `MAX_DAILY_TRADES` | `3` | 每日最大交易次數 |
 
-### 4.2 風險控管功能
+### 5.2 風險控管功能
 - **單筆風險限制**：動態計算部位大小
 - **每日虧損上限**：達上限後停止交易
 - **交易次數限制**：避免過度交易
 - **漲跌停過濾**：跳過流動性枯竭標的
 
-### 4.3 部位計算邏輯
+### 5.3 部位計算邏輯
 ```
 風險金額 = 初始資金 × MAX_RISK_PER_TRADE
 止損距離 = 股價 × 2%（固定百分比）
@@ -197,9 +327,9 @@ python live_trader_finmind.py --symbol 0050 --strategy ma_cross
 
 ---
 
-## 📱 第五步：Telegram 通知
+## 📱 第六步：Telegram 通知
 
-### 5.1 設定步驟
+### 6.1 設定步驟
 1. **建立 Telegram Bot**：
    - Telegram 搜尋 `@BotFather`
    - 輸入 `/newbot` 建立新 Bot
@@ -216,7 +346,7 @@ python live_trader_finmind.py --symbol 0050 --strategy ma_cross
    TELEGRAM_CHAT_ID=your_chat_id
    ```
 
-### 5.2 通知內容範例
+### 6.2 通知內容範例
 ```
 🤖 TW AutoTrader
 *BUY 2330*
@@ -228,9 +358,9 @@ python live_trader_finmind.py --symbol 0050 --strategy ma_cross
 
 ---
 
-## 🧪 第六步：自動化測試
+## 🧪 第七步：自動化測試
 
-### 6.1 執行測試
+### 7.1 執行測試
 ```bash
 # 執行所有策略測試
 python -m pytest tests/ -v
@@ -239,16 +369,31 @@ python -m pytest tests/ -v
 python tests/test_strategies.py
 ```
 
-### 6.2 測試內容
+### 7.2 測試內容
 - 策略訊號產生正確性
 - 空資料處理
 - 邊界條件測試
 
 ---
 
-## 🐳 第七步：Docker 部署（可選）
+## ☁️ 第八步：雲端部署（GCP 定時排程，成本最低）
 
-### 7.1 建立 Dockerfile
+### 8.1 為什麼選 GCP 定時排程？
+
+台股交易時間只有 **週一至五 09:00~13:30**（約 4.5 小時），把主機 24/7 開著很浪費。用 GCP 的排程服務只在交易時間開機，成本極低：
+
+| 方案 | 運算方式 | 每月成本（估） | 適用本金 |
+|------|---------|--------------|---------|
+| **GCP 定時 VM**（e2-micro, spot） | 開盤前開機 → 收盤後關機 | **~60 元** | 1 萬 ~ 100 萬以上 |
+| **Cloud Run Jobs**（無伺服器） | 每分鐘觸發一次，其餘靜止 | **~50 元** | 同上 |
+| **Docker 24/7 VPS**（DO/NAS） | 24 小時全時運轉 | **~200 元** | 建議本金 50 萬以上 |
+
+### 8.2 方式一：Docker + GCP Compute Engine（定時開關機）
+
+#### 建立機器映像
+
+在本地端建立 Dockerfile：
+
 ```dockerfile
 FROM python:3.10-slim
 RUN apt-get update && apt-get install -y libfreetype6-dev libpng-dev && rm -rf /var/lib/apt/lists/*
@@ -259,14 +404,78 @@ COPY . .
 CMD ["python", "live_trader_finmind.py", "--symbol", "2330", "--strategy", "vwap"]
 ```
 
-### 7.2 一鍵部署
 ```bash
-# 建立並啟動容器
+# 建立映像
 docker build -t tw-autotrader .
-docker run -d --env-file .env --name tw-autotrader tw-autotrader
+```
 
-# 監控日誌
-docker logs -f tw-autotrader
+#### 上傳到 GCP
+
+```bash
+# 上傳至 Google Container Registry
+gcloud auth configure-docker
+docker tag tw-autotrader gcr.io/[PROJECT_ID]/tw-autotrader
+docker push gcr.io/[PROJECT_ID]/tw-autotrader
+```
+
+#### 建立 VM（開盤前開機 → 收盤後關機）
+
+```bash
+# 建立 e2-micro（最低成本）
+gcloud compute instances create tw-autotrader \
+  --zone=asia-east1-a \
+  --machine-type=e2-micro \
+  --preemptible \
+  --container-image=gcr.io/[PROJECT_ID]/tw-autotrader \
+  --container-env-file=.env
+```
+
+```bash
+# 建立 Cloud Scheduler（開盤前 08:50 開機）
+gcloud scheduler jobs create pubsub start-instance \
+  --schedule="50 8 * * 1-5" \
+  --topic=start-instance \
+  --message-body='{"instance": "tw-autotrader"}'
+
+# Cloud Scheduler（收盤後 13:35 關機）
+gcloud scheduler jobs create pubsub stop-instance \
+  --schedule="35 13 * * 1-5" \
+  --topic=stop-instance \
+  --message-body='{"instance": "tw-autotrader"}'
+```
+
+設定完成後，主機只在**週一至五 08:50~13:35** 運轉，每月運算時數約 **90 小時**，e2-micro 費用約 **60 元台幣**。
+
+### 8.3 方式二：Cloud Run Jobs（無主機管理）
+
+更輕量的做法：用 Cloud Scheduler + Cloud Run Jobs，每分鐘執行一次策略檢查。
+
+```bash
+# 建立 Cloud Run Job（無伺服器，按呼叫次數計費）
+gcloud run jobs create tw-autotrader \
+  --image=gcr.io/[PROJECT_ID]/tw-autotrader \
+  --region=asia-east1 \
+  --max-retries=0 \
+  --task-timeout=30s
+
+# Cloud Scheduler（每分鐘觸發，開盤時段才處理）
+gcloud scheduler jobs create http trigger-trader \
+  --schedule="* 9-13 * * 1-5" \
+  --uri="https://asia-east1-run.googleapis.com/..." \
+  --http-method=POST
+```
+
+Cloud Run 在沒有呼叫時不計費，**開盤時段約 270 次呼叫/日**，每月帳單約 **50 元台幣**。
+
+### 8.4 監控日誌
+
+```bash
+# VM 模式
+gcloud compute ssh tw-autotrader -- "docker logs tw-autotrader"
+
+# Cloud Run 模式
+gcloud run jobs executions list --region=asia-east1
+gcloud logging read "resource.type=cloud_run_job" --limit=50
 ```
 
 ---
@@ -321,11 +530,15 @@ docker logs -f tw-autotrader
 | 功能 | 指令 |
 |------|------|
 | **安裝依賴** | `pip install -r requirements.txt` |
-| **回測 VWAP** | `python backtest_finmind.py --symbol 2330` |
-| **模擬實盤** | `python live_trader_finmind.py --strategy vwap` |
-| **真實交易** | `USE_REAL_API=true python live_trader_finmind.py --strategy vwap` |
+| **回測（Yahoo Finance，可調參）** | `python backtest.py --strategy ma_cross --fast_period 5 --slow_period 30` |
+| **回測（FinMind 多策略比較）** | `python backtest_finmind.py --symbol 2330` |
+| **單股實盤** | `python live_trader_finmind.py --symbol 2330 --strategy vwap` |
+| **多股多策略實盤** | `python live_trader_multi.py` |
+| **參數調整（回測）** | CLI 命令列 `--參數` |
+| **參數調整（實盤）** | 編輯 `.env`，重啟程式 |
 | **執行測試** | `python tests/test_strategies.py` |
-| **Docker 部署** | `docker run -d --env-file .env tw-autotrader` |
+| **本地 Docker 測試** | `docker build -t tw-autotrader . && docker run -d --env-file .env tw-autotrader` |
+| **GCP 定時部署** | `gcloud run jobs create tw-autotrader --image=... && gcloud scheduler jobs create http ...` |
 
 ---
 

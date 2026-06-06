@@ -37,12 +37,24 @@ def run_live_trading(symbol: str = "2330", strategy_name: str = "vwap"):
         max_daily_trades=int(os.getenv("MAX_DAILY_TRADES", 3))
     )
     
-    # 選擇策略
+    # 選擇策略（從 .env 讀取參數，未設定則使用預設值）
     strategy_map = {
-        "vwap": VWAPDeviationStrategy(sigma_mult=1.5, rsi_period=5),
-        "ma_cross": MACrossStrategy(fast_period=9, slow_period=21),
-        "bollinger": BollingerReverseStrategy(window=20, std_dev=2.0),
-        "breakout": BreakoutStrategy(lookback=20)
+        "vwap": VWAPDeviationStrategy(
+            sigma_mult=float(os.getenv("VWAP_SIGMA_MULT", 1.5)),
+            rsi_period=int(os.getenv("VWAP_RSI_PERIOD", 5)),
+        ),
+        "ma_cross": MACrossStrategy(
+            fast_period=int(os.getenv("MA_CROSS_FAST_PERIOD", 9)),
+            slow_period=int(os.getenv("MA_CROSS_SLOW_PERIOD", 21)),
+        ),
+        "bollinger": BollingerReverseStrategy(
+            window=int(os.getenv("BOLLINGER_WINDOW", 20)),
+            std_dev=float(os.getenv("BOLLINGER_STD_DEV", 2.0)),
+            rsi_period=int(os.getenv("BOLLINGER_RSI_PERIOD", 5)),
+        ),
+        "breakout": BreakoutStrategy(
+            lookback=int(os.getenv("BREAKOUT_LOOKBACK", 20)),
+        )
     }
     
     if strategy_name not in strategy_map:
