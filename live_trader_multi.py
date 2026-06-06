@@ -3,6 +3,8 @@ import time
 import requests
 import pandas as pd
 from datetime import datetime
+import json
+from pathlib import Path
 
 # ==========================================
 # 1. 核心投資組合配置（從 .env 讀取）
@@ -64,7 +66,63 @@ def send_line_notification(message):
 def main():
     print("🚀 啟動 TW AutoTrader 多股多策略分流系統（全天候監控模式）")
     send_line_notification("\n🤖 TW AutoTrader 雲端主機已成功啟動！開始全天候監控台股...")
+
+    # ==========================================
+    # 股票數量上限檢查（GCP e2-micro 建議值）
+    # 超過 15 支時提出警告，但不強制停止
+    # ==========================================
+    MAX_RECOMMENDED_STOCKS = 15
+    if len(MY_PORTFOLIO) > MAX_RECOMMENDED_STOCKS:
+        print(f"⚠️  警告：投資組合中有 {len(MY_PORTFOLIO)} 支股票，超過建議上限 {MAX_RECOMMENDED_STOCKS} 支。")
+        print(f"   由於程式是順序處理，股票過多會導致每輪循環時間拉長，訊號失去即時性。")
+        print(f"   建議將股票數降至 {MAX_RECOMMENDED_STOCKS} 支以下，或將程式改為非同步並行架構。")
+
+    # ==========================================
+    # 每月預算控管
+    # ==========================================
+    budget_file = Path("logs/monthly_budget.json")
     
+    def load_monthly_budget() -> dict:
+        """載入本月已使用預算"""
+        current_month = datetime.now().strftime("%Y-%m")
+        if budget_file.exists():
+            try:
+                data = json.loads(budget_file.read_text())
+                if data.get("month") == current_month:
+                    return data.get("spent", {})
+            except:
+                pass
+        return {}
+    
+    def save_monthly_budget(spent: dict):
+        """儲存本月已使用預算"""
+        current_month = datetime.now().strftime("%Y-%m")
+        budget_file.write_text(json.dumps({
+            "month": current_month,
+            "spent": spent
+        }, indent=2))
+    
+    def check_monthly_budget(strategy_name: str, cost: float, spent: dict) -> bool:
+        """檢查本月預算是否足夠，回傳 True = 可以下單"""
+        budget_key = f"MONTHLY_BUDGET_{strategy_name.upper()}"
+        monthly_limit = float(os.getenv(budget_key, 0))
+        if monthly_limit <= 0:
+            return True  # 0 = 不限制
+        current_spent = spent.get(strategy_name, 0)
+        if current_spent + cost > monthly_limit:
+            print(f"⚠️  每月預算已達上限：{strategy_name} "
+                  f"本月已花 {current_spent:.0f} / {monthly_limit:.0f} 元，跳過此筆交易")
+            return False
+        return True
+    
+    def update_monthly_spending(strategy_name: str, cost: float, spent: dict):
+        """扣減預算並儲存"""
+        spent[strategy_name] = spent.get(strategy_name, 0) + cost
+        save_monthly_budget(spent)
+    
+    # 初始化每月預算
+    budget_spent = load_monthly_budget()
+
     broker = BrokerAPI()
     risk_manager = RiskManager(
         max_risk_per_trade=float(os.getenv("MAX_RISK_PER_TRADE", 0.01)),
@@ -148,27 +206,36 @@ def main():
                     action = "BUY" if signal == 1 else "SELL"
                     
                     # ==========================================
-                    # 【核心核心：自動化小資零股戰術】
+                    # 下單股數計算（從 .env 讀取，不設定則使用預設值）
                     # ==========================================
                     position_size = 0
                     
-                    # 戰術 A & B：逆勢與均線（單筆大於 2000 元，自動算股數）
+                    # 金額制策略：指定單筆金額，自動換算股數
                     if strategy_name in ["bollinger", "vwap", "ma_cross"]:
-                        target_amount = 2500 if strategy_name != "ma_cross" else 2200
+                        amount_key = f"{strategy_name.upper()}_POSITION_AMOUNT"
+                        defaults = {"bollinger": 2500, "vwap": 2500, "ma_cross": 2200}
+                        target_amount = int(os.getenv(amount_key, defaults[strategy_name]))
                         position_size = int(target_amount // current_price)
+                        if position_size <= 0:
+                            position_size = 1  # 至少買 1 股
                     
-                    # 戰術 C：唐奇安突破（首次買 50 股，創高再追 50 股）
+                    # 股數制策略：直接指定買/賣股數
                     elif strategy_name == "breakout":
-                        if action == "BUY":
-                            position_size = 50  # 簡化風控，突破或創高皆自動追 50 股
-                        else:
-                            position_size = 100 # 賣出時出清部位
+                        buy_shares = int(os.getenv("BREAKOUT_POSITION_BUY", 50))
+                        sell_shares = int(os.getenv("BREAKOUT_POSITION_SELL", 100))
+                        position_size = buy_shares if action == "BUY" else sell_shares
                     
                     if position_size <= 0:
                         continue
                         
                     if not risk_manager.check_trade_allowed(symbol, signal, current_price):
                         continue
+                    
+                    # 每月預算檢查（僅買進時才扣預算）
+                    if action == "BUY":
+                        trade_cost = current_price * position_size
+                        if not check_monthly_budget(strategy_name, trade_cost, budget_spent):
+                            continue
                     
                     # 下單執行
                     if USE_REAL_API:
@@ -179,6 +246,11 @@ def main():
                         broker.place_order(symbol, action, position_size)
                     
                     risk_manager.log_trade(symbol, signal, current_price, position_size)
+                    
+                    # 更新每月預算花費
+                    if action == "BUY":
+                        trade_cost = current_price * position_size
+                        update_monthly_spending(strategy_name, trade_cost, budget_spent)
                     
                     # ==========================================
                     # 雙重同時通知（Telegram + LINE Notify）

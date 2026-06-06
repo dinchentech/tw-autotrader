@@ -130,6 +130,25 @@ BREAKOUT_ATR_PERIOD=14       # ATR 計算週期
 # 不設定則使用程式內建預設組合
 # ==========================================
 # PORTFOLIO=0050:bollinger,2330:ma_cross,2382:breakout,2881:vwap
+
+# ==========================================
+# 下單股數設定（live_trader_multi.py 專用）
+# 金額制策略：bollinger / vwap / ma_cross 用 target_amount 計算股數
+# 股數制策略：breakout 直接指定買/賣股數
+# ==========================================
+# BOLLINGER_POSITION_AMOUNT=2500
+# VWAP_POSITION_AMOUNT=2500
+# MA_CROSS_POSITION_AMOUNT=2200
+# BREAKOUT_POSITION_BUY=50
+# BREAKOUT_POSITION_SELL=100
+
+# ==========================================
+# 每月預算控管（0 = 不限制）
+# ==========================================
+# MONTHLY_BUDGET_BOLLINGER=10000
+# MONTHLY_BUDGET_VWAP=3000
+# MONTHLY_BUDGET_MA_CROSS=4000
+# MONTHLY_BUDGET_BREAKOUT=3000
 ```
 
 > 💡 **取得 API Token 教學**：
@@ -275,7 +294,27 @@ PORTFOLIO=0050:bollinger,2330:ma_cross,2382:breakout,2881:vwap
 
 每檔股票會獨立判斷，不會互相干擾。
 
-### 4.3 調整策略參數（免改程式碼）
+### 4.3 股票數量上限建議
+
+由於 `live_trader_multi.py` 採用**順序迴圈架構**（一支股票處理完才處理下一支），股票數量過多會導致每輪循環時間拉長：
+
+| 股票數 | 每輪循環時間 | 建議 |
+|--------|------------|------|
+| 1~4 支 | ~68 秒 | ✅ 最佳，當前設計目標 |
+| 5~10 支 | ~80 秒 | ✅ 良好，仍在 1 分鐘內 |
+| 10~15 支 | ~95 秒 | ⚠️ 可接受，留意循環漂移 |
+| 15+ 支 | 超過 100 秒 | ❌ 不建議，訊號失去即時性 |
+
+**建議上限：15 支股票**。如果你需要同時監控超過 15 支股票，建議：
+- 方案一：將程式改為非同步並行（asyncio）架構，同時發送 API 請求
+- 方案二：開兩台 GCP e2-micro VM，各負責一半股票
+- 方案三：改用 Cloud Run Jobs + Cloud Scheduler，每分鐘觸發一次（無主機管理）
+
+> 💡 超過 15 支時程式會顯示警告訊息，但不會強制停止。
+
+---
+
+### 4.4 調整策略參數（免改程式碼）
 
 實盤策略參數透過 `.env` 環境變數設定：
 
@@ -324,6 +363,27 @@ BREAKOUT_LOOKBACK=40
 股數 = 風險金額 / 止損距離
 張數 = floor(股數 / 1000)  # 台股一張 = 1000 股
 ```
+
+### 5.4 每月預算控管
+
+`live_trader_multi.py` 支援**每月每策略預算上限**，避免單一策略超額下單：
+
+```env
+# 各策略每月預算（0 = 不限制）
+MONTHLY_BUDGET_BOLLINGER=10000      # ETF 逆勢策略，預算最高
+MONTHLY_BUDGET_VWAP=3000            # 金融存股策略
+MONTHLY_BUDGET_MA_CROSS=4000        # 權值股順勢策略
+MONTHLY_BUDGET_BREAKOUT=3000        # 飆股順勢策略
+```
+
+運作方式：
+- **只有買進（BUY）會扣預算**，賣出（SELL）不計入
+- 預算以「買進成本」（股數 × 成交價）計算，**不是**以每月總額預扣
+- 月中達到預算上限後，該策略就不再買進，直到下個月 1 號重置
+- 設定 `0` 或留空 = 不限制預算
+- 預算追蹤資料儲存在 `logs/monthly_budget.json`
+
+可搭配風險控管同時使用，兩層防護互不衝突。
 
 ---
 
