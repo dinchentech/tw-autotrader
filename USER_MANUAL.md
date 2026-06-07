@@ -439,24 +439,56 @@ PYRAMID_TIER2_DROP=0.03
 
 ## 📱 第六步：Telegram 通知
 
-### 6.1 設定步驟
-1. **建立 Telegram Bot**：
-   - Telegram 搜尋 `@BotFather`
-   - 輸入 `/newbot` 建立新 Bot
-   - 取得 `BOT_TOKEN`
+### 6.1 建立 Telegram Bot（取得 Token）
 
-2. **取得 Chat ID**：
-   - 對你的 Bot 傳送訊息
-   - 瀏覽 `https://api.telegram.org/bot<BOT_TOKEN>/getUpdates`
-   - 找到 `chat.id` 數值
-
-3. **填入 `.env` 檔案**：
-   ```env
-   TELEGRAM_BOT_TOKEN=your_bot_token
-   TELEGRAM_CHAT_ID=your_chat_id
+1. 打開 Telegram，搜尋 `@BotFather`
+2. 輸入 `/newbot`
+3. 依提示輸入機器人名稱（例如 `TW AutoTrader`）
+4. 完成後 `@BotFather` 會回傳一組 Token，格式如下：
    ```
+   1234567890:AAFghijklmnopqrstuvwxyzABCDEFGH
+   ```
+5. **複製這串 Token**，它只顯示一次
 
-### 6.2 通知內容範例
+### 6.2 取得 Chat ID
+
+1. Telegram 搜尋你剛建立的 Bot，點進去按 **Start**（或傳一句話給它）
+2. 打開瀏覽器，貼上以下網址（**把 `<你的TOKEN>` 換成剛剛複製的那串**）：
+   ```
+   https://api.telegram.org/bot<你的TOKEN>/getUpdates
+   ```
+3. 瀏覽器畫面中搜尋 `"chat":{"id":`，後面那組數字就是 Chat ID
+   - 例如：`"chat":{"id":-123456789,"title":"...`
+   - **個人通知**：Chat ID 通常是正數（如 `123456789`）
+   - **群組通知**：Chat ID 通常是負數（如 `-123456789`）
+
+### 6.3 填入 .env
+
+```env
+TELEGRAM_BOT_TOKEN=1234567890:AAFghijklmnopqrstuvwxyzABCDEFGH
+TELEGRAM_CHAT_ID=-123456789
+```
+
+> ⚠️ **群組通知特別注意**：如果選擇發送到群組，必須手動將 `@BotFather` 建立的那個 Bot **邀請進群組**，否則收不到通知。
+
+### 6.4 驗證
+
+設定完成後，執行一次程式：
+```bash
+python live_trader_multi.py
+```
+
+成功的話你會收到 Telegram 通知：
+```
+🤖 TW AutoTrader 雲端主機已成功啟動！開始全天候監控台股...
+```
+
+沒收到請檢查：
+- Token 是否完整複製（含冒號前面那段數字）
+- Chat ID 正負號是否正確
+- 群組通知的話，Bot 是否已被邀請進群組
+
+### 6.5 通知內容範例
 ```
 🤖 TW AutoTrader
 *BUY 2330*
