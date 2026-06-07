@@ -2,7 +2,7 @@ import os
 import time
 import requests
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, date
 import json
 from pathlib import Path
 
@@ -123,6 +123,17 @@ def main():
     # 初始化每月預算
     budget_spent = load_monthly_budget()
 
+    # ==========================================
+    # 大盤年線過濾器
+    # ==========================================
+    from core.market_filter import MarketTrendFilter
+    market_filter = MarketTrendFilter()
+
+    # ==========================================
+    # 金字塔加碼追蹤（記錄每檔股票的買進次數與價格）
+    # ==========================================
+    pyramid_tracker = {}  # { symbol: { buy_count: 0, last_buy_price: 0 } }
+
     broker = BrokerAPI()
     risk_manager = RiskManager(
         max_risk_per_trade=float(os.getenv("MAX_RISK_PER_TRADE", 0.01)),
@@ -216,7 +227,50 @@ def main():
                         amount_key = f"{strategy_name.upper()}_POSITION_AMOUNT"
                         defaults = {"bollinger": 2500, "vwap": 2500, "ma_cross": 2200}
                         target_amount = int(os.getenv(amount_key, defaults[strategy_name]))
-                        position_size = int(target_amount // current_price)
+                        
+                        # 金字塔加碼：檢查是否啟用且為買進
+                        pyramid_enabled = os.getenv("PYRAMID_ENABLED", "false").lower() == "true"
+                        if pyramid_enabled and action == "BUY" and strategy_name == "bollinger":
+                            # 初始化追蹤
+                            if symbol not in pyramid_tracker:
+                                pyramid_tracker[symbol] = {"buy_count": 0, "last_buy_price": 0}
+                            tracker = pyramid_tracker[symbol]
+                            
+                            tier1 = int(os.getenv("PYRAMID_TIER1_SHARES", 200))
+                            tier2 = int(os.getenv("PYRAMID_TIER2_SHARES", 400))
+                            tier3 = int(os.getenv("PYRAMID_TIER3_SHARES", 600))
+                            tier2_drop = float(os.getenv("PYRAMID_TIER2_DROP", 0.03))
+                            tier3_drop = float(os.getenv("PYRAMID_TIER3_DROP", 0.05))
+                            
+                            if tracker["buy_count"] == 0:
+                                # 首次買進
+                                position_size = tier1
+                                tracker["last_buy_price"] = current_price
+                                tracker["buy_count"] = 1
+                                print(f"🔔 金字塔加碼 Tier 1：{symbol} 首次買進 {tier1} 股 @ {current_price:.2f}")
+                            elif tracker["buy_count"] == 1:
+                                # 檢查是否跌夠深觸發 Tier 2
+                                drop = (tracker["last_buy_price"] - current_price) / tracker["last_buy_price"]
+                                if drop >= tier2_drop:
+                                    position_size = tier2
+                                    tracker["last_buy_price"] = current_price
+                                    tracker["buy_count"] = 2
+                                    print(f"🔔 金字塔加碼 Tier 2：{symbol} 加碼 {tier2} 股（跌 {drop:.1%}）")
+                                else:
+                                    # 未達加碼門檻，用一般金額制
+                                    position_size = int(target_amount // current_price)
+                            elif tracker["buy_count"] >= 2:
+                                drop = (tracker["last_buy_price"] - current_price) / tracker["last_buy_price"]
+                                if drop >= tier3_drop and tracker["buy_count"] < 3:
+                                    position_size = tier3
+                                    tracker["last_buy_price"] = current_price
+                                    tracker["buy_count"] = 3
+                                    print(f"🔔 金字塔加碼 Tier 3：{symbol} 加碼 {tier3} 股（跌 {drop:.1%}）")
+                                else:
+                                    position_size = int(target_amount // current_price)
+                        else:
+                            position_size = int(target_amount // current_price)
+                        
                         if position_size <= 0:
                             position_size = 1  # 至少買 1 股
                     
@@ -238,6 +292,12 @@ def main():
                         if not check_monthly_budget(strategy_name, trade_cost, budget_spent):
                             continue
                     
+                    # 大盤年線過濾（僅買進時檢查）
+                    if action == "BUY" and os.getenv("MARKET_TREND_FILTER", "true").lower() == "true":
+                        if not market_filter.is_above_ma200():
+                            print(f"🛑 {symbol} 買進被大盤年線過濾攔截")
+                            continue
+                    
                     # 下單執行
                     if USE_REAL_API:
                         order_result = broker.place_order(symbol, action.lower(), position_size)
@@ -247,6 +307,10 @@ def main():
                         broker.place_order(symbol, action, position_size)
                     
                     risk_manager.log_trade(symbol, signal, current_price, position_size)
+                    
+                    # 賣出時重置金字塔追蹤
+                    if action == "SELL" and symbol in pyramid_tracker:
+                        del pyramid_tracker[symbol]
                     
                     # 更新每月預算花費
                     if action == "BUY":

@@ -150,6 +150,21 @@ BREAKOUT_ATR_PERIOD=14       # ATR 計算週期
 # MONTHLY_BUDGET_VWAP=3000
 # MONTHLY_BUDGET_MA_CROSS=4000
 # MONTHLY_BUDGET_BREAKOUT=3000
+
+# ==========================================
+# 大盤年線過濾（FinMind 為資料源，抓不到則跳過）
+# ==========================================
+MARKET_TREND_FILTER=true
+
+# ==========================================
+# 金字塔加碼（Bollinger 分批進場，需設 PYRAMID_ENABLED=true）
+# ==========================================
+# PYRAMID_ENABLED=false
+# PYRAMID_TIER1_SHARES=200
+# PYRAMID_TIER2_SHARES=400
+# PYRAMID_TIER3_SHARES=600
+# PYRAMID_TIER2_DROP=0.03
+# PYRAMID_TIER3_DROP=0.05
 ```
 
 > 💡 **取得 API Token 教學**：
@@ -385,6 +400,40 @@ MONTHLY_BUDGET_BREAKOUT=3000        # 飆股順勢策略
 - 預算追蹤資料儲存在 `logs/monthly_budget.json`
 
 可搭配風險控管同時使用，兩層防護互不衝突。
+
+### 5.5 大盤年線過濾
+
+避免在空頭市場（大盤跌破年線）時逆勢買進：
+
+- 啟動時從 **FinMind** 抓取加權指數（TX00）日線，計算 MA200
+- 若指數 < MA200，跳過所有買進訊號
+- 若 FinMind 抓取失敗（網路、API 問題），**安全跳過不過濾**，不影響正常交易
+- 設定 `MARKET_TREND_FILTER=false` 可關閉
+
+```env
+MARKET_TREND_FILTER=true
+```
+
+### 5.6 金字塔加碼（Bollinger 分批進場）
+
+Bollinger 逆勢策略觸發買進時，分批次進場降低成本，而非一次性買足：
+
+| 梯次 | 條件 | 買入股數 |
+|------|------|---------|
+| Tier 1 | 首次觸發訊號 | 200 股 |
+| Tier 2 | 價格再跌 3% | 400 股 |
+| Tier 3 | 價格再跌 5% | 600 股 |
+
+僅限 Bollinger 策略，可透過 `.env` 啟用：
+
+```env
+PYRAMID_ENABLED=true
+PYRAMID_TIER1_SHARES=200
+PYRAMID_TIER2_SHARES=400
+PYRAMID_TIER2_DROP=0.03
+```
+
+> 預設為關閉（`PYRAMID_ENABLED=false`），需要手動開啟。
 
 ---
 
