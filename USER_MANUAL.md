@@ -123,7 +123,8 @@ BOLLINGER_RSI_PERIOD=5       # RSI 計算週期
 
 # 突破交易策略
 BREAKOUT_LOOKBACK=20         # 突破回溯期間
-BREAKOUT_ATR_PERIOD=14       # ATR 計算週期
+BREAKOUT_ATR_PERIOD=14       # ATR 計算週期（預設 14 天）
+BREAKOUT_ATR_THRESHOLD=0.01  # ATR/股價比率門檻，低於此值跳過訊號（預設 0.01 = 1%）
 
 # ==========================================
 # 多股組合配置（live_trader_multi.py 專用）
