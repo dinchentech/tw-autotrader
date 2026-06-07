@@ -138,6 +138,7 @@ def main():
         "ma_cross": MACrossStrategy(
             fast_period=int(os.getenv("MA_CROSS_FAST_PERIOD", 9)),
             slow_period=int(os.getenv("MA_CROSS_SLOW_PERIOD", 21)),
+            atr_threshold=float(os.getenv("MA_CROSS_ATR_THRESHOLD", 0.005)),
         ),
         "bollinger": BollingerReverseStrategy(
             window=int(os.getenv("BOLLINGER_WINDOW", 20)),
