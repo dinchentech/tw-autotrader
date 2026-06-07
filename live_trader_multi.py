@@ -158,6 +158,8 @@ def main():
         ),
         "breakout": BreakoutStrategy(
             lookback=int(os.getenv("BREAKOUT_LOOKBACK", 20)),
+            atr_period=int(os.getenv("BREAKOUT_ATR_PERIOD", 14)),
+            atr_threshold=float(os.getenv("BREAKOUT_ATR_THRESHOLD", 0.01)),
         )
     }
     

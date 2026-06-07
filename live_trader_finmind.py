@@ -55,6 +55,8 @@ def run_live_trading(symbol: str = "2330", strategy_name: str = "vwap"):
         ),
         "breakout": BreakoutStrategy(
             lookback=int(os.getenv("BREAKOUT_LOOKBACK", 20)),
+            atr_period=int(os.getenv("BREAKOUT_ATR_PERIOD", 14)),
+            atr_threshold=float(os.getenv("BREAKOUT_ATR_THRESHOLD", 0.01)),
         )
     }
     
