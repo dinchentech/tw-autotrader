@@ -22,7 +22,7 @@ STRATEGY_CONFIG = {
     },
     "ma_cross": {
         "func": ma_cross_strategy,
-        "params": {"fast_period": 9, "slow_period": 21}
+        "params": {"fast_period": 9, "slow_period": 21, "atr_threshold": 0.005}
     },
     "bollinger": {
         "func": bollinger_reverse_strategy,
@@ -35,19 +35,25 @@ STRATEGY_CONFIG = {
 }
 
 # 所有策略參數統一定義（用於 argparse）
+# 跨策略共用參數只定義一次，避免 argparse 衝突
+SHARED_PARAMS = {
+    "rsi_period": {"default": 5, "type": int, "help": "RSI 計算週期"},
+}
+
 STRATEGY_PARAMS = {
     "vwap": {
         "sigma_mult": {"default": 1.5,  "type": float, "help": "VWAP 偏離倍數"},
-        "rsi_period": {"default": 5,    "type": int,   "help": "RSI 計算週期"},
+        "rsi_period": SHARED_PARAMS["rsi_period"],
     },
     "ma_cross": {
-        "fast_period": {"default": 9,   "type": int, "help": "快線週期"},
-        "slow_period": {"default": 21,  "type": int, "help": "慢線週期"},
+        "fast_period": {"default": 9,   "type": int,   "help": "快線週期"},
+        "slow_period": {"default": 21,  "type": int,   "help": "慢線週期"},
+        "atr_threshold": {"default": 0.005, "type": float, "help": "ATR波動度門檻"},
     },
     "bollinger": {
         "window":   {"default": 20, "type": int,   "help": "布林通道計算週期"},
         "std_dev":  {"default": 2.0,"type": float, "help": "標準差倍數"},
-        "rsi_period": {"default": 5,  "type": int,   "help": "RSI 計算週期"},
+        "rsi_period": SHARED_PARAMS["rsi_period"],
     },
     "breakout": {
         "lookback":   {"default": 20, "type": int,   "help": "突破回溯期間"},
@@ -62,8 +68,8 @@ def get_strategy_from_env_or_args():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "各策略可用參數：\n"
-            "  vwap:     --sigma_mult, --rsi_period\n"
-            "  ma_cross: --fast_period, --slow_period\n"
+             "  vwap:     --sigma_mult, --rsi_period\n"
+             "  ma_cross: --fast_period, --slow_period, --atr_threshold\n"
             "  bollinger: --window, --std_dev, --rsi_period\n"
             "  breakout: --lookback, --atr_period\n"
             "\n"
@@ -79,15 +85,18 @@ def get_strategy_from_env_or_args():
     parser.add_argument('--start', type=str, default="2023-01-01",
                         help='回測開始日期 (YYYY-MM-DD)')
 
-    # 動態加入所有策略參數（共用參數名不會衝突）
+    # 動態加入所有策略參數（去重避免同名衝突）
+    added_params = set()
     for sname, sparam in STRATEGY_PARAMS.items():
         for pname, popts in sparam.items():
-            parser.add_argument(
-                f'--{pname}',
-                type=popts["type"],
-                default=None,
-                help=f'{sname}: {popts["help"]} (預設 {popts["default"]})'
-            )
+            if pname not in added_params:
+                parser.add_argument(
+                    f'--{pname}',
+                    type=popts["type"],
+                    default=None,
+                    help=f'{sname}: {popts["help"]} (預設 {popts["default"]})'
+                )
+                added_params.add(pname)
 
     args = parser.parse_args()
 

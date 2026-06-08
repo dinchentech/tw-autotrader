@@ -17,6 +17,10 @@ def load_historical_data(symbol: str, start: str = "2023-01-01") -> pd.DataFrame
         if df.empty:
             return df
             
+        # 處理 yfinance 新版 MultiIndex columns（如 ('Close', '2330.TW')）
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+        
         # 重新命名欄位為小寫（與系統其他部分一致）
         df = df.rename(columns={
             "Open": "open", 
