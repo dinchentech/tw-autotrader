@@ -16,7 +16,7 @@ TW AutoTrader 是一套 **專業級台股自動交易系統**，整合：
 - **真實券商支援**：凱基證券 API（可替換為其他券商）
 - **專業風險控管**：單筆風險、每日虧損上限、交易次數限制
 - **即時監控**：Telegram 通知 + 交易日誌
-- **低成本部署**：GCP 定時排程（~60 元/月）、Docker、本機開發
+- **低成本部署**：GCP 定時排程（~50 元/月）、Docker、本機開發
 
 ---
 
@@ -519,106 +519,129 @@ python tests/test_strategies.py
 
 ---
 
-## ☁️ 第八步：雲端部署（GCP 定時排程，成本最低）
+## ☁️ 第八步：雲端部署（GCP 定時排程，最低 ~NT$50/月）
 
-### 8.1 為什麼選 GCP 定時排程？
+### 8.1 為什麼選 GCP？
 
-台股交易時間只有 **週一至五 09:00~13:30**（約 4.5 小時），把主機 24/7 開著很浪費。用 GCP 的排程服務只在交易時間開機，成本極低：
+GCP 在**彰化（asia-east1）**有資料中心，台灣 IP、低延遲，而且內建 **Instance Schedules（實例排程）** — 不需要寫任何腳本，直接設定 VM 週一~五自動開關機。
 
-| 方案 | 運算方式 | 每月成本（估） | 適用本金 |
-|------|---------|--------------|---------|
-| **GCP 定時 VM**（e2-micro, spot） | 開盤前開機 → 收盤後關機 | **~60 元** | 1 萬 ~ 100 萬以上 |
-| **Cloud Run Jobs**（無伺服器） | 每分鐘觸發一次，其餘靜止 | **~50 元** | 同上 |
-| **Docker 24/7 VPS**（DO/NAS） | 24 小時全時運轉 | **~200 元** | 建議本金 50 萬以上 |
+台股交易時間只有 **週一至五 09:00~13:30**（約 4.5 小時），配合排程只在交易時段開機：
 
-### 8.2 方式一：Docker + GCP Compute Engine（定時開關機）
+| 方案 | 說明 | 月費（估） | 年費（估） |
+|------|------|-----------|-----------|
+| **GCP e2-micro 定時開關** | Instance Schedules 自動排程 | **~NT$50** | **~NT$600** |
+| Cloud Run Jobs（無伺服器） | 每分鐘觸發 | ~NT$50 | ~NT$600 |
+| 24/7 VPS（LightNode 等） | 全時運轉 | ~NT$250 | ~NT$3,000 |
 
-#### 建立機器映像
+### 8.2 費用試算
 
-在本地端建立 Dockerfile：
+| 項目 | 說明 | 月費 |
+|------|------|-----|
+| **運算** e2-micro（asia-east1） | 116 hr × $0.0101/hr（排程後） | **$1.17** |
+| **硬碟** 10 GB 標準持久碟 | 停機也收費 | **$0.40** |
+| **IP** Ephemeral（開機自動配發） | 免費，每次重開 IP 會換（API client 沒差） | **$0** |
+| **合計 USD** | | **~$1.57** |
+| **合計 TWD** | | **~NT$50** |
 
-```dockerfile
-FROM python:3.10-slim
-RUN apt-get update && apt-get install -y libfreetype6-dev libpng-dev && rm -rf /var/lib/apt/lists/*
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-CMD ["python", "live_trader_finmind.py", "--symbol", "2330", "--strategy", "vwap"]
+> 💡 **新用戶 $300 美元免費額度**：前 90 天連 $1.57 都不用花。
+
+### 8.3 一鍵部署（gcloud 指令）
+
+#### 前置準備
+```bash
+# 安裝 Google Cloud SDK（一次性）
+# https://cloud.google.com/sdk/docs/install
+
+# 登入並設定專案
+gcloud auth login
+gcloud config set project 你的專案ID
 ```
 
-```bash
-# 建立映像
-docker build -t tw-autotrader .
-```
-
-#### 上傳到 GCP
+#### 建立 VM + 排程（複製貼上即可）
 
 ```bash
-# 上傳至 Google Container Registry
-gcloud auth configure-docker
-docker tag tw-autotrader gcr.io/[PROJECT_ID]/tw-autotrader
-docker push gcr.io/[PROJECT_ID]/tw-autotrader
-```
-
-#### 建立 VM（開盤前開機 → 收盤後關機）
-
-```bash
-# 建立 e2-micro（最低成本）
+# 1. 建立 e2-micro VM（台灣機房）
 gcloud compute instances create tw-autotrader \
-  --zone=asia-east1-a \
+  --zone=asia-east1-b \
   --machine-type=e2-micro \
-  --preemptible \
-  --container-image=gcr.io/[PROJECT_ID]/tw-autotrader \
-  --container-env-file=.env
-```
+  --image-family=ubuntu-2204-lts \
+  --image-project=ubuntu-os-cloud \
+  --tags=tw-autotrader
 
-```bash
-# 建立 Cloud Scheduler（開盤前 08:50 開機）
-gcloud scheduler jobs create pubsub start-instance \
-  --schedule="50 8 * * 1-5" \
-  --topic=start-instance \
-  --message-body='{"instance": "tw-autotrader"}'
-
-# Cloud Scheduler（收盤後 13:35 關機）
-gcloud scheduler jobs create pubsub stop-instance \
-  --schedule="35 13 * * 1-5" \
-  --topic=stop-instance \
-  --message-body='{"instance": "tw-autotrader"}'
-```
-
-設定完成後，主機只在**週一至五 08:50~13:35** 運轉，每月運算時數約 **90 小時**，e2-micro 費用約 **60 元台幣**。
-
-### 8.3 方式二：Cloud Run Jobs（無主機管理）
-
-更輕量的做法：用 Cloud Scheduler + Cloud Run Jobs，每分鐘執行一次策略檢查。
-
-```bash
-# 建立 Cloud Run Job（無伺服器，按呼叫次數計費）
-gcloud run jobs create tw-autotrader \
-  --image=gcr.io/[PROJECT_ID]/tw-autotrader \
+# 2. 建立排程（週一~五 08:00 開機 → 14:00 關機）
+gcloud compute resource-policies create instance-schedule trade-hours \
   --region=asia-east1 \
-  --max-retries=0 \
-  --task-timeout=30s
+  --vm-start-schedule="0 8 * * 1-5" \
+  --vm-stop-schedule="0 14 * * 1-5" \
+  --timezone="Asia/Taipei"
 
-# Cloud Scheduler（每分鐘觸發，開盤時段才處理）
-gcloud scheduler jobs create http trigger-trader \
-  --schedule="* 9-13 * * 1-5" \
-  --uri="https://asia-east1-run.googleapis.com/..." \
-  --http-method=POST
+# 3. 將排程綁定到 VM
+gcloud compute instances add-resource-policies tw-autotrader \
+  --resource-policies=trade-hours \
+  --zone=asia-east1-b
 ```
 
-Cloud Run 在沒有呼叫時不計費，**開盤時段約 270 次呼叫/日**，每月帳單約 **50 元台幣**。
+> ✅ 到這步 VM 就會自動在週一~五 **08:00 開機、14:00 關機**，假日不開。
 
-### 8.4 監控日誌
+#### SSH 進 VM 部署程式
 
 ```bash
-# VM 模式
-gcloud compute ssh tw-autotrader -- "docker logs tw-autotrader"
+gcloud compute ssh tw-autotrader --zone=asia-east1-b
+```
 
-# Cloud Run 模式
-gcloud run jobs executions list --region=asia-east1
-gcloud logging read "resource.type=cloud_run_job" --limit=50
+進 VM 後執行：
+```bash
+# 安裝 Docker
+sudo apt-get update && sudo apt-get install -y docker.io docker-compose-plugin
+
+# 下載專案
+git clone https://github.com/你的帳號/tw-autotrader.git
+cd tw-autotrader
+
+# 建立 .env（貼入你的 API Token）
+cp .env.example .env
+nano .env
+
+# 啟動（背景執行）
+sudo docker compose up -d
+
+# 查看日誌
+sudo docker logs -f tw_autotrader_bot
+```
+
+### 8.4 圖形介面操作（不熟指令的人適用）
+
+如果不想用指令，全部可以在網頁上完成：
+
+1. 打開 [GCP Console → Compute Engine](https://console.cloud.google.com/compute/instances)
+2. 點 **「建立執行個體」**
+3. 名稱填 `tw-autotrader`，區域選 **asia-east1**（台灣）
+4. 機器類型選 **e2-micro**（1 GB RAM，最便宜）
+5. 開放下方 **「防火牆」** 允許 HTTP/HTTPS（非必要，但方便）
+6. 點開 **「進階選項」→「執行個體排程」**
+   - 建立新的排程 → 取名 `trade-hours`
+   - 開始時間 `08:00`、結束時間 `14:00`
+   - 頻率選 **「每週」** → 勾選週一至週五
+   - 時區選 **Asia/Taipei**
+7. 點 **「建立」**
+8. 建立後在 VM 列表點 **SSH** 按鈕，會開瀏覽器終端機
+9. 在終端機貼上上面第 8.3 節的部署指令（安裝 Docker + git clone）
+
+### 8.5 監控與維護
+
+```bash
+# 查看即時日誌
+gcloud compute ssh tw-autotrader --zone=asia-east1-b -- "sudo docker logs -f tw_autotrader_bot"
+
+# 顯示費用
+gcloud billing accounts list
+
+# 手動開關（不受排程影響）
+gcloud compute instances start tw-autotrader --zone=asia-east1-b
+gcloud compute instances stop tw-autotrader --zone=asia-east1-b
+
+# 刪除 VM（不再使用時）
+gcloud compute instances delete tw-autotrader --zone=asia-east1-b
 ```
 
 ---
@@ -681,7 +704,7 @@ gcloud logging read "resource.type=cloud_run_job" --limit=50
 | **參數調整（實盤）** | 編輯 `.env`，重啟程式 |
 | **執行測試** | `python tests/test_strategies.py` |
 | **本地 Docker 測試** | `docker build -t tw-autotrader . && docker run -d --env-file .env tw-autotrader` |
-| **GCP 定時部署** | `gcloud run jobs create tw-autotrader --image=... && gcloud scheduler jobs create http ...` |
+| **GCP 定時部署** | `gcloud compute instances create tw-autotrader --zone=asia-east1-b --machine-type=e2-micro` + `gcloud compute resource-policies create instance-schedule ...`（詳見 §8.3） |
 
 ---
 

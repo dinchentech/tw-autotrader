@@ -1,4 +1,8 @@
-請看User_Manual.MD
+# TW AutoTrader — 台股自動交易系統
+
+📖 完整使用手冊 → [USER_MANUAL.md](USER_MANUAL.md)
+☁️ GCP 台灣機房部署（~NT$50/月）→ [USER_MANUAL.md#第八步](USER_MANUAL.md)
+
 如果你想學如何搭這樣一個自動化系統, 請發電郵frank@dinchen.com.tw , 標題請寫:TW-AUTOTRADER
 
 對於每個月預算數千到數萬元、只能進出零股的小資買家而言，核心目標是降低交易成本、避免承擔單一公司倒閉風險、並利用程式自動化克服人性追高殺低的弱點。
