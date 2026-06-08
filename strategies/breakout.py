@@ -16,7 +16,7 @@ def breakout_strategy(df: pd.DataFrame, lookback=20, atr_period=14, atr_mult=1.5
     
     # 計算 ATR（Average True Range）
     df['TR'] = df['high'] - df['low']
-    df['TR'] = df[['TR', 'high', 'close']].apply(
+    df['TR'] = df[['TR', 'high', 'low', 'close']].apply(
         lambda row: max(row['TR'], abs(row['high'] - row['close']), abs(row['low'] - row['close'])), axis=1
     )
     df['ATR'] = df['TR'].rolling(window=atr_period, min_periods=1).mean()
