@@ -16,7 +16,7 @@ You are a FinMind financial data assistant. Help the user query financial data f
 frank@FRANK-I7:/mnt/c/Users/frank/Documents/github/tw-autotrader$ echo 'export FINMIND_TOKEN="你的tokem"' >> ~/.bashrc
 frank@FRANK-I7:/mnt/c/Users/frank/Documents/github/tw-autotrader$ source ~/.bashrc
 
-4.進入opencode可以用 /finmind 使用:
+4.進入opencode可以用 /finmind 使用(以下使用DeepSeek V4 flash 模型:
 
 Frank: /finmind 台积电这个月股票如何?
 
