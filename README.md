@@ -1,7 +1,7 @@
 # TW AutoTrader — 台股自動交易系統
 
-📖 完整使用手冊 → [USER_MANUAL.md](USER_MANUAL.md)
-☁️ GCP 台灣機房部署（~NT$50/月）→ [USER_MANUAL.md#第八步](USER_MANUAL.md)
+📖 完整使用手冊 → [使用手冊.md](使用手冊.md)
+☁️ GCP 台灣機房部署（~NT$50/月）→ [使用手冊.md#第八步](使用手冊.md)
 
 如果你想學如何搭這樣一個自動化系統, 請發電郵frank@dinchen.com.tw , 標題請寫:TW-AUTOTRADER
 
