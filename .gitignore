@@ -190,3 +190,5 @@ create_tw_autotrader.py
 .idea/inspectionProfiles/profiles_settings.xml
 /.omo
 /.omo
+#usun_sdk
+esun_sdk/

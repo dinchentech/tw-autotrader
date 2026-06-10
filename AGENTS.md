@@ -51,15 +51,18 @@ When modifying a strategy, check which files import it. The function-based ones 
 All config goes in `.env`. No hardcoded secrets. The file is loaded via `dotenv.load_dotenv()` at each entrypoint's `if __name__ == "__main__"` block. Every strategy parameter can be overridden via `.env` keys (see `.env.example.txt`).
 
 Key env vars:
-- `USE_REAL_API=true` — switches from `kgi_mock` to `kgi_real` (KGI brokerage)
+- `BROKER=kgi|esun` — broker selection: `kgi` (default, uses KGI mock/real) or `esun` (uses E.Sun API for market data + trading)
+- `USE_REAL_API=true` — switches from `kgi_mock` to `kgi_real` (only meaningful when `BROKER=kgi`)
 - `FINMIND_API_TOKEN` — required for FinMind data (market filter, backtest)
 - `MARKET_TREND_FILTER=true` — enables MA200 index filter before buying
 - `PORTFOLIO=0050:bollinger,2330:ma_cross,...` — multi-trader stock allocation
 
 ## Architecture notes
 
-- **KGI API**: `data/kgi_mock.py` (mock) / `data/kgi_real.py` (real). Selected via `USE_REAL_API` env var. `kgi_real.py` has placeholder endpoints (`https://api.kgi.com.tw`) — real URLs must be confirmed with KGI.
-- **Data sources**: Yahoo Finance (`yfinance`) for backtest data, FinMind for market filter index data, KGI API for live minute bars.
+- **Broker selection**: `BROKER=kgi` (default) or `BROKER=esun` in `.env`. When `BROKER=esun`, both market data and order execution go through E.Sun API; `USE_REAL_API` is forced `true`.
+- **KGI API**: `data/kgi_mock.py` (mock) / `data/kgi_real.py` (real). Selected via `BROKER=kgi` + `USE_REAL_API` env var. `kgi_real.py` has placeholder endpoints — real URLs must be confirmed with KGI.
+- **E.Sun API** (`BROKER=esun`): `data/esun_provider.py` wraps `esun_marketdata` + `esun_trade` SDKs. Requires `.p12` cert, API key/secret, and two passwords stored in system keyring. Supports both simulation and real environments.
+- **Data sources**: Yahoo Finance (`yfinance`) for backtest data, FinMind for market filter index data, KGI/E.Sun API for live minute bars (volume included — VWAP works correctly).
 - **Risk manager** (`core/risk_manager.py`): limits daily trades, daily loss, checks limit up/down. Logs to `logs/performance.csv`.
 - **Market filter** (`core/market_filter.py`): checks TAIEX > MA200 before buying. Falls back safely if FinMind fails.
 - **Budget control** (`live_trader_multi.py` only): per-strategy monthly cap tracked in `logs/monthly_budget.json`.
@@ -102,9 +105,10 @@ python -m unittest test.test_strategies
 1. **Missing deps in requirements.txt**: `requirements.txt` is missing `python-dotenv`, `yfinance`, and `tqdm` (FinMind needs it). Always install extras after `pip install -r requirements.txt`.
 2. **ATR threshold param discrepancy**: `ma_cross_strategy.py` (class-based) calls it `atr_threshold`, `ma_cross.py` (function-based) also uses `atr_threshold`. `breakout.py` uses hardcoded `df['close'] * 0.01` instead of the `atr_threshold` param. Check before changing.
 3. **`min_periods=1` in rolling windows**: Strategy functions use `min_periods=1` which produces values from the first row. This differs from the class-based strategies that default to `min_periods=window` (NaN until enough data). When comparing signals between the two, this causes mismatches.
-4. **VWAP approximation**: Function-based `vwap_deviation.py` sets `df['VWAP'] = df['close']` as fallback when no VWAP column exists (backtest mode). Real VWAP requires volume-weighted calculation.
+4. **VWAP calculation**: Both function-based (`vwap_deviation.py`) and class-based (`vwap_strategy.py`) now use volume-weighted calculation (`Σ(close×volume)/Σ(volume)`, rolling 20 periods). Requires `volume` column — all data sources (Yahoo, FinMind, mock) provide it.
 5. **`.omo/` is gitignored**: Boulder/plan tracking data stays local.
 6. **Modular strategy engine** (`core/strategy_engine.py`) is a thin wrapper — used only by `backtest.py`. The multi-trader and finmind trader instantiate strategy classes directly.
+7. **E.Sun keyring in Docker**: When running `BROKER=esun` in Docker, set `PYTHON_KEYRING_BACKEND=keyrings.cryptfile.cryptfile.CryptFileKeyring` and `KEYRING_CRYPTFILE_PASSWORD` in the container environment. If passwords aren't in keyring, login will prompt interactively and fail.
 
 ## Development workflow
 
