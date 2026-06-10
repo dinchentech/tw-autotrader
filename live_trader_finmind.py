@@ -22,7 +22,7 @@ from strategies.bollinger_strategy import BollingerReverseStrategy
 from strategies.breakout_strategy import BreakoutStrategy
 
 # 匯入工具
-from utils.telegram import send_trade_alert
+from utils.telegram import send_trade_alert, send_telegram_message
 from core.risk_manager import RiskManager
 
 def run_live_trading(symbol: str = "2330", strategy_name: str = "vwap"):
@@ -77,6 +77,13 @@ def run_live_trading(symbol: str = "2330", strategy_name: str = "vwap"):
     
     print("✅ 系統初始化完成，開始監控...")
     
+    current_price = accumulated_data['close'].iloc[-1]
+    send_telegram_message(
+        f"✅ *{symbol}* ({strategy_name}) 監控已啟動\n"
+        f"💰 當前價格: {current_price:.2f}\n"
+        f"📡 資料源: FinMind"
+    )
+    
     while True:
         try:
             # 取得最新資料
@@ -108,7 +115,7 @@ def run_live_trading(symbol: str = "2330", strategy_name: str = "vwap"):
             if signal != 0:
                 # 風險控管檢查
                 if not risk_manager.check_trade_allowed(symbol, signal, current_price):
-                    print(f"🛑 {symbol} 交易被風險控管攔截")
+                    send_telegram_message(f"🛑 *{symbol}* 風險控管攔截（次數/虧損/漲跌停）")
                     continue
                 
                 # 計算部位大小

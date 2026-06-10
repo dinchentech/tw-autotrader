@@ -46,7 +46,7 @@ from strategies.vwap_strategy import VWAPDeviationStrategy
 from strategies.ma_cross_strategy import MACrossStrategy
 from strategies.bollinger_strategy import BollingerReverseStrategy
 from strategies.breakout_strategy import BreakoutStrategy
-from utils.telegram import send_trade_alert
+from utils.telegram import send_trade_alert, send_telegram_message
 from core.risk_manager import RiskManager
 
 # ==========================================
@@ -59,13 +59,14 @@ def send_line_notification(message):
     headers = {"Authorization": f"Bearer {line_token}"}
     payload = {"message": message}
     try:
-        requests.post("https://line.me", headers=headers, data=payload, timeout=5)
+        requests.post("https://notify-api.line.me/api/notify", headers=headers, data=payload, timeout=5)
     except Exception as e:
         print(f"❌ LINE 通知發送失敗: {e}")
 
 def main():
     print("🚀 啟動 TW AutoTrader 多股多策略分流系統（全天候監控模式）")
     send_line_notification("\n🤖 TW AutoTrader 雲端主機已成功啟動！開始全天候監控台股...")
+    send_telegram_message("✅ *TW AutoTrader* 多股多策略系統已啟動\n📈 監控中: " + ", ".join(f"{s}[{p}]" for s, p in MY_PORTFOLIO.items()))
 
     # ==========================================
     # 股票數量上限檢查（GCP e2-micro 建議值）
@@ -286,6 +287,7 @@ def main():
                         continue
                         
                     if not risk_manager.check_trade_allowed(symbol, signal, current_price):
+                        send_telegram_message(f"🛑 *{symbol}* 風險控管攔截（次數/虧損/漲跌停）")
                         continue
                     
                     # 每月預算檢查（僅買進時才扣預算）
