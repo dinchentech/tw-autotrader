@@ -1,0 +1,38 @@
+1. 首先必須安裝opencode, 如果無法自行安裝,可以跟我們購買整個裝好的wsl備份檔直接使用(查看WSL恢復.MD)
+
+2. 申請Finmimnd的api key(使用手冊.MD)及openrouter, nvidea的api key:
+
+   https://openrouter.ai/
+   https://build.nvidia.com/settings/api-keys
+
+3. 進入wsl設定api key:
+
+   wsl -d 你設定的名稱
+  
+   進入後先用nano修改 ~/.bashrc 中findmind的key
+
+   修改完記得 source  ~/.bashrc , 設定才生效
+
+   及~/.local/share/opencode/auth.json 中openrouter, nvedia的 key, 如果你有買其他ai 模型 可以進入opencode在自行輸入
+
+  但是基本上大部分知名的模型, openrouter都有 ,我們建議使用deepseek V4 flash(反應比較快費用也便宜,對於股票策略已經夠用)
+
+  實際使用成本範例假設你進行了一次中型任務，丟入 100 萬字（無快取），並讓模型回答 10 萬字：
+
+  使用 V4 Flash： 總花費約 $0.168 美元（不到台幣 6 元）。
+
+  使用 V4 Pro： 總花費約 $1.83 美元（約台幣 60 元）。
+
+4. 進入工作目錄:
+
+   cd ~/tw-autotrader/
+
+5. 執行opencode web --hostname 0.0.0.0或open_web(已經於~/.bashrc中設好的alias), 此時瀏覽器會打開opencode控制網頁
+
+6. 顯於左下方設定圖示Genral=>Language改成繁中
+
+7. 在設定的模型處選擇你使用的AI模型!
+
+其他opencode使用請參考"opencode快速入門.md"
+
+
