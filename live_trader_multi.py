@@ -68,6 +68,57 @@ def send_line_notification(message):
     except Exception as e:
         print(f"❌ LINE 通知發送失敗: {e}")
 
+# ==========================================
+# 3. 每日 13:45 交易日報（發送到 Telegram）
+# ==========================================
+def send_daily_report():
+    """讀取 logs/performance.csv，產生今日交易摘要發送到 Telegram"""
+    csv_path = Path("logs/performance.csv")
+    if not csv_path.exists():
+        send_telegram_message("📊 *今日交易日報*\n📅 今日無交易紀錄")
+        return
+
+    try:
+        df = pd.read_csv(csv_path)
+        today = date.today()
+        df["timestamp"] = pd.to_datetime(df["timestamp"])
+        today_df = df[df["timestamp"].dt.date == today]
+    except Exception as e:
+        send_telegram_message(f"❌ 讀取交易紀錄失敗: {e}")
+        return
+
+    if today_df.empty:
+        send_telegram_message("📊 *今日交易日報*\n📅 今日無交易紀錄")
+        return
+
+    buys = today_df[today_df["action"].str.upper() == "BUY"]
+    sells = today_df[today_df["action"].str.upper() == "SELL"]
+
+    msg = f"📊 *今日交易日報 ({today.isoformat()})*\n"
+    msg += "─" * 20 + "\n"
+
+    if not buys.empty:
+        msg += "🔹 *買進*\n"
+        for _, row in buys.iterrows():
+            t = pd.Timestamp(row["timestamp"]).strftime("%H:%M")
+            s = row["symbol"]
+            msg += f"  {s}  {t}  @${row['price']:.2f}  {int(row['quantity'])}股\n"
+        total_buy = (buys["price"] * buys["quantity"]).sum()
+        msg += f"  買進總成本: NT${total_buy:,.0f}\n"
+
+    if not sells.empty:
+        msg += "🔸 *賣出*\n"
+        for _, row in sells.iterrows():
+            t = pd.Timestamp(row["timestamp"]).strftime("%H:%M")
+            s = row["symbol"]
+            msg += f"  {s}  {t}  @${row['price']:.2f}  {int(row['quantity'])}股\n"
+        total_sell = (sells["price"] * sells["quantity"]).sum()
+        msg += f"  賣出總收入: NT${total_sell:,.0f}\n"
+
+    msg += "─" * 20
+    send_telegram_message(msg)
+
+
 def main():
     print("🚀 啟動 TW AutoTrader 多股多策略分流系統（全天候監控模式）")
     send_line_notification("\n🤖 TW AutoTrader 雲端主機已成功啟動！開始全天候監控台股...")
@@ -179,20 +230,32 @@ def main():
         portfolio_history[symbol] = df_init
         print(f"✅ {symbol} 初始化成功 -> [{strat_name.upper()}]")
     
+    daily_report_sent_date = None
+
     while True:
         current_time = datetime.now()
-        
+
         # 💡 判斷是否為台股開盤時間 (週一至週五 09:00 ~ 13:30)
-        # 全天候執行時，非交易時間主機會自動靜音等待，不浪費運算資源
         is_trading_time = current_time.weekday() < 5 and (
             (current_time.hour == 9 and current_time.minute >= 0) or
             (9 < current_time.hour < 13) or
             (current_time.hour == 13 and current_time.minute <= 30)
         )
-        
+
+        # ✨ 每日 13:45 發送交易日報到 Telegram
+        if (current_time.weekday() < 5
+                and current_time.hour == 13
+                and current_time.minute == 45
+                and daily_report_sent_date != current_time.date()):
+            send_daily_report()
+            daily_report_sent_date = current_time.date()
+
         if not is_trading_time and USE_REAL_API:
-            # 實盤模式下，非非開盤時間每 10 分鐘檢查一次即可
-            time.sleep(600)
+            # 收盤後~VM關機前 (13:30~14:00) 每分鐘檢查（為了發送 13:45 日報）
+            if current_time.hour < 14:
+                time.sleep(60)
+            else:
+                time.sleep(600)
             continue
 
         for symbol, strategy_name in MY_PORTFOLIO.items():
