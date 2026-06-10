@@ -31,22 +31,36 @@ jobs:
             echo "✅ VM 已在運行"
           fi
 
-      - name: Fetch dashboard.html from VM
+      - name: Fetch dashboard.html from VM via SSH
         run: |
-          gcloud compute ssh tw-autotrader --zone=asia-east1-b --quiet \
-            --ssh-flag="-o StrictHostKeyChecking=no" \
-            --command="cat /home/frank/tw-autotrader/logs/dashboard.html" \
+          # 取得 VM 外部 IP
+          EXT_IP=$(gcloud compute instances describe tw-autotrader \
+            --zone=asia-east1-b --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
+          echo "🌐 VM IP: $EXT_IP"
+
+          # 寫入 SSH 金鑰
+          mkdir -p ~/.ssh
+          echo "${{ secrets.GH_SSH_KEY }}" > ~/.ssh/gh_actions
+          chmod 600 ~/.ssh/gh_actions
+
+          # 抓取 dashboard.html
+          ssh -i ~/.ssh/gh_actions -o StrictHostKeyChecking=no \
+            github-actions@$EXT_IP \
+            "cat /home/frank/tw-autotrader/logs/dashboard.html" \
             > ./dashboard.html
+
+          # 若不存在則遠端產生
           if [ ! -s ./dashboard.html ]; then
-            echo "❌ dashboard.html 不存在或為空，嘗試遠端產生..."
-            gcloud compute ssh tw-autotrader --zone=asia-east1-b --quiet \
-              --ssh-flag="-o StrictHostKeyChecking=no" \
-              --command="cd /home/frank/tw-autotrader && sudo docker exec tw_autotrader_bot python -c 'from scripts.generate_dashboard import main; main()'"
-            gcloud compute ssh tw-autotrader --zone=asia-east1-b --quiet \
-              --ssh-flag="-o StrictHostKeyChecking=no" \
-              --command="cat /home/frank/tw-autotrader/logs/dashboard.html" \
+            echo "⚠️  dashboard.html 不存在，遠端產生中..."
+            ssh -i ~/.ssh/gh_actions -o StrictHostKeyChecking=no \
+              github-actions@$EXT_IP \
+              "sudo docker exec tw_autotrader_bot python -c 'from scripts.generate_dashboard import main; main()'"
+            ssh -i ~/.ssh/gh_actions -o StrictHostKeyChecking=no \
+              github-actions@$EXT_IP \
+              "cat /home/frank/tw-autotrader/logs/dashboard.html" \
               > ./dashboard.html
           fi
+
           if [ -s ./dashboard.html ]; then
             echo "✅ dashboard.html 已取得 ($(wc -c < ./dashboard.html) bytes)"
           else
