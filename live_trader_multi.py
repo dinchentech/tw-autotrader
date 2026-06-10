@@ -34,8 +34,13 @@ def load_portfolio() -> dict:
 MY_PORTFOLIO = load_portfolio()
 
 USE_REAL_API = os.getenv("USE_REAL_API", "false").lower() == "true"
+BROKER = os.getenv("BROKER", "kgi").lower()
 
-if USE_REAL_API:
+if BROKER == "esun":
+    from data.esun_provider import EsunProvider as BrokerAPI
+    USE_REAL_API = True  # 玉山永遠提供真實行情
+    print("🏦 【玉山證券】使用玉山 API 進行行情 + 交易")
+elif USE_REAL_API:
     from data.kgi_real import KGIRealAPI as BrokerAPI
     print("🚀 【正式上線】使用真實凱基 API 進行自動化零股下單")
 else:

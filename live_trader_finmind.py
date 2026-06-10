@@ -5,10 +5,15 @@ import argparse
 import pandas as pd
 from datetime import datetime
 
-# 選擇 API（真實或模擬）
+# 選擇券商
 USE_REAL_API = os.getenv("USE_REAL_API", "false").lower() == "true"
+BROKER = os.getenv("BROKER", "kgi").lower()
 
-if USE_REAL_API:
+if BROKER == "esun":
+    from data.esun_provider import EsunProvider as BrokerAPI
+    USE_REAL_API = True
+    print("🏦 使用玉山 API")
+elif USE_REAL_API:
     from data.kgi_real import KGIRealAPI as BrokerAPI
     print("🚀 使用真實凱基 API")
 else:
