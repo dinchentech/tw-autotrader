@@ -248,6 +248,11 @@ def main():
                 and current_time.minute == 45
                 and daily_report_sent_date != current_time.date()):
             send_daily_report()
+            try:
+                from scripts.generate_dashboard import main as gen_dash
+                gen_dash()
+            except Exception as e:
+                print(f"❌ 產生儀表板失敗: {e}")
             daily_report_sent_date = current_time.date()
 
         if not is_trading_time and USE_REAL_API:

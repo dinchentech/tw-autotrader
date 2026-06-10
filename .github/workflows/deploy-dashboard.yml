@@ -1,0 +1,32 @@
+name: Deploy Dashboard
+
+on:
+  schedule:
+    # 每日 14:00 Taipei（06:00 UTC），週一至週五
+    - cron: '0 6 * * 1-5'
+  workflow_dispatch:   # 手動觸發
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Fetch dashboard.html from VM
+        run: |
+          gcloud compute scp tw-autotrader:~/tw-autotrader/logs/dashboard.html ./dashboard.html \
+            --zone=asia-east1-b --compress
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./
+          destination_dir: ./
+          keep_files: false
