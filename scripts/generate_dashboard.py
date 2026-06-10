@@ -111,6 +111,24 @@ def compute_daily_pnl(pnl_list: list) -> list:
     return dates
 
 
+def _to_native(obj):
+    """遞迴轉換 numpy 型態為 Python 原生型態（JSON 相容）"""
+    if isinstance(obj, dict):
+        return {k: _to_native(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_to_native(v) for v in obj]
+    if isinstance(obj, (int, float)):
+        if hasattr(obj, "item"):
+            return obj.item()
+        return obj
+    import numpy as np
+    if isinstance(obj, (np.integer,)):
+        return int(obj)
+    if isinstance(obj, (np.floating,)):
+        return float(obj)
+    return obj
+
+
 def build_html(trades_df: pd.DataFrame) -> str:
     pnl_list = compute_pnl(trades_df)
     symbol_stats = compute_symbol_stats(trades_df, pnl_list)
@@ -134,11 +152,12 @@ def build_html(trades_df: pd.DataFrame) -> str:
     last_trades = sorted(pnl_list, key=lambda x: x["date"] + x["time"], reverse=True)[:50]\
         if pnl_list else []
 
-    charts_json = json.dumps({
+    charts_data = _to_native({
         "daily_pnl": daily_pnl,
         "symbol_stats": symbol_stats,
         "pnl_list": pnl_list[-30:] if len(pnl_list) > 30 else pnl_list,
-    }, ensure_ascii=False)
+    })
+    charts_json = json.dumps(charts_data, ensure_ascii=False)
 
     html = f"""<!DOCTYPE html>
 <html lang="zh-TW">
