@@ -70,3 +70,71 @@ su - frank
    ```
 3. 按 `Ctrl + O` 儲存，按下 `Enter` 確認，再按 `Ctrl + X` 離開編輯器。
 4. 回到 Windows **PowerShell** 執行 `wsl --shutdown` 重啟，設定即會生效。
+
+
+### 3.編輯Finmind的api key,跟opencode 的模型供應者api key
+1. Findmind:
+   用nano修改~/.bashrc中最下面一行改成你申請的api key
+   export FINMIND_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGc................aHN1YW4iLCJlbWFpbCI6ImhzaWVoLmloc3Vh>"
+
+2. opencode:
+   nano  ~/.local/share/opencode/auth.json
+   修改你申請的openrouter跟nvidea的key=>
+   {
+     "openrouter": {
+     "type": "api",
+     "key": "sk-or-v1-........................1da0c559ba14a4f249b34197385a5"
+     },
+     "nvidia": {
+     "type": "api",
+     "key": "nvapi-DDsAgaIKnVNs......................DrD-rwnhHetomKrVD-9c"
+     }
+   }
+
+# nano 編輯器簡易入門
+
+`nano` 是 Linux 系統中最簡單的文字編輯器。它非常適合新手使用。
+
+## 如何打開或建立檔案
+
+在終端機（Terminal）中輸入 `nano` 加上檔案名稱。
+如果檔案不存在，它會自動幫你建立一個新檔案。
+
+* **指令：** `nano 檔案名稱.txt`
+
+---
+
+## 畫面三大區塊
+
+1. **最上方：** 顯示 `nano` 版本和正在編輯的檔案名稱。
+2. **中間：** 讓你輸入和修改文字的空白區。
+3. **最下方：** 快捷鍵說明書。
+
+---
+
+## 必學快捷鍵
+
+> 💡 **提示：** 畫面上的符號 `^` 代表鍵盤的 **Ctrl** 鍵。所有快捷鍵都要按住 `Ctrl` 鍵再按字母。
+
+* **`Ctrl + O`**：存檔（寫入文字）。
+* **`Ctrl + X`**：離開 `nano` 編輯器。
+* **`Ctrl + W`**：搜尋文字（尋找關鍵字）。
+* **`Ctrl + K`**：剪下整行文字。
+* **`Ctrl + U`**：貼上文字。
+
+---
+
+## 最常用的操作流程
+
+1. 輸入 `nano test.txt` 打開檔案。
+2. 直接用鍵盤打字。
+3. 按 **`Ctrl + O`**，再按 **Enter** 鍵儲存檔案。
+4. 按 **`Ctrl + X`** 離開。
+
+> ⚠️ **注意：** 如果你在離開前忘記存檔，`nano` 會在最下方詢問：
+> `Save modified buffer? (Answering No will DISCARD changes.)`
+> * 按 **`Y`**：儲存修改
+> * 按 **`N`**：放棄修改（字會消失）
+> * 按 **`Ctrl + C`**：取消離開，回到編輯畫面
+   
+
