@@ -73,22 +73,37 @@ su - frank
 
 
 ### 3.編輯Finmind的api key,跟opencode 的模型供應者api key
+
 1. Findmind:
+2. 
    用nano修改~/.bashrc中最下面一行改成你申請的api key
+   
    export FINMIND_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGc................aHN1YW4iLCJlbWFpbCI6ImhzaWVoLmloc3Vh>"
 
-2. opencode:
+3. opencode:
+   
    nano  ~/.local/share/opencode/auth.json
+   
    修改你申請的openrouter跟nvidea的key=>
+   
    {
+   
      "openrouter": {
+   
      "type": "api",
+   
      "key": "sk-or-v1-........................1da0c559ba14a4f249b34197385a5"
+   
      },
+   
      "nvidia": {
+   
      "type": "api",
+   
      "key": "nvapi-DDsAgaIKnVNs......................DrD-rwnhHetomKrVD-9c"
+   
      }
+   
    }
 
 # nano 編輯器簡易入門
