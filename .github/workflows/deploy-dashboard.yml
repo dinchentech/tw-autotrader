@@ -33,8 +33,14 @@ jobs:
 
       - name: Fetch dashboard.html from VM
         run: |
-          gcloud compute scp tw-autotrader:~/tw-autotrader/logs/dashboard.html ./dashboard.html \
-            --zone=asia-east1-b --compress
+          gcloud compute ssh tw-autotrader --zone=asia-east1-b \
+            --command="cat /home/frank/tw-autotrader/logs/dashboard.html" \
+            > ./dashboard.html
+          if [ ! -s ./dashboard.html ]; then
+            echo "❌ dashboard.html 不存在或為空"
+            exit 1
+          fi
+          echo "✅ dashboard.html 已取得 ($(wc -c < ./dashboard.html) bytes)"
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
