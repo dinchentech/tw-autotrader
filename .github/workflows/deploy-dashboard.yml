@@ -33,14 +33,26 @@ jobs:
 
       - name: Fetch dashboard.html from VM
         run: |
-          gcloud compute ssh tw-autotrader --zone=asia-east1-b \
+          gcloud compute ssh tw-autotrader --zone=asia-east1-b --quiet \
+            --ssh-flag="-o StrictHostKeyChecking=no" \
             --command="cat /home/frank/tw-autotrader/logs/dashboard.html" \
             > ./dashboard.html
           if [ ! -s ./dashboard.html ]; then
-            echo "❌ dashboard.html 不存在或為空"
+            echo "❌ dashboard.html 不存在或為空，嘗試遠端產生..."
+            gcloud compute ssh tw-autotrader --zone=asia-east1-b --quiet \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --command="cd /home/frank/tw-autotrader && sudo docker exec tw_autotrader_bot python -c 'from scripts.generate_dashboard import main; main()'"
+            gcloud compute ssh tw-autotrader --zone=asia-east1-b --quiet \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --command="cat /home/frank/tw-autotrader/logs/dashboard.html" \
+              > ./dashboard.html
+          fi
+          if [ -s ./dashboard.html ]; then
+            echo "✅ dashboard.html 已取得 ($(wc -c < ./dashboard.html) bytes)"
+          else
+            echo "❌ 無法取得 dashboard.html"
             exit 1
           fi
-          echo "✅ dashboard.html 已取得 ($(wc -c < ./dashboard.html) bytes)"
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
