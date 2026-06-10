@@ -18,6 +18,19 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
+      - name: Ensure VM is running
+        run: |
+          STATUS=$(gcloud compute instances describe tw-autotrader \
+            --zone=asia-east1-b --format='get(status)')
+          if [ "$STATUS" != "RUNNING" ]; then
+            echo "🔄 VM 狀態: $STATUS → 正在啟動..."
+            gcloud compute instances start tw-autotrader --zone=asia-east1-b
+            echo "⏳ 等待 VM 開機..."
+            sleep 60
+          else
+            echo "✅ VM 已在運行"
+          fi
+
       - name: Fetch dashboard.html from VM
         run: |
           gcloud compute scp tw-autotrader:~/tw-autotrader/logs/dashboard.html ./dashboard.html \
