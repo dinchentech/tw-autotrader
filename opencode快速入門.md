@@ -82,6 +82,44 @@ tmux attach -t opencode
 | `oracle` | 純思考 — 除錯、架構設計、複雜推理 | **最貴**，但值得 |
 | `metis` | 需求模糊時釐清歧義、找出遺漏假設 | 規劃專用 |
 
+### Atlas 跨 session 運作機制
+
+Atlas 不是 Sisyphus 執行中自動呼叫的，而是在**規劃階段就被指定**的角色。
+
+```
+你拋需求 → Prometheus 規劃
+                    ↓
+         判斷任務大小，決定用誰扛:
+           ├ 一般 → Sisyphus（單一 session 完成）
+           └ 太大 → Atlas（跨 session 追蹤）
+                              ↓
+                   實際執行每個 todo 的還是
+                   Sisyphus-Junior / general agent
+                   （Atlas 只是標籤，不是執行者）
+```
+
+Atlas 靠 **Boulder 系統**（`.omo/boulder.json`）跨 session：
+
+```json
+{
+  "work_id": "breakout-atr-filter-...",
+  "agent": "atlas",       // ← 標記為跨 session 任務
+  "status": "completed",
+  "session_ids": [         // ← 所有參與的 session
+    "ses_xxx", "ses_yyy", ...
+  ],
+  "task_sessions": {
+    "todo:1": { "agent": "general", "status": "completed" },
+    "todo:2": { "agent": "general", "status": "completed" },
+    ...
+  }
+}
+```
+
+下次開新 session 時，Boulder 自動載入進度 — 不用每次重頭解釋。
+
+> **你用 Sisyphus 就夠了。** Atlas 是給規劃階段就預期要搞好幾天、好幾個 session 的大型任務用的，不需要手動切換。
+
 ### 一句話總結
 
 > **explore 找 code → librarian 找外援 → metis 釐清需求 → oracle 解難題。**
