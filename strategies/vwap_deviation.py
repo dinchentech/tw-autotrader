@@ -8,10 +8,15 @@ def calculate_rsi(series, period=5):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
+def calculate_vwap(close: pd.Series, volume: pd.Series, window=20) -> pd.Series:
+    """成交量加權平均價格 VWAP = Σ(close × volume) / Σ(volume)"""
+    pv = (close * volume).rolling(window=window, min_periods=1).sum()
+    vol = volume.rolling(window=window, min_periods=1).sum()
+    return (pv / vol).fillna(close)  # volume=0 時 fallback 到 close
+
 def vwap_deviation_strategy(df: pd.DataFrame, sigma_mult=1.5, rsi_period=5, rsi_low=30, rsi_high=70) -> pd.DataFrame:
     df = df.copy()
-    if 'VWAP' not in df.columns:
-        df['VWAP'] = df['close']  # 回測用近似值；實盤會被覆蓋
+    df['VWAP'] = calculate_vwap(df['close'], df['volume'])
     
     df['RSI'] = calculate_rsi(df['close'], rsi_period)
     df['Deviation'] = df['close'] - df['VWAP']

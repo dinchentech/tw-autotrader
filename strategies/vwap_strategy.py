@@ -20,10 +20,12 @@ class VWAPDeviationStrategy(BackTest):
         if len(stock_price) < 20:
             return 0
             
-        # 計算 VWAP（使用 close 近似）
-        vwap = stock_price['close'].mean()
+        pv = (stock_price['close'] * stock_price['volume']).rolling(window=20, min_periods=1).sum()
+        vol = stock_price['volume'].rolling(window=20, min_periods=1).sum()
+        vwap_series = (pv / vol).fillna(stock_price['close'])
+        current_vwap = vwap_series.iloc[-1]
         current_price = stock_price['close'].iloc[-1]
-        deviations = stock_price['close'] - vwap
+        deviations = stock_price['close'] - vwap_series
         std = np.std(deviations)
         
         # 計算 RSI
@@ -31,9 +33,9 @@ class VWAPDeviationStrategy(BackTest):
         rsi = rsi_series.iloc[-1] if not rsi_series.empty else 50
         
         # 訊號邏輯
-        if current_price < vwap - self.sigma_mult * std and rsi < self.rsi_low:
+        if current_price < current_vwap - self.sigma_mult * std and rsi < self.rsi_low:
             return 1
-        elif current_price > vwap + self.sigma_mult * std and rsi > self.rsi_high:
+        elif current_price > current_vwap + self.sigma_mult * std and rsi > self.rsi_high:
             return -1
         else:
             return 0
