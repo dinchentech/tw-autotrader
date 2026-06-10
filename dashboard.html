@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TW AutoTrader — 績儀表板</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         background: #f5f7fa; color: #1a1a2e; padding: 24px; }
+  .container { max-width: 1200px; margin: 0 auto; }
+  h1 { font-size: 1.6rem; font-weight: 700; margin-bottom: 4px; }
+  .subtitle { color: #666; font-size: .85rem; margin-bottom: 24px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap: 12px; margin-bottom: 24px; }
+  .card { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+  .card .label { font-size: .75rem; color: #888; text-transform: uppercase; letter-spacing: .5px; }
+  .card .value { font-size: 1.5rem; font-weight: 700; margin-top: 4px; }
+  .card .value.positive { color: #e74c3c; }  .card .value.negative { color: #3498db; }
+  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  .chart-box { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+  .chart-box.full { grid-column: 1 / -1; }
+  .chart-box h3 { font-size: .9rem; color: #555; margin-bottom: 12px; }
+  .chart-box canvas { max-height: 320px; }
+  table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  th { text-align: left; padding: 8px 10px; border-bottom: 2px solid #e8e8e8; color: #888; font-weight: 600; }
+  td { padding: 8px 10px; border-bottom: 1px solid #f0f0f0; }
+  .positive { color: #e74c3c; }  .negative { color: #3498db; }
+  .section-title { font-size: 1.05rem; font-weight: 600; margin: 24px 0 12px; }
+  .empty { text-align: center; color: #999; padding: 48px 0; font-size: 1rem; }
+  @media (max-width: 640px) { .charts { grid-template-columns: 1fr; }
+     .cards { grid-template-columns: repeat(2, 1fr); } }
+  footer { text-align: center; color: #aaa; font-size: .75rem; margin-top: 32px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>📊 TW AutoTrader 績效儀表板</h1>
+  <div class="subtitle">最後更新：2026-06-10 18:34 · 資料來源：logs/performance.csv</div>
+
+  <div class="cards">
+    <div class="card"><div class="label">已實現損益</div><div class="value positive">+0</div></div>
+    <div class="card"><div class="label">總交易次數</div><div class="value">0</div></div>
+    <div class="card"><div class="label">勝率</div><div class="value">0%</div></div>
+    <div class="card"><div class="label">交易天數</div><div class="value">1</div></div>
+    <div class="card"><div class="label">買進總股數</div><div class="value">49</div></div>
+    <div class="card"><div class="label">賣出總股數</div><div class="value">100</div></div>
+  </div>
+
+  <div class="charts">
+    <div class="chart-box full"><h3>📈 累積損益曲線</h3><canvas id="chartPnl"></canvas></div>
+    <div class="chart-box"><h3>📊 各標的損益</h3><canvas id="chartSymbols"></canvas></div>
+    <div class="chart-box"><h3>🥧 多空比例</h3><canvas id="chartWinLoss"></canvas></div>
+  </div>
+
+  <div class="section-title">📋 近 50 筆交易</div>
+  <table>
+    <thead><tr><th>日期</th><th>時間</th><th>標的</th><th>價格</th><th>股數</th><th>損益</th><th>報酬率</th><th>累積損益</th></tr></thead>
+    <tbody></tbody></table>
+  <div class="section-title">🏷️ 各標的統計</div>
+  <table><thead><tr><th>標的</th><th>交易次數</th><th>買進次數</th><th>賣出次數</th><th>損益</th><th>勝率</th></tr></thead><tbody><tr><td>2382</td><td>0</td><td>0</td><td>1</td>
+                <td class="positive">+0</td><td>0%</td></tr><tr><td>2881</td><td>0</td><td>2</td><td>0</td>
+                <td class="positive">+0</td><td>0%</td></tr></tbody></table>
+  <footer>TW AutoTrader · 資料不構成投資建議 · 2026-06-10 18:34</footer>
+</div>
+<script>
+const DATA = {"daily_pnl": [], "symbol_stats": [{"symbol": 2382, "trades": 0, "buys": 0, "sells": 1, "pnl": 0, "win_rate": 0}, {"symbol": 2881, "trades": 0, "buys": 2, "sells": 0, "pnl": 0, "win_rate": 0}], "pnl_list": []};
+if (DATA.daily_pnl && DATA.daily_pnl.length) {
+  new Chart(document.getElementById('chartPnl'), {
+    type: 'line',
+    data: { labels: DATA.daily_pnl.map(d=>d.date),
+            datasets: [{ label: '累積損益', data: DATA.daily_pnl.map(d=>d.cumulative),
+                        borderColor: '#e74c3c', backgroundColor: 'rgba(231,76,60,.08)',
+                        fill: true, tension: .3, pointRadius: 4 }] },
+    options: { responsive: true, plugins: { legend: { display: false } },
+               scales: { y: { ticks: { callback: v=>v+'元' } } } }
+  });
+}
+if (DATA.symbol_stats && DATA.symbol_stats.length) {
+  new Chart(document.getElementById('chartSymbols'), {
+    type: 'bar',
+    data: { labels: DATA.symbol_stats.map(s=>s.symbol),
+            datasets: [{ label: '損益', data: DATA.symbol_stats.map(s=>s.pnl),
+                        backgroundColor: DATA.symbol_stats.map(s=>s.pnl>=0?'rgba(231,76,60,.7)':'rgba(52,152,219,.7)') }] },
+    options: { responsive: true, plugins: { legend: { display: false } },
+               scales: { y: { ticks: { callback: v=>v+'元' } } } }
+  });
+}
+if (DATA.pnl_list && DATA.pnl_list.length) {
+  const wins = DATA.pnl_list.filter(p=>p.pnl>0).length;
+  const loss = DATA.pnl_list.length - wins;
+  new Chart(document.getElementById('chartWinLoss'), {
+    type: 'doughnut',
+    data: { labels: ['獲利', '虧損'],
+            datasets: [{ data: [wins, loss],
+                        backgroundColor: ['#e74c3c','#3498db'] }] },
+    options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+  });
+}
+</script>
+</body>
+</html>
