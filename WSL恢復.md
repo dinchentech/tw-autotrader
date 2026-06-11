@@ -78,6 +78,24 @@ wsl -d Ubuntu_New
 | 🤖 Telegram Bot Token | 自己跟 `@BotFather` 申請 |
 | 🔐 OpenCode API Key | `opencode providers login` |
 
+### 還原後第一次設定
+
+```bash
+# 1. 把 remote 改為 HTTPS（SSH 金鑰已清空，改用 HTTPS 免驗證 pull）
+cd ~/tw-autotrader
+git remote set-url origin https://github.com/dinchentech/tw-autotrader.git
+
+# 2. 拉最新程式碼
+git pull
+
+# 3. 檢查 opencode 憑證已清空
+ls ~/.local/share/opencode/auth.json
+# 預期輸出：ls: cannot access ... No such file or directory
+
+# 4. 重新設定 opencode provider
+opencode providers login OpenRouter
+```
+
 進去後確認：
 
 ```bash
