@@ -2,7 +2,7 @@ import os
 import time
 import requests
 import pandas as pd
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import json
 from pathlib import Path
 
@@ -135,6 +135,19 @@ def send_daily_report():
 
     msg += "─" * 20
     send_telegram_message(msg)
+
+
+def _next_market_open(now: datetime) -> datetime:
+    """計算下次台股開盤時間 (交易日 09:00)"""
+    # 交易日 09:00 前 → 今天 09:00
+    if now.weekday() < 5 and now.hour < 9:
+        return now.replace(hour=9, minute=0, second=0, microsecond=0)
+    # 往後找第一個交易日
+    for days in range(1, 8):
+        dt = now + timedelta(days=days)
+        if dt.weekday() < 5:
+            return dt.replace(hour=9, minute=0, second=0, microsecond=0)
+    return now.replace(hour=9, minute=0) + timedelta(days=1)
 
 
 def main():
@@ -302,211 +315,189 @@ def main():
     daily_report_sent_date = None
 
     while True:
-        current_time = datetime.now()
+        now = datetime.now()
+        is_weekday = now.weekday() < 5
+        h, m = now.hour, now.minute
 
-        # 💡 判斷是否為台股開盤時間 (週一至週五 09:00 ~ 13:30)
-        is_trading_time = current_time.weekday() < 5 and (
-            (current_time.hour == 9 and current_time.minute >= 0) or
-            (9 < current_time.hour < 13) or
-            (current_time.hour == 13 and current_time.minute <= 30)
-        )
+        # ============================================================
+        # 時段 1：盤中 09:00-13:30 → 正常交易
+        # ============================================================
+        if is_weekday and ((h == 9 and m >= 0) or 9 < h < 13 or (h == 13 and m <= 30)):
+            for symbol, strategy_name in MY_PORTFOLIO.items():
+                if symbol not in portfolio_history:
+                    continue
+                try:
+                    strategy = strategy_instances[strategy_name]
+                    accumulated_data = portfolio_history[symbol]
 
-        # ✨ 每日 13:45 發送交易日報到 Telegram
-        if (current_time.weekday() < 5
-                and current_time.hour == 13
-                and current_time.minute == 45
-                and daily_report_sent_date != current_time.date()):
-            send_daily_report()
-            try:
-                from scripts.generate_dashboard import main as gen_dash
-                gen_dash()
-            except Exception as e:
-                print(f"❌ 產生儀表板失敗: {e}")
-            daily_report_sent_date = current_time.date()
+                    if USE_REAL_API:
+                        new_data = broker.get_minute_bars(symbol, minutes=1)
+                        if not new_data.empty:
+                            accumulated_data = pd.concat([accumulated_data, new_data])
+                    else:
+                        current_price = broker.get_current_price(symbol)
+                        new_row = pd.DataFrame({
+                            'open': [current_price * 0.999], 'high': [current_price * 1.001],
+                            'low': [current_price * 0.998], 'close': [current_price], 'volume': [5000]
+                        }, index=[pd.Timestamp.now()])
+                        accumulated_data = pd.concat([accumulated_data, new_row])
 
-        if not is_trading_time and USE_REAL_API:
-            # 收盤後~VM關機前 (13:30~14:00) 每分鐘檢查（為了發送 13:45 日報）
-            if current_time.hour < 14:
-                time.sleep(60)
-            else:
-                time.sleep(600)
+                    if len(accumulated_data) > 100:
+                        accumulated_data = accumulated_data.iloc[-100:]
+                    portfolio_history[symbol] = accumulated_data
+
+                    signal = strategy.trade(accumulated_data)
+                    current_price = accumulated_data['close'].iloc[-1]
+
+                    if signal != 0:
+                        action = "BUY" if signal == 1 else "SELL"
+
+                        position_size = 0
+                        if strategy_name in ["bollinger", "vwap", "ma_cross"]:
+                            amount_key = f"{strategy_name.upper()}_POSITION_AMOUNT"
+                            defaults = {"bollinger": 2500, "vwap": 2500, "ma_cross": 2200}
+                            target_amount = int(os.getenv(amount_key, defaults[strategy_name]))
+
+                            pyramid_enabled = os.getenv("PYRAMID_ENABLED", "false").lower() == "true"
+                            if pyramid_enabled and action == "BUY" and strategy_name == "bollinger":
+                                if symbol not in pyramid_tracker:
+                                    pyramid_tracker[symbol] = {"buy_count": 0, "last_buy_price": 0}
+                                tracker = pyramid_tracker[symbol]
+
+                                tier1 = int(os.getenv("PYRAMID_TIER1_SHARES", 200))
+                                tier2 = int(os.getenv("PYRAMID_TIER2_SHARES", 400))
+                                tier3 = int(os.getenv("PYRAMID_TIER3_SHARES", 600))
+                                tier2_drop = float(os.getenv("PYRAMID_TIER2_DROP", 0.03))
+                                tier3_drop = float(os.getenv("PYRAMID_TIER3_DROP", 0.05))
+
+                                if tracker["buy_count"] == 0:
+                                    position_size = tier1
+                                    tracker["last_buy_price"] = current_price
+                                    tracker["buy_count"] = 1
+                                    print(f"🔔 金字塔加碼 Tier 1：{symbol} 首次買進 {tier1} 股 @ {current_price:.2f}")
+                                elif tracker["buy_count"] == 1:
+                                    drop = (tracker["last_buy_price"] - current_price) / tracker["last_buy_price"]
+                                    if drop >= tier2_drop:
+                                        position_size = tier2
+                                        tracker["last_buy_price"] = current_price
+                                        tracker["buy_count"] = 2
+                                        print(f"🔔 金字塔加碼 Tier 2：{symbol} 加碼 {tier2} 股（跌 {drop:.1%}）")
+                                    else:
+                                        position_size = int(target_amount // current_price)
+                                elif tracker["buy_count"] >= 2:
+                                    drop = (tracker["last_buy_price"] - current_price) / tracker["last_buy_price"]
+                                    if drop >= tier3_drop and tracker["buy_count"] < 3:
+                                        position_size = tier3
+                                        tracker["last_buy_price"] = current_price
+                                        tracker["buy_count"] = 3
+                                        print(f"🔔 金字塔加碼 Tier 3：{symbol} 加碼 {tier3} 股（跌 {drop:.1%}）")
+                                    else:
+                                        position_size = int(target_amount // current_price)
+                            else:
+                                position_size = int(target_amount // current_price)
+
+                            if position_size <= 0:
+                                position_size = 1
+
+                        elif strategy_name == "breakout":
+                            buy_shares = int(os.getenv("BREAKOUT_POSITION_BUY", 50))
+                            sell_shares = int(os.getenv("BREAKOUT_POSITION_SELL", 100))
+                            position_size = buy_shares if action == "BUY" else sell_shares
+
+                        if position_size <= 0:
+                            continue
+
+                        allowed, reject_reason = risk_manager.check_trade_allowed(symbol, signal, current_price)
+                        if not allowed:
+                            send_telegram_message(f"🛑 *{symbol}* 風險控管攔截（{reject_reason}）")
+                            continue
+
+                        if action == "BUY":
+                            trade_cost = current_price * position_size
+                            if not check_monthly_budget(strategy_name, trade_cost, budget_spent):
+                                continue
+                            if not check_strategy_cap(strategy_name, trade_cost, strategy_alloc):
+                                continue
+
+                        if action == "BUY" and os.getenv("MARKET_TREND_FILTER", "true").lower() == "true":
+                            if not market_filter.is_above_ma200():
+                                print(f"🛑 {symbol} 買進被大盤年線過濾攔截")
+                                continue
+
+                        if action == "SELL":
+                            owned = holdings.get(symbol, 0)
+                            if owned < position_size:
+                                print(f"⚠️  {symbol} 持有 {owned} 股，不足賣出 {position_size} 股，跳過")
+                                continue
+
+                        if USE_REAL_API:
+                            order_result = broker.place_order(symbol, action.lower(), position_size)
+                            if "error" in order_result:
+                                continue
+                        else:
+                            broker.place_order(symbol, action, position_size)
+
+                        risk_manager.log_trade(symbol, signal, current_price, position_size)
+
+                        if action == "BUY":
+                            holdings[symbol] = holdings.get(symbol, 0) + position_size
+                        else:
+                            holdings[symbol] = max(0, holdings.get(symbol, 0) - position_size)
+                        save_holdings(holdings)
+
+                        if action == "SELL":
+                            if symbol in pyramid_tracker:
+                                del pyramid_tracker[symbol]
+                            if strategy_name in strategy_alloc:
+                                alloc_data = strategy_alloc[strategy_name]
+                                if alloc_data["total_buy_shares"] > 0:
+                                    avg_cost = alloc_data["total_buy_cost"] / alloc_data["total_buy_shares"]
+                                    cost_basis = avg_cost * position_size
+                                    alloc_data["total_buy_cost"] = max(0, alloc_data["total_buy_cost"] - cost_basis)
+                                    alloc_data["total_buy_shares"] = max(0, alloc_data["total_buy_shares"] - position_size)
+                                    save_strategy_allocation(strategy_alloc)
+
+                        if action == "BUY":
+                            trade_cost = current_price * position_size
+                            update_monthly_spending(strategy_name, trade_cost, budget_spent)
+                            strategy_alloc[strategy_name]["total_buy_cost"] += trade_cost
+                            strategy_alloc[strategy_name]["total_buy_shares"] += position_size
+                            save_strategy_allocation(strategy_alloc)
+
+                        action_zh = "買進" if action == "BUY" else "賣出"
+                        notice_msg = f"\n🔔 交易通知\n股票: {symbol}\n動作: {action_zh}\n價格: {current_price:.2f}\n股數: {position_size} 股\n策略: {strategy_name.upper()}"
+                        send_trade_alert(symbol, action, current_price, position_size, strategy_name.upper())
+                        send_line_notification(notice_msg)
+
+                except Exception as e:
+                    print(f"❌ {symbol} 錯誤: {e}")
+
+            time.sleep(60)
             continue
 
-        for symbol, strategy_name in MY_PORTFOLIO.items():
-            if symbol not in portfolio_history:
-                continue
-                
-            try:
-                strategy = strategy_instances[strategy_name]
-                accumulated_data = portfolio_history[symbol]
-                
-                if USE_REAL_API:
-                    new_data = broker.get_minute_bars(symbol, minutes=1)
-                    if not new_data.empty:
-                        accumulated_data = pd.concat([accumulated_data, new_data])
-                else:
-                    current_price = broker.get_current_price(symbol)
-                    new_row = pd.DataFrame({
-                        'open': [current_price * 0.999], 'high': [current_price * 1.001],
-                        'low': [current_price * 0.998], 'close': [current_price], 'volume': [5000]
-                    }, index=[pd.Timestamp.now()])
-                    accumulated_data = pd.concat([accumulated_data, new_row])
-                
-                if len(accumulated_data) > 100:
-                    accumulated_data = accumulated_data.iloc[-100:]
-                portfolio_history[symbol] = accumulated_data
-                
-                signal = strategy.trade(accumulated_data)
-                current_price = accumulated_data['close'].iloc[-1]
-                
-                if signal != 0:
-                    action = "BUY" if signal == 1 else "SELL"
-                    
-                    # ==========================================
-                    # 下單股數計算（從 .env 讀取，不設定則使用預設值）
-                    # ==========================================
-                    position_size = 0
-                    
-                    # 金額制策略：指定單筆金額，自動換算股數
-                    if strategy_name in ["bollinger", "vwap", "ma_cross"]:
-                        amount_key = f"{strategy_name.upper()}_POSITION_AMOUNT"
-                        defaults = {"bollinger": 2500, "vwap": 2500, "ma_cross": 2200}
-                        target_amount = int(os.getenv(amount_key, defaults[strategy_name]))
-                        
-                        # 金字塔加碼：檢查是否啟用且為買進
-                        pyramid_enabled = os.getenv("PYRAMID_ENABLED", "false").lower() == "true"
-                        if pyramid_enabled and action == "BUY" and strategy_name == "bollinger":
-                            # 初始化追蹤
-                            if symbol not in pyramid_tracker:
-                                pyramid_tracker[symbol] = {"buy_count": 0, "last_buy_price": 0}
-                            tracker = pyramid_tracker[symbol]
-                            
-                            tier1 = int(os.getenv("PYRAMID_TIER1_SHARES", 200))
-                            tier2 = int(os.getenv("PYRAMID_TIER2_SHARES", 400))
-                            tier3 = int(os.getenv("PYRAMID_TIER3_SHARES", 600))
-                            tier2_drop = float(os.getenv("PYRAMID_TIER2_DROP", 0.03))
-                            tier3_drop = float(os.getenv("PYRAMID_TIER3_DROP", 0.05))
-                            
-                            if tracker["buy_count"] == 0:
-                                # 首次買進
-                                position_size = tier1
-                                tracker["last_buy_price"] = current_price
-                                tracker["buy_count"] = 1
-                                print(f"🔔 金字塔加碼 Tier 1：{symbol} 首次買進 {tier1} 股 @ {current_price:.2f}")
-                            elif tracker["buy_count"] == 1:
-                                # 檢查是否跌夠深觸發 Tier 2
-                                drop = (tracker["last_buy_price"] - current_price) / tracker["last_buy_price"]
-                                if drop >= tier2_drop:
-                                    position_size = tier2
-                                    tracker["last_buy_price"] = current_price
-                                    tracker["buy_count"] = 2
-                                    print(f"🔔 金字塔加碼 Tier 2：{symbol} 加碼 {tier2} 股（跌 {drop:.1%}）")
-                                else:
-                                    # 未達加碼門檻，用一般金額制
-                                    position_size = int(target_amount // current_price)
-                            elif tracker["buy_count"] >= 2:
-                                drop = (tracker["last_buy_price"] - current_price) / tracker["last_buy_price"]
-                                if drop >= tier3_drop and tracker["buy_count"] < 3:
-                                    position_size = tier3
-                                    tracker["last_buy_price"] = current_price
-                                    tracker["buy_count"] = 3
-                                    print(f"🔔 金字塔加碼 Tier 3：{symbol} 加碼 {tier3} 股（跌 {drop:.1%}）")
-                                else:
-                                    position_size = int(target_amount // current_price)
-                        else:
-                            position_size = int(target_amount // current_price)
-                        
-                        if position_size <= 0:
-                            position_size = 1  # 至少買 1 股
-                    
-                    # 股數制策略：直接指定買/賣股數
-                    elif strategy_name == "breakout":
-                        buy_shares = int(os.getenv("BREAKOUT_POSITION_BUY", 50))
-                        sell_shares = int(os.getenv("BREAKOUT_POSITION_SELL", 100))
-                        position_size = buy_shares if action == "BUY" else sell_shares
-                    
-                    if position_size <= 0:
-                        continue
-                        
-                    allowed, reject_reason = risk_manager.check_trade_allowed(symbol, signal, current_price)
-                    if not allowed:
-                        send_telegram_message(f"🛑 *{symbol}* 風險控管攔截（{reject_reason}）")
-                        continue
-                    
-                    # 每月預算檢查（僅買進時才扣預算）
-                    if action == "BUY":
-                        trade_cost = current_price * position_size
-                        if not check_monthly_budget(strategy_name, trade_cost, budget_spent):
-                            continue
-                        if not check_strategy_cap(strategy_name, trade_cost, strategy_alloc):
-                            continue
-                    
-                    # 大盤年線過濾（僅買進時檢查）
-                    if action == "BUY" and os.getenv("MARKET_TREND_FILTER", "true").lower() == "true":
-                        if not market_filter.is_above_ma200():
-                            print(f"🛑 {symbol} 買進被大盤年線過濾攔截")
-                            continue
+        # ============================================================
+        # 時段 2：收盤後 13:30-13:45 → 等待發送日報
+        # ============================================================
+        if is_weekday and h == 13 and m > 30 and m < 46:
+            if m == 45 and daily_report_sent_date != now.date():
+                send_daily_report()
+                try:
+                    from scripts.generate_dashboard import main as gen_dash
+                    gen_dash()
+                except Exception as e:
+                    print(f"❌ 產生儀表板失敗: {e}")
+                daily_report_sent_date = now.date()
+            time.sleep(60)
+            continue
 
-                    # 賣出前檢查是否持有足夠股數
-                    if action == "SELL":
-                        owned = holdings.get(symbol, 0)
-                        if owned < position_size:
-                            print(f"⚠️  {symbol} 持有 {owned} 股，不足賣出 {position_size} 股，跳過")
-                            continue
-
-                    # 下單執行
-                    if USE_REAL_API:
-                        order_result = broker.place_order(symbol, action.lower(), position_size)
-                        if "error" in order_result:
-                            continue
-                    else:
-                        broker.place_order(symbol, action, position_size)
-                    
-                    risk_manager.log_trade(symbol, signal, current_price, position_size)
-
-                    # 更新庫存（逐股票記錄實際持有股數）
-                    if action == "BUY":
-                        holdings[symbol] = holdings.get(symbol, 0) + position_size
-                    else:
-                        holdings[symbol] = max(0, holdings.get(symbol, 0) - position_size)
-                    save_holdings(holdings)
-
-                    # 賣出時重置金字塔追蹤 + 釋放策略配置
-                    if action == "SELL":
-                        if symbol in pyramid_tracker:
-                            del pyramid_tracker[symbol]
-                        if strategy_name in strategy_alloc:
-                            alloc_data = strategy_alloc[strategy_name]
-                            if alloc_data["total_buy_shares"] > 0:
-                                avg_cost = alloc_data["total_buy_cost"] / alloc_data["total_buy_shares"]
-                                cost_basis = avg_cost * position_size
-                                alloc_data["total_buy_cost"] = max(0, alloc_data["total_buy_cost"] - cost_basis)
-                                alloc_data["total_buy_shares"] = max(0, alloc_data["total_buy_shares"] - position_size)
-                                save_strategy_allocation(strategy_alloc)
-                    
-                    # 更新每月預算 + 策略配置花費
-                    if action == "BUY":
-                        trade_cost = current_price * position_size
-                        update_monthly_spending(strategy_name, trade_cost, budget_spent)
-                        strategy_alloc[strategy_name]["total_buy_cost"] += trade_cost
-                        strategy_alloc[strategy_name]["total_buy_shares"] += position_size
-                        save_strategy_allocation(strategy_alloc)
-                    
-                    # ==========================================
-                    # 雙重同時通知（Telegram + LINE Notify）
-                    # ==========================================
-                    action_zh = "買進" if action == "BUY" else "賣出"
-                    notice_msg = f"\n🔔 交易通知\n股票: {symbol}\n動作: {action_zh}\n價格: {current_price:.2f}\n股數: {position_size} 股\n策略: {strategy_name.upper()}"
-                    
-                    # 1. 發送 Telegram
-                    send_trade_alert(symbol, action, current_price, position_size, strategy_name.upper())
-                    # 2. 發送 LINE
-                    send_line_notification(notice_msg)
-                    
-            except Exception as e:
-                print(f"❌ {symbol} 錯誤: {e}")
-                
-        time.sleep(60)
+        # ============================================================
+        # 時段 3：非交易時段（盤前、盤後、週末）→ 休眠到下次開盤
+        # ============================================================
+        next_open = _next_market_open(now)
+        sleep_seconds = min((next_open - now).total_seconds(), 3600)
+        if sleep_seconds >= 3600:
+            print(f"💤 非交易時段，下次開盤 {next_open.strftime('%m/%d %H:%M')}，休眠中...")
+        time.sleep(max(sleep_seconds, 60))
 
 if __name__ == "__main__":
     from dotenv import load_dotenv
