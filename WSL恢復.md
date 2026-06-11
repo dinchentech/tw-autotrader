@@ -6,9 +6,8 @@
 # 1. 刪除 .env（含玉山密碼、Telegram Token、FinMind Token）
 rm -f ~/tw-autotrader/.env
 
-# 2. 刪除 opencode API Key 憑證
+# 2. 刪除 opencode API Key 憑證（沒有 key 就打不了任何 API）
 rm -f ~/.local/share/opencode/auth.json
-rm -rf ~/.local/share/opencode/sessions/
 
 # 3. 清 shell 歷史
 history -c && history -w
