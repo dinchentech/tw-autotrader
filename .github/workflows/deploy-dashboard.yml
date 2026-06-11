@@ -4,12 +4,23 @@ on:
   schedule:
     # 每日 14:00 Taipei（06:00 UTC），週一至週五
     - cron: '0 6 * * 1-5'
-  workflow_dispatch:   # 手動觸發
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
 
 jobs:
   deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
-    environment: production
     steps:
       - uses: actions/checkout@v4
 
@@ -33,23 +44,16 @@ jobs:
 
       - name: Fetch dashboard.html from VM via SSH
         run: |
-          # 取得 VM 外部 IP
           EXT_IP=$(gcloud compute instances describe tw-autotrader \
             --zone=asia-east1-b --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
           echo "🌐 VM IP: $EXT_IP"
-
-          # 寫入 SSH 金鑰
           mkdir -p ~/.ssh
           echo "${{ secrets.GH_SSH_KEY }}" > ~/.ssh/gh_actions
           chmod 600 ~/.ssh/gh_actions
-
-          # 抓取 dashboard.html
           ssh -i ~/.ssh/gh_actions -o StrictHostKeyChecking=no \
             github-actions@$EXT_IP \
             "cat /home/frank/tw-autotrader/logs/dashboard.html" \
             > ./dashboard.html
-
-          # 若不存在則遠端產生
           if [ ! -s ./dashboard.html ]; then
             echo "⚠️  dashboard.html 不存在，遠端產生中..."
             ssh -i ~/.ssh/gh_actions -o StrictHostKeyChecking=no \
@@ -60,7 +64,6 @@ jobs:
               "cat /home/frank/tw-autotrader/logs/dashboard.html" \
               > ./dashboard.html
           fi
-
           if [ -s ./dashboard.html ]; then
             echo "✅ dashboard.html 已取得 ($(wc -c < ./dashboard.html) bytes)"
           else
@@ -68,11 +71,16 @@ jobs:
             exit 1
           fi
 
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
+      - name: Prepare artifact
+        run: |
+          cp dashboard.html index.html
+          ls -la dashboard.html index.html
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./
-          destination_dir: ./
-          keep_files: false
-          enable_jekyll: false
+          path: '.'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
