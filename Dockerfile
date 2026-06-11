@@ -6,7 +6,7 @@ COPY requirements.txt .
 RUN pip install --default-timeout=120 --no-cache-dir -r requirements.txt
 # 複製 E.Sun SDK 並安裝
 COPY esun_sdk/ esun_sdk/
-RUN pip install --default-timeout=120 --no-cache-dir esun_sdk/esun_marketdata-*.whl esun_sdk/esun_trade-*.whl
+RUN pip install --default-timeout=600 --no-cache-dir esun_sdk/esun_marketdata-*.whl esun_sdk/esun_trade-*.whl
 # 複製其餘程式碼
 COPY . .
 CMD ["python", "live_trader_multi.py"]
