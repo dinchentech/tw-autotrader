@@ -33,6 +33,24 @@ def load_portfolio() -> dict:
 
 MY_PORTFOLIO = load_portfolio()
 
+# ==========================================
+# 策略資金配置上限（總量 × 各策略百分比）
+# TOTAL_CAPITAL 可大於 INITIAL_CAPITAL（例如還有其他資金來源）
+# ==========================================
+TOTAL_CAPITAL = float(os.getenv("TOTAL_CAPITAL", os.getenv("INITIAL_CAPITAL", 500000)))
+
+ALLOC_BOLLINGER = float(os.getenv("ALLOC_BOLLINGER", 40)) / 100.0
+ALLOC_VWAP = float(os.getenv("ALLOC_VWAP", 20)) / 100.0
+ALLOC_MA_CROSS = float(os.getenv("ALLOC_MA_CROSS", 20)) / 100.0
+ALLOC_BREAKOUT = float(os.getenv("ALLOC_BREAKOUT", 20)) / 100.0
+
+STRATEGY_ALLOC = {
+    "bollinger": TOTAL_CAPITAL * ALLOC_BOLLINGER,
+    "vwap": TOTAL_CAPITAL * ALLOC_VWAP,
+    "ma_cross": TOTAL_CAPITAL * ALLOC_MA_CROSS,
+    "breakout": TOTAL_CAPITAL * ALLOC_BREAKOUT,
+}
+
 USE_REAL_API = os.getenv("USE_REAL_API", "false").lower() == "true"
 BROKER = os.getenv("BROKER", "kgi").lower()
 
@@ -179,6 +197,39 @@ def main():
     
     # 初始化每月預算
     budget_spent = load_monthly_budget()
+
+    # ==========================================
+    # 策略配置上限追蹤（累計買進成本）
+    # ==========================================
+    alloc_file = Path("logs/strategy_allocation.json")
+
+    def load_strategy_allocation() -> dict:
+        if alloc_file.exists():
+            try:
+                data = json.loads(alloc_file.read_text())
+                for s in STRATEGY_ALLOC:
+                    data.setdefault(s, {"total_buy_cost": 0, "total_buy_shares": 0})
+                return data
+            except:
+                pass
+        return {s: {"total_buy_cost": 0, "total_buy_shares": 0} for s in STRATEGY_ALLOC}
+
+    def save_strategy_allocation(alloc: dict):
+        alloc_file.write_text(json.dumps(alloc, indent=2))
+
+    def check_strategy_cap(strategy: str, cost: float, alloc: dict) -> bool:
+        cap = STRATEGY_ALLOC.get(strategy, float("inf"))
+        if cap <= 0:
+            return True
+        net = alloc.get(strategy, {}).get("total_buy_cost", 0)
+        if net + cost > cap:
+            remaining = cap - net
+            print(f"⚠️  策略配置已達上限：{strategy} "
+                  f"已用 {net:.0f} / {cap:.0f} 元（剩 {remaining:.0f}），跳過此筆交易")
+            return False
+        return True
+
+    strategy_alloc = load_strategy_allocation()
 
     # ==========================================
     # 大盤年線過濾器
@@ -368,6 +419,8 @@ def main():
                         trade_cost = current_price * position_size
                         if not check_monthly_budget(strategy_name, trade_cost, budget_spent):
                             continue
+                        if not check_strategy_cap(strategy_name, trade_cost, strategy_alloc):
+                            continue
                     
                     # 大盤年線過濾（僅買進時檢查）
                     if action == "BUY" and os.getenv("MARKET_TREND_FILTER", "true").lower() == "true":
@@ -385,14 +438,26 @@ def main():
                     
                     risk_manager.log_trade(symbol, signal, current_price, position_size)
                     
-                    # 賣出時重置金字塔追蹤
-                    if action == "SELL" and symbol in pyramid_tracker:
-                        del pyramid_tracker[symbol]
+                    # 賣出時重置金字塔追蹤 + 釋放策略配置
+                    if action == "SELL":
+                        if symbol in pyramid_tracker:
+                            del pyramid_tracker[symbol]
+                        if strategy_name in strategy_alloc:
+                            alloc_data = strategy_alloc[strategy_name]
+                            if alloc_data["total_buy_shares"] > 0:
+                                avg_cost = alloc_data["total_buy_cost"] / alloc_data["total_buy_shares"]
+                                cost_basis = avg_cost * position_size
+                                alloc_data["total_buy_cost"] = max(0, alloc_data["total_buy_cost"] - cost_basis)
+                                alloc_data["total_buy_shares"] = max(0, alloc_data["total_buy_shares"] - position_size)
+                                save_strategy_allocation(strategy_alloc)
                     
-                    # 更新每月預算花費
+                    # 更新每月預算 + 策略配置花費
                     if action == "BUY":
                         trade_cost = current_price * position_size
                         update_monthly_spending(strategy_name, trade_cost, budget_spent)
+                        strategy_alloc[strategy_name]["total_buy_cost"] += trade_cost
+                        strategy_alloc[strategy_name]["total_buy_shares"] += position_size
+                        save_strategy_allocation(strategy_alloc)
                     
                     # ==========================================
                     # 雙重同時通知（Telegram + LINE Notify）
