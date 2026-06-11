@@ -1,6 +1,6 @@
 services:
   autotrader:
-    build: .
+    image: tw-autotrader:latest
     container_name: tw_autotrader_bot
     restart: always
     env_file:
