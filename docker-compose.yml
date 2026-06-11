@@ -6,9 +6,9 @@ services:
     env_file:
       - .env
     volumes:
-      - .:/app
+      - ./logs:/app/logs         # 只持久化 logs，程式碼走 image
     logging:
       driver: "json-file"
       options:
-        max-size: "10m" # 防止日誌塞爆 DigitalOcean $6 方案硬碟
+        max-size: "10m"
         max-file: "3"
