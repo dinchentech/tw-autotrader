@@ -42,33 +42,48 @@ class MarketTrendFilter:
             return True
     
     def _fetch_tw_index(self):
-        """從 TWSE 公開 API 抓取加權指數日線（免 token、免套件）"""
-        today = datetime.now()
-        start_date = (today - timedelta(days=400)).strftime("%Y%m%d")
+        """從 TWSE 公開 API 抓取加權指數日線（免 token、免套件）
         
-        try:
-            import requests
-            url = "https://www.twse.com.tw/en/exchangeReport/FMTQIK"
-            params = {"response": "json", "date": start_date}
-            resp = requests.get(url, params=params, headers={
-                "User-Agent": "Mozilla/5.0",
-            }, timeout=10)
-            data = resp.json()
-            rows = data.get("data", [])
-            
-            if rows and len(rows) >= 200:
-                df = pd.DataFrame(rows, columns=[
-                    "date", "volume", "value", "trades", "TAIEX", "change"
-                ])
-                df["close"] = pd.to_numeric(
-                    df["TAIEX"].str.replace(",", ""), errors="coerce"
-                )
-                df = df.dropna(subset=["close"])
-                print(f"✅ 大盤過濾：成功取得 TWSE 加權指數 ({len(df)} 筆)")
-                return df
-            else:
-                print(f"⚠️  大盤過濾：TWSE 回傳 {len(rows)} 筆，不足 200")
-        except Exception as e:
-            print(f"⚠️  大盤過濾：TWSE 抓取失敗 ({e})")
+        一次只回傳約一個月資料，自動往前翻頁直到湊足 200+ 筆。
+        """
+        today = datetime.now()
+        all_rows = []
+        seen_dates = set()
+        
+        # 往前翻 15 次（約 15 個月），每次倒退 40 天
+        for i in range(15):
+            d = today - timedelta(days=i * 40)
+            dt = d.strftime("%Y%m%d")
+            try:
+                import requests
+                url = "https://www.twse.com.tw/en/exchangeReport/FMTQIK"
+                params = {"response": "json", "date": dt}
+                resp = requests.get(url, params=params, headers={
+                    "User-Agent": "Mozilla/5.0",
+                }, timeout=10)
+                data = resp.json()
+                for row in data.get("data", []):
+                    if row[0] not in seen_dates:
+                        seen_dates.add(row[0])
+                        all_rows.append(row)
+                if len(all_rows) >= 200:
+                    break
+            except Exception as e:
+                print(f"⚠️  大盤過濾：TWSE 第 {i+1} 次抓取失敗 ({e})")
+                continue
+        
+        if len(all_rows) >= 200:
+            df = pd.DataFrame(all_rows, columns=[
+                "date", "volume", "value", "trades", "TAIEX", "change"
+            ])
+            df["close"] = pd.to_numeric(
+                df["TAIEX"].str.replace(",", ""), errors="coerce"
+            )
+            df = df.dropna(subset=["close"])
+            df = df.sort_values("date")
+            print(f"✅ 大盤過濾：成功取得 TWSE 加權指數 ({len(df)} 筆)")
+            return df
+        else:
+            print(f"⚠️  大盤過濾：TWSE 僅回傳 {len(all_rows)} 筆，不足 200")
         
         return None
