@@ -1,31 +1,33 @@
 # WSL 備份還原
 
-## 備份（在 WSL 中執行）
+## 備份前清理（賣給他人前務必執行）
 
 ```bash
-# 先清理敏感資料（API Key、對話記錄等）
+# 1. 刪除 .env（含玉山密碼、Telegram Token、FinMind Token）
+rm -f ~/tw-autotrader/.env
+
+# 2. 刪除 opencode API Key 憑證
 rm -f ~/.local/share/opencode/auth.json
 rm -rf ~/.local/share/opencode/sessions/
+
+# 3. 清 shell 歷史
 history -c && history -w
 
-# 離開 WSL 回到 PowerShell
+# 4. （可選）刪除 SSH Key — 如果你有放金鑰在 WSL 裡
+rm -rf ~/.ssh
+
+# 5. 離開 WSL 回到 PowerShell
 exit
 ```
 
-在 **PowerShell（系統管理員）** 中執行：
+> ⚠️ **`.env` 沒刪掉的話，買家拿到你的玉山帳密、Telegram Token、FinMind Token，可以直接用你的身份下單、發訊息、叫資料。**
+> ⚠️ **`~/.ssh/` 沒清的話，買家拿到你的 GitHub / GCP SSH 金鑰。**
 
-```powershell
-# 停止 WSL
-wsl --shutdown
+## 注意：還原後買家需自行設定
 
-# 匯出成 tar 檔（備份）
-wsl --export <發行版名稱> D:\wsl_backup.tar
-```
+還原後買家第一次進 WSL 要做的：
 
-- `<發行版名稱>` 可用 `wsl -l` 查看，通常是 `Ubuntu` 或 `Ubuntu-22.04`
-- `D:\wsl_backup.tar` 可自行改路徑
-
-## 還原
+## 備份
 
 在 **PowerShell（系統管理員）** 中執行：
 
