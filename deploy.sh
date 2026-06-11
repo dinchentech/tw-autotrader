@@ -20,6 +20,14 @@ gcloud_as_user() {
   fi
 }
 
+run_as_user() {
+  if [ -n "$GCLOUD_USER" ]; then
+    sudo -u "$GCLOUD_USER" "$@"
+  else
+    "$@"
+  fi
+}
+
 echo "🏗️  本機建構 Docker image..."
 sudo docker build -t tw-autotrader .
 
@@ -27,7 +35,7 @@ echo "📦 壓縮 image 並上傳到 Cloud Storage..."
 TMP_FILE="/tmp/tw-autotrader.tar.gz"
 sudo docker save tw-autotrader | gzip > "${TMP_FILE}"
 sudo chmod 644 "${TMP_FILE}"
-gcloud_as_user gsutil cp "${TMP_FILE}" "${BUCKET}/tw-autotrader.tar.gz"
+run_as_user gsutil cp "${TMP_FILE}" "${BUCKET}/tw-autotrader.tar.gz"
 rm -f "${TMP_FILE}"
 
 echo "📄 同步設定檔 (.env + docker-compose.yml)..."
