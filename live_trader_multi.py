@@ -428,8 +428,9 @@ def main():
                     if position_size <= 0:
                         continue
                         
-                    if not risk_manager.check_trade_allowed(symbol, signal, current_price):
-                        send_telegram_message(f"🛑 *{symbol}* 風險控管攔截（次數/虧損/漲跌停）")
+                    allowed, reject_reason = risk_manager.check_trade_allowed(symbol, signal, current_price)
+                    if not allowed:
+                        send_telegram_message(f"🛑 *{symbol}* 風險控管攔截（{reject_reason}）")
                         continue
                     
                     # 每月預算檢查（僅買進時才扣預算）

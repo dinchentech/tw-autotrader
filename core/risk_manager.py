@@ -47,26 +47,29 @@ class RiskManager:
             self.daily_trade_count = 0
             self.daily_loss = 0.0
     
-    def check_trade_allowed(self, symbol: str, signal: int, current_price: float) -> bool:
-        """檢查是否允許交易"""
+    def check_trade_allowed(self, symbol: str, signal: int, current_price: float) -> tuple:
+        """檢查是否允許交易，回傳 (允許與否, 原因)"""
         self._load_today_trades()
         
         # 每日交易次數上限
         if self.daily_trade_count >= self.max_daily_trades:
-            print(f"⚠️ 風險控管：今日交易次數已達上限 ({self.max_daily_trades})")
-            return False
+            reason = "今日交易次數已達上限"
+            print(f"⚠️ 風險控管：{reason} ({self.max_daily_trades})")
+            return False, reason
         
         # 每日最大虧損
         if self.daily_loss >= self.max_daily_loss:
-            print(f"⚠️ 風險控管：今日虧損已達上限 ({self.max_daily_loss:.1%})")
-            return False
+            reason = "今日虧損已達上限"
+            print(f"⚠️ 風險控管：{reason} ({self.max_daily_loss:.1%})")
+            return False, reason
         
         # 漲跌停過濾
         if self._is_limit_up_or_down(symbol, current_price):
-            print(f"⚠️ 風險控管：{symbol} 已達漲跌停，跳過交易")
-            return False
+            reason = f"{symbol} 已達漲跌停"
+            print(f"⚠️ 風險控管：{reason}，跳過交易")
+            return False, reason
         
-        return True
+        return True, ""
     
     def calculate_position_size(self, symbol: str, current_price: float) -> int:
         """動態計算部位大小"""
