@@ -138,16 +138,16 @@ def send_daily_report():
 
 
 def _next_market_open(now: datetime) -> datetime:
-    """計算下次台股開盤時間 (交易日 09:00)"""
-    # 交易日 09:00 前 → 今天 09:00
-    if now.weekday() < 5 and now.hour < 9:
-        return now.replace(hour=9, minute=0, second=0, microsecond=0)
+    """計算下次台股開盤時間 (交易日 08:45，提前暖機)"""
+    # 交易日 08:45 前 → 今天 08:45
+    if now.weekday() < 5 and (now.hour < 8 or (now.hour == 8 and now.minute < 45)):
+        return now.replace(hour=8, minute=45, second=0, microsecond=0)
     # 往後找第一個交易日
     for days in range(1, 8):
         dt = now + timedelta(days=days)
         if dt.weekday() < 5:
-            return dt.replace(hour=9, minute=0, second=0, microsecond=0)
-    return now.replace(hour=9, minute=0) + timedelta(days=1)
+            return dt.replace(hour=8, minute=45, second=0, microsecond=0)
+    return now.replace(hour=8, minute=45) + timedelta(days=1)
 
 
 def main():
@@ -320,9 +320,9 @@ def main():
         h, m = now.hour, now.minute
 
         # ============================================================
-        # 時段 1：盤中 09:00-13:30 → 正常交易
+        # 時段 1：盤中 08:45-13:30 → 提前暖機 + 正常交易
         # ============================================================
-        if is_weekday and ((h == 9 and m >= 0) or 9 < h < 13 or (h == 13 and m <= 30)):
+        if is_weekday and ((h == 8 and m >= 45) or (h >= 9 and h < 13) or (h == 13 and m <= 30)):
             for symbol, strategy_name in MY_PORTFOLIO.items():
                 if symbol not in portfolio_history:
                     continue
