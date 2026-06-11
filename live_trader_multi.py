@@ -232,6 +232,24 @@ def main():
     strategy_alloc = load_strategy_allocation()
 
     # ==========================================
+    # 庫存追蹤（逐股票記錄持有股數，避免空賣）
+    # ==========================================
+    holdings_file = Path("logs/holdings.json")
+
+    def load_holdings() -> dict:
+        if holdings_file.exists():
+            try:
+                return json.loads(holdings_file.read_text())
+            except:
+                pass
+        return {}
+
+    def save_holdings(h: dict):
+        holdings_file.write_text(json.dumps(h, indent=2))
+
+    holdings = load_holdings()
+
+    # ==========================================
     # 大盤年線過濾器
     # ==========================================
     from core.market_filter import MarketTrendFilter
@@ -427,7 +445,14 @@ def main():
                         if not market_filter.is_above_ma200():
                             print(f"🛑 {symbol} 買進被大盤年線過濾攔截")
                             continue
-                    
+
+                    # 賣出前檢查是否持有足夠股數
+                    if action == "SELL":
+                        owned = holdings.get(symbol, 0)
+                        if owned < position_size:
+                            print(f"⚠️  {symbol} 持有 {owned} 股，不足賣出 {position_size} 股，跳過")
+                            continue
+
                     # 下單執行
                     if USE_REAL_API:
                         order_result = broker.place_order(symbol, action.lower(), position_size)
@@ -437,7 +462,14 @@ def main():
                         broker.place_order(symbol, action, position_size)
                     
                     risk_manager.log_trade(symbol, signal, current_price, position_size)
-                    
+
+                    # 更新庫存（逐股票記錄實際持有股數）
+                    if action == "BUY":
+                        holdings[symbol] = holdings.get(symbol, 0) + position_size
+                    else:
+                        holdings[symbol] = max(0, holdings.get(symbol, 0) - position_size)
+                    save_holdings(holdings)
+
                     # 賣出時重置金字塔追蹤 + 釋放策略配置
                     if action == "SELL":
                         if symbol in pyramid_tracker:
