@@ -4,8 +4,8 @@
 > 能打開四支策略檔案，指出買進條件在哪一行、賣出條件在哪一行，並知道每個參數在做什麼。
 
 ### 原專案對應檔案
-- `strategies/vwap_deviation.py`（全部 25 行）
-- `strategies/ma_cross.py`（全部 32 行）
+- `strategies/vwap_deviation.py`（全部 30 行）
+- `strategies/ma_cross.py`（全部 46 行）
 - `strategies/bollinger.py`（全部 33 行）
 - `strategies/breakout.py`（全部 34 行）
 
@@ -27,8 +27,8 @@
 2. 進入 `python_basic/` 目錄，執行 `python week-05-tweak_params.py`，它會示範如何用 OpenCode 改參數。
 
 ### 學完自評清單
-- [ ] 我能在 vwap_deviation.py 中找出買進條件（第 21 行）
-- [ ] 我能在 ma_cross.py 中找出黃金交叉的條件（第 22 行）
+- [ ] 我能在 vwap_deviation.py 中找出買進條件（第 26 行）
+- [ ] 我能在 ma_cross.py 中找出黃金交叉的條件（第 36 行）
 - [ ] 我能在 bollinger.py 中找出布林下軌的計算（第 16 行）
 - [ ] 我能在 breakout.py 中找出 ATR 波動度過濾（第 27 行）
 - [ ] 我執行過 `python backtest.py --strategy bollinger --std_dev 2.5` 並看到不同結果

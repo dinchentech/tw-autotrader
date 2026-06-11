@@ -427,7 +427,8 @@ def main():
                         if action == "SELL":
                             owned = holdings.get(symbol, 0)
                             if owned < position_size:
-                                print(f"⚠️  {symbol} 持有 {owned} 股，不足賣出 {position_size} 股，跳過")
+                                if owned > 0:
+                                    print(f"⚠️  {symbol} 持有 {owned} 股，不足賣出 {position_size} 股，跳過")
                                 continue
 
                         if USE_REAL_API:
