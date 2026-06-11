@@ -71,16 +71,32 @@ jobs:
             exit 1
           fi
 
+      - name: Check GIT_PAGE setting
+        id: check-gitpage
+        run: |
+          EXT_IP=$(gcloud compute instances describe tw-autotrader \
+            --zone=asia-east1-b --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
+          mkdir -p ~/.ssh
+          echo "${{ secrets.GH_SSH_KEY }}" > ~/.ssh/gh_actions
+          chmod 600 ~/.ssh/gh_actions
+          GIT_PAGE=$(ssh -i ~/.ssh/gh_actions -o StrictHostKeyChecking=no \
+            github-actions@$EXT_IP \
+            "grep ^GIT_PAGE= /home/frank/tw-autotrader/.env | cut -d= -f2" 2>/dev/null || echo "off")
+          echo "GIT_PAGE=${GIT_PAGE:-off}"
+          echo "gitpage=${GIT_PAGE:-off}" >> "$GITHUB_OUTPUT"
+
       - name: Prepare artifact
         run: |
           cp dashboard.html index.html
           ls -la dashboard.html index.html
 
       - name: Upload artifact
+        if: steps.check-gitpage.outputs.gitpage == 'on'
         uses: actions/upload-pages-artifact@v3
         with:
           path: '.'
 
       - name: Deploy to GitHub Pages
+        if: steps.check-gitpage.outputs.gitpage == 'on'
         id: deployment
         uses: actions/deploy-pages@v5
