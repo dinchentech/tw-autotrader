@@ -23,9 +23,16 @@ echo "🏗️  建構 Docker image（約 1-2 分鐘）..."
 sudo docker build -t tw-autotrader .
 
 echo "📦 壓縮並傳送至 GCP VM（${VM_NAME}）..."
-sudo docker save tw-autotrader | gzip -1 | gcloud_as_user compute ssh "${VM_NAME}" \
-  --zone="${ZONE}" --ssh-flag="-C" \
-  --command="gunzip | sudo docker load"
+# 改用 save + scp，比 SSH pipe 更穩定（避免大檔傳輸中斷）
+TMP_IMAGE="tw-autotrader.tar"
+sudo docker save tw-autotrader -o "${TMP_IMAGE}"
+sudo chmod 644 "${TMP_IMAGE}"   # docker save 產生的檔只有 root 能讀，開放給 gcloud scp 讀取
+gcloud_as_user compute scp "${TMP_IMAGE}" "${VM_NAME}:~/tw-autotrader/${TMP_IMAGE}" \
+  --zone="${ZONE}" --quiet
+gcloud_as_user compute ssh "${VM_NAME}" --zone="${ZONE}" \
+  --ssh-flag="-o ServerAliveInterval=60" \
+  --command="sudo docker load -i ~/tw-autotrader/${TMP_IMAGE} && rm -f ~/tw-autotrader/${TMP_IMAGE}"
+rm -f "${TMP_IMAGE}"
 
 echo "📄 同步設定檔 (.env + docker-compose.yml)..."
 gcloud_as_user compute scp "${ENV_FILE}" "${VM_NAME}:~/tw-autotrader/.env" \
