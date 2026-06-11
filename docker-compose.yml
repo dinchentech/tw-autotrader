@@ -3,6 +3,8 @@ services:
     image: tw-autotrader:latest
     container_name: tw_autotrader_bot
     restart: always
+    environment:
+      - PYTHONUNBUFFERED=1
     env_file:
       - .env
     volumes:
