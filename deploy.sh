@@ -33,9 +33,17 @@ gcloud_as_user compute scp "${ENV_FILE}" "${VM_NAME}:~/tw-autotrader/.env" \
 gcloud_as_user compute scp docker-compose.yml "${VM_NAME}:~/tw-autotrader/docker-compose.yml" \
   --zone="${ZONE}" --quiet
 
+echo "🧹 清理舊 image..."
+gcloud_as_user compute ssh "${VM_NAME}" --zone="${ZONE}" \
+  --command="sudo docker system prune -a -f --filter until=48h 2>&1 | tail -1"
+
 echo "🔄 重啟容器..."
 gcloud_as_user compute ssh "${VM_NAME}" --zone="${ZONE}" \
   --command="cd ~/tw-autotrader && sudo docker compose up -d --force-recreate"
+
+echo "🧹 清理舊 image（保留最新的）..."
+gcloud_as_user compute ssh "${VM_NAME}" --zone="${ZONE}" \
+  --command="sudo docker system prune -a -f 2>&1 | tail -1"
 
 echo ""
 echo "✅  部署完成！"
