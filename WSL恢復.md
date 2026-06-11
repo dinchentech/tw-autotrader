@@ -1,26 +1,39 @@
 # WSL 備份還原
 
+## 憑證檔案注意（重要）
+
+本專案使用玉山證券 `.p12` 憑證檔案（位於 `~/tw-autotrader/esun_sdk/`）。**憑證是個人資產，無法共用。**
+
+- **備份前**：請自行將憑證檔移出備份範圍（或告知買家需自備憑證）
+- **還原後**：買家必須將自己的 `.p12` 憑證放到 `~/tw-autotrader/esun_sdk/` 目錄下
+- 程式會自動偵測該目錄下的 `.p12` 檔案，無需額外設定
+
 ## 備份前清理（賣給他人前務必執行）
 
 ```bash
-# 1. 刪除 .env（含玉山密碼、Telegram Token、FinMind Token）
+# 1. 將個人憑證移出（賣給他人時，買家會用自己的憑證）
+#    建議移到 Windows 磁碟暫存
+mv ~/tw-autotrader/esun_sdk/*.p12 /mnt/c/Users/你的名字/Desktop/
+
+# 2. 刪除 .env（含玉山密碼、Telegram Token、FinMind Token）
 rm -f ~/tw-autotrader/.env
 
-# 2. 刪除 opencode API Key 憑證（沒有 key 就打不了任何 API）
+# 3. 刪除 opencode API Key 憑證（沒有 key 就打不了任何 API）
 rm -f ~/.local/share/opencode/auth.json
 
-# 3. 清 shell 歷史
+# 4. 清 shell 歷史
 history -c && history -w
 
-# 4. （可選）刪除 SSH Key — 如果你有放金鑰在 WSL 裡
+# 5. （可選）刪除 SSH Key — 如果你有放金鑰在 WSL 裡
 rm -rf ~/.ssh
 
-# 5. 離開 WSL 回到 PowerShell
+# 6. 離開 WSL 回到 PowerShell
 exit
 ```
 
 > ⚠️ **`.env` 沒刪掉的話，買家拿到你的玉山帳密、Telegram Token、FinMind Token，可以直接用你的身份下單、發訊息、叫資料。**
 > ⚠️ **`~/.ssh/` 沒清的話，買家拿到你的 GitHub / GCP SSH 金鑰。**
+> ⚠️ **`.p12` 憑證是個人數位簽章，移出備份避免外洩。**
 
 ## 注意：還原後買家需自行設定
 
@@ -56,12 +69,25 @@ Ubuntu_New config --default-user frank
 wsl -d Ubuntu_New
 ```
 
+### 買家需要自己準備的
+
+| 項目 | 說明 |
+|------|------|
+| 📄 玉山 `.p12` 憑證 | 放到 `~/tw-autotrader/esun_sdk/` |
+| 🔑 自己的 `.env` | 參考 `.env.example.lump` 填寫 |
+| 🤖 Telegram Bot Token | 自己跟 `@BotFather` 申請 |
+| 🔐 OpenCode API Key | `opencode providers login` |
+
 進去後確認：
 
 ```bash
 # 檢查 opencode 憑證已清空
 ls ~/.local/share/opencode/auth.json
 # 預期輸出：ls: cannot access ... No such file or directory
+
+# 檢查憑證已放入
+ls ~/tw-autotrader/esun_sdk/*.p12
+# 應該看到你的 .p12 檔案
 
 # 設定 opencode provider（重新登入）
 opencode providers login OpenRouter
