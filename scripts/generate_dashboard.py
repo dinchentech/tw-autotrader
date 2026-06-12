@@ -17,7 +17,10 @@ CHART_CDN = "https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"
 def load_trades() -> pd.DataFrame:
     if not CSV_PATH.exists():
         return pd.DataFrame()
-    df = pd.read_csv(CSV_PATH)
+    try:
+        df = pd.read_csv(CSV_PATH)
+    except pd.errors.EmptyDataError:
+        return pd.DataFrame()
     if df.empty:
         return df
     df["timestamp"] = pd.to_datetime(df["timestamp"])
