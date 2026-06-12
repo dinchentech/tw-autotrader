@@ -486,9 +486,9 @@ def main():
             continue
 
         # ============================================================
-        # 時段 2：收盤後 13:30-13:45 → 等待發送日報
+        # 時段 2：收盤後 13:31-13:59 → 等待發送日報（13:45準時發送）
         # ============================================================
-        if is_weekday and h == 13 and m > 30 and m < 46:
+        if is_weekday and h == 13 and m >= 31:
             if m == 45 and daily_report_sent_date != now.date():
                 send_daily_report()
                 try:
