@@ -47,15 +47,27 @@ class RiskManager:
             self.daily_trade_count = 0
             self.daily_loss = 0.0
     
-    def check_trade_allowed(self, symbol: str, signal: int, current_price: float) -> tuple:
-        """檢查是否允許交易，回傳 (允許與否, 原因)"""
+    def check_trade_allowed(self, symbol: str, signal: int, current_price: float,
+                            total_buy: float = 0, total_sell: float = 0) -> tuple:
+        """檢查是否允許交易，回傳 (允許與否, 原因)
+
+        total_buy: 累計買入總金額（用於判斷剩餘資金）
+        total_sell: 累計賣出總金額
+        """
         self._load_today_trades()
         
-        # 每日交易次數上限
-        if self.daily_trade_count >= self.max_daily_trades:
-            reason = "今日交易次數已達上限"
-            print(f"⚠️ 風險控管：{reason} ({self.max_daily_trades})")
-            return False, reason
+        # 資金充裕檢查：剩餘資金 > CAPITAL_CONTROL_LINE% 時，不限制交易次數
+        capital_control_line = float(os.getenv("CAPITAL_CONTROL_LINE", "30"))
+        remaining = self.initial_capital - total_buy + total_sell
+        capital_ratio = remaining / self.initial_capital if self.initial_capital > 0 else 1.0
+        
+        if capital_ratio > capital_control_line / 100:
+            pass  # 資金充裕，跳過交易次數檢查
+        else:
+            if self.daily_trade_count >= self.max_daily_trades:
+                reason = "今日交易次數已達上限"
+                print(f"⚠️ 風險控管：{reason} ({self.max_daily_trades})，剩餘資金 {capital_ratio:.1%}")
+                return False, reason
         
         # 每日最大虧損
         if self.daily_loss >= self.max_daily_loss:

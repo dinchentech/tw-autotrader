@@ -191,4 +191,6 @@ create_tw_autotrader.py
 /.omo
 /.omo
 #usun_sdk
+*.tar
+*.tar.gz
 esun_sdk/

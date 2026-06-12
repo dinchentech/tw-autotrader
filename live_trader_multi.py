@@ -244,6 +244,10 @@ def main():
 
     strategy_alloc = load_strategy_allocation()
 
+    # 累計買賣總額（含已實現損益，用於 CAPITAL_CONTROL_LINE 資金充裕判斷）
+    total_buy_all = 0
+    total_sell_all = 0
+
     # ==========================================
     # 庫存追蹤（逐股票記錄持有股數，避免空賣）
     # ==========================================
@@ -407,7 +411,9 @@ def main():
                         if position_size <= 0:
                             continue
 
-                        allowed, reject_reason = risk_manager.check_trade_allowed(symbol, signal, current_price)
+                        allowed, reject_reason = risk_manager.check_trade_allowed(
+                            symbol, signal, current_price,
+                            total_buy=total_buy_all, total_sell=total_sell_all)
                         if not allowed:
                             send_telegram_message(f"🛑 *{symbol}* 風險控管攔截（{reject_reason}）")
                             continue
@@ -447,6 +453,8 @@ def main():
                         save_holdings(holdings)
 
                         if action == "SELL":
+                            sell_proceeds = current_price * position_size
+                            total_sell_all += sell_proceeds
                             if symbol in pyramid_tracker:
                                 del pyramid_tracker[symbol]
                             if strategy_name in strategy_alloc:
@@ -460,6 +468,7 @@ def main():
 
                         if action == "BUY":
                             trade_cost = current_price * position_size
+                            total_buy_all += trade_cost
                             update_monthly_spending(strategy_name, trade_cost, budget_spent)
                             strategy_alloc[strategy_name]["total_buy_cost"] += trade_cost
                             strategy_alloc[strategy_name]["total_buy_shares"] += position_size
