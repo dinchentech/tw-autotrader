@@ -28,6 +28,20 @@ run_as_user() {
   fi
 }
 
+echo "🔍 檢查 VM 狀態..."
+VM_STATUS=$(gcloud_as_user compute instances describe "${VM_NAME}" --zone="${ZONE}" --format="get(status)" 2>&1)
+if [ "$VM_STATUS" != "RUNNING" ]; then
+  echo ""
+  echo "⚠️  VM 目前狀態：${VM_STATUS:-未知}"
+  echo "   VM 在非交易時段會自動關機，請先手動啟動："
+  echo ""
+  echo "   gcloud compute instances start ${VM_NAME} --zone=${ZONE}"
+  echo ""
+  echo "   啟動後約 1-2 分鐘 VM 就緒，再重新執行 deploy。"
+  exit 1
+fi
+echo "   ✅ VM 運行中"
+
 echo "🏗️  本機建構 Docker image..."
 sudo docker build -t tw-autotrader .
 
