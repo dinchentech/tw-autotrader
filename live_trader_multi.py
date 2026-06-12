@@ -43,12 +43,14 @@ ALLOC_BOLLINGER = float(os.getenv("ALLOC_BOLLINGER", 40)) / 100.0
 ALLOC_VWAP = float(os.getenv("ALLOC_VWAP", 20)) / 100.0
 ALLOC_MA_CROSS = float(os.getenv("ALLOC_MA_CROSS", 20)) / 100.0
 ALLOC_BREAKOUT = float(os.getenv("ALLOC_BREAKOUT", 20)) / 100.0
+ALLOC_KEEP_WAIT = float(os.getenv("ALLOC_KEEP_WAIT", 0)) / 100.0
 
 STRATEGY_ALLOC = {
     "bollinger": TOTAL_CAPITAL * ALLOC_BOLLINGER,
     "vwap": TOTAL_CAPITAL * ALLOC_VWAP,
     "ma_cross": TOTAL_CAPITAL * ALLOC_MA_CROSS,
     "breakout": TOTAL_CAPITAL * ALLOC_BREAKOUT,
+    "keep_wait": TOTAL_CAPITAL * ALLOC_KEEP_WAIT,
 }
 
 USE_REAL_API = os.getenv("USE_REAL_API", "false").lower() == "true"
@@ -69,6 +71,7 @@ from strategies.vwap_strategy import VWAPDeviationStrategy
 from strategies.ma_cross_strategy import MACrossStrategy
 from strategies.bollinger_strategy import BollingerReverseStrategy
 from strategies.breakout_strategy import BreakoutStrategy
+from strategies.keep_wait_strategy import KeepWaitStrategy
 from utils.telegram import send_trade_alert, send_telegram_message
 from core.risk_manager import RiskManager
 
@@ -303,6 +306,9 @@ def main():
             lookback=int(os.getenv("BREAKOUT_LOOKBACK", 20)),
             atr_period=int(os.getenv("BREAKOUT_ATR_PERIOD", 14)),
             atr_threshold=float(os.getenv("BREAKOUT_ATR_THRESHOLD", 0.01)),
+        ),
+        "keep_wait": KeepWaitStrategy(
+            take_profit_pct=float(os.getenv("KW_TP_TRIGGER_PCT", 15)),
         )
     }
     
@@ -353,10 +359,88 @@ def main():
                     signal = strategy.trade(accumulated_data)
                     current_price = accumulated_data['close'].iloc[-1]
 
+                    if strategy_name == "keep_wait":
+                        kw_initial = int(os.getenv("KW_INITIAL_SHARES", 1000))
+                        kw_add = int(os.getenv("KW_ADD_SHARES", 2000))
+                        kw_drop = float(os.getenv("KW_ADD_DROP_PCT", 0.05))
+                        kw_max_add = int(os.getenv("KW_MAX_ADDITIONS", 3))
+                        kw_tp_pct = float(os.getenv("KW_TP_TRIGGER_PCT", 15))
+                        kw_tp_sell = float(os.getenv("KW_TP_SELL_RATIO", 100))
+                        kw_cooldown = int(os.getenv("KW_COOLDOWN_DAYS", 30))
+
+                        if symbol not in pyramid_tracker:
+                            pyramid_tracker[symbol] = {
+                                "buy_count": 0, "last_buy_price": 0.0,
+                                "total_cost": 0.0, "total_shares": 0,
+                                "sold_date": None,
+                                "notified_tp": set(),
+                            }
+                        trk = pyramid_tracker[symbol]
+
+                        if trk.get("sold_date") and trk["buy_count"] == -1:
+                            days_since_sold = (datetime.now() - trk["sold_date"]).days
+                            if days_since_sold < kw_cooldown:
+                                signal = 0
+                                continue
+                            else:
+                                trk["buy_count"] = 0
+
+                        if trk["buy_count"] == 0:
+                            signal = 1
+                            position_size = kw_initial
+                            trk["last_buy_price"] = current_price
+                            trk["total_cost"] = current_price * position_size
+                            trk["total_shares"] = position_size
+                            trk["buy_count"] = 1
+                            print(f"📥 {symbol} keep_wait 初始進場 {position_size} 股 @ {current_price:.0f}")
+                        else:
+                            avg_cost = trk["total_cost"] / trk["total_shares"] if trk["total_shares"] > 0 else current_price
+                            drop_pct = (trk["last_buy_price"] - current_price) / trk["last_buy_price"] * 100
+                            profit_pct = (current_price - avg_cost) / avg_cost * 100
+
+                            if profit_pct >= kw_tp_pct and trk["total_shares"] > 0:
+                                owned = holdings.get(symbol, 0)
+                                if kw_tp_sell > 0 and owned > 0:
+                                    sell_qty = max(1, int(owned * kw_tp_sell / 100))
+                                    signal = -1
+                                    position_size = sell_qty
+                                    print(f"📈 {symbol} 停利 +{profit_pct:.1f}% 賣出 {sell_qty}/{owned} 股 ({kw_tp_sell:.0f}%)")
+                                    trk["buy_count"] = -1
+                                    trk["sold_date"] = datetime.now()
+                                elif kw_tp_sell == 0 and owned > 0:
+                                    signal = 0
+                                    if profit_pct not in trk.setdefault("notified_tp", set()):
+                                        trk["notified_tp"].add(profit_pct)
+                                        msg = (f"📈 *{symbol}* 漲幅 +{profit_pct:.1f}% 已達目標 {kw_tp_pct:.0f}%\n"
+                                               f"目前持有 {owned} 股，成本均價 {avg_cost:.0f}\n"
+                                               f"是否手動獲利了結？")
+                                        send_telegram_message(msg)
+                                        print(f"📢 {symbol} 漲 {profit_pct:.1f}% 達標，已通知使用者")
+                                else:
+                                    signal = 0
+                            elif drop_pct >= kw_drop * 100 and trk["buy_count"] < kw_max_add:
+                                signal = 1
+                                position_size = kw_add
+                                trk["last_buy_price"] = current_price
+                                trk["total_cost"] += current_price * position_size
+                                trk["total_shares"] += position_size
+                                trk["buy_count"] += 1
+                                print(f"📉 {symbol} DCA 第 {trk['buy_count']} 次加碼 {position_size} 股 "
+                                      f"@ {current_price:.0f}（距前次 -{drop_pct:.1f}%）")
+                            else:
+                                signal = 0
+
+                        if signal == 0:
+                            continue
+
                     if signal != 0:
                         action = "BUY" if signal == 1 else "SELL"
 
-                        position_size = 0
+                        if strategy_name == "keep_wait":
+                            pass  # position_size already set by DCA logic above
+                        else:
+                            position_size = 0
+
                         if strategy_name in ["bollinger", "vwap", "ma_cross"]:
                             amount_key = f"{strategy_name.upper()}_POSITION_AMOUNT"
                             defaults = {"bollinger": 2500, "vwap": 2500, "ma_cross": 2200}
@@ -455,7 +539,7 @@ def main():
                         if action == "SELL":
                             sell_proceeds = current_price * position_size
                             total_sell_all += sell_proceeds
-                            if symbol in pyramid_tracker:
+                            if symbol in pyramid_tracker and strategy_name != "keep_wait":
                                 del pyramid_tracker[symbol]
                             if strategy_name in strategy_alloc:
                                 alloc_data = strategy_alloc[strategy_name]
