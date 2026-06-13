@@ -5,6 +5,9 @@ import pandas as pd
 from datetime import datetime, date, timedelta
 import json
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()  # 讀取 .env 檔（本機開發用；Docker container 走 env_file 自動注入）
 
 # ==========================================
 # 1. 核心投資組合配置（從 .env 讀取）
