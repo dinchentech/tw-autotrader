@@ -44,6 +44,7 @@ ALLOC_VWAP = float(os.getenv("ALLOC_VWAP", 20)) / 100.0
 ALLOC_MA_CROSS = float(os.getenv("ALLOC_MA_CROSS", 20)) / 100.0
 ALLOC_BREAKOUT = float(os.getenv("ALLOC_BREAKOUT", 20)) / 100.0
 ALLOC_KEEP_WAIT = float(os.getenv("ALLOC_KEEP_WAIT", 0)) / 100.0
+INST_MOM_CAPITAL = float(os.getenv("INST_MOM_CAPITAL", 0))
 
 STRATEGY_ALLOC = {
     "bollinger": TOTAL_CAPITAL * ALLOC_BOLLINGER,
@@ -72,6 +73,7 @@ from strategies.ma_cross_strategy import MACrossStrategy
 from strategies.bollinger_strategy import BollingerReverseStrategy
 from strategies.breakout_strategy import BreakoutStrategy
 from strategies.keep_wait_strategy import KeepWaitStrategy
+from strategies.institutional_momentum import InstitutionalMomentumStrategy
 from utils.telegram import send_trade_alert, send_telegram_message
 from core.risk_manager import RiskManager
 
@@ -153,10 +155,14 @@ def _next_market_open(now: datetime) -> datetime:
     return now.replace(hour=8, minute=45) + timedelta(days=1)
 
 
+APP_VERSION = "1.00"
+BUILD_DATE = "2026-06-13"
+
 def main():
-    print("🚀 啟動 TW AutoTrader 多股多策略分流系統（全天候監控模式）")
-    send_line_notification("\n🤖 TW AutoTrader 雲端主機已成功啟動！開始全天候監控台股...")
-    send_telegram_message("✅ *TW AutoTrader* 多股多策略系統已啟動\n📈 監控中: " + ", ".join(f"{s}[{p}]" for s, p in MY_PORTFOLIO.items()))
+    print(f"🚀 TW AutoTrader v{APP_VERSION} (build {BUILD_DATE}) 多股多策略分流系統啟動")
+    print(f"📦 版號：v{APP_VERSION}｜建置日期：{BUILD_DATE}")
+    send_line_notification(f"\n🤖 TW AutoTrader v{APP_VERSION} 雲端主機已成功啟動！開始全天候監控台股...")
+    send_telegram_message(f"✅ *TW AutoTrader* v{APP_VERSION} 多股多策略系統已啟動\n📈 監控中: " + ", ".join(f"{s}[{p}]" for s, p in MY_PORTFOLIO.items()))
 
     # ==========================================
     # 股票數量上限檢查（GCP e2-micro 建議值）
@@ -311,6 +317,12 @@ def main():
             take_profit_pct=float(os.getenv("KW_TP_TRIGGER_PCT", 15)),
         )
     }
+
+    inst_momentum = InstitutionalMomentumStrategy(
+        broker=broker,
+        capital=INST_MOM_CAPITAL,
+        top_n=int(os.getenv("INST_MOM_TOP_N", 2)),
+    )
     
     portfolio_history = {}
     
@@ -321,6 +333,11 @@ def main():
             continue
         portfolio_history[symbol] = df_init
         print(f"✅ {symbol} 初始化成功 -> [{strat_name.upper()}]")
+    
+    if INST_MOM_CAPITAL > 0:
+        print(f"✅ Group 2 法人抬轎動能初始化成功（資本 NT${INST_MOM_CAPITAL:,.0f}）")
+    else:
+        print("ℹ️ Group 2 法人抬轎動能未啟用（INST_MOM_CAPITAL=0）")
     
     daily_report_sent_date = None
 
@@ -566,6 +583,12 @@ def main():
                 except Exception as e:
                     print(f"❌ {symbol} 錯誤: {e}")
 
+            if INST_MOM_CAPITAL > 0:
+                try:
+                    inst_momentum.run(broker, risk_manager, holdings, now)
+                except Exception as e:
+                    print(f"❌ [INST_MOM] 執行錯誤: {e}")
+
             time.sleep(60)
             continue
 
@@ -581,6 +604,11 @@ def main():
                 except Exception as e:
                     print(f"❌ 產生儀表板失敗: {e}")
                 daily_report_sent_date = now.date()
+            if INST_MOM_CAPITAL > 0:
+                try:
+                    inst_momentum.run(broker, risk_manager, holdings, now)
+                except Exception as e:
+                    print(f"❌ [INST_MOM] 執行錯誤: {e}")
             time.sleep(60)
             continue
 
