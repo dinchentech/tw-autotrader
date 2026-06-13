@@ -58,7 +58,7 @@ gcloud_as_user compute scp docker-compose.yml "${VM_NAME}:~/tw-autotrader/docker
 
 echo "⬇️  在 VM 上從 Cloud Storage 下載 image 並重啟..."
 gcloud_as_user compute ssh "${VM_NAME}" --zone="${ZONE}" --ssh-flag=-o --ssh-flag=ServerAliveInterval=60 \
-  --command="gsutil cp ${BUCKET}/tw-autotrader.tar.gz - | gunzip | sudo docker load && cd ~/tw-autotrader && sudo docker compose up -d --force-recreate"
+  --command="gsutil cp ${BUCKET}/tw-autotrader.tar.gz - | gunzip | sudo docker load && cd ~/tw-autotrader && sudo docker compose down 2>/dev/null; sudo docker compose up -d --force-recreate"
 
 echo "🧹 清理舊 image..."
 gcloud_as_user compute ssh "${VM_NAME}" --zone="${ZONE}" --ssh-flag=-o --ssh-flag=ServerAliveInterval=60 \
