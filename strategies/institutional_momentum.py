@@ -163,14 +163,16 @@ class InstitutionalMomentumStrategy:
     def _get_dataloader(self) -> DataLoader:
         return DataLoader(token=self.finmind_token)
 
+    MAX_STOCKS = 270  # 前 270 大股票，控制 FinMind API 呼叫量（每檔 2 次 API → 270 * 2 = 540 < 600/hr）
+
     def _get_all_stock_ids(self) -> list:
-        """回傳上市普通股 stock_id 列表（排除權證、ETF、特別股等）"""
+        """回傳上市普通股 stock_id 列表（前 MAX_STOCKS 檔，控制 API 配額）"""
         dl = self._get_dataloader()
         df = dl.taiwan_stock_info()
         # 只保留上市普通股（type="twse" 且 stock_id 為 4 位數字）
         df = df[df["type"] == "twse"]
         ids = [s.strip() for s in df["stock_id"] if s.strip().isdigit() and len(s.strip()) == 4]
-        return sorted(set(ids))
+        return sorted(set(ids))[:self.MAX_STOCKS]
 
     def _get_price_data(self, stock_id: str, days: int = 30) -> pd.DataFrame:
         """取得個股日 K 資料，FinMind → TWSE 備援"""

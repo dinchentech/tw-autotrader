@@ -57,18 +57,22 @@ def finmind_login():
 
 # ─── 階段 1a：下載價格資料（FinMind，含快取）─────────────
 
+MAX_STOCKS = 270  # 前 N 大股票，控制 FinMind API 呼叫量（每檔 2 次 API → 270 * 2 = 540 < 600/hr）
+
 def get_all_stock_ids(dl) -> list:
-    """回傳上市普通股 stock_id 列表"""
+    """回傳上市普通股 stock_id 列表（前 MAX_STOCKS 檔，控制 API 配額）"""
     cache_file = CACHE_DIR / "stock_ids.pkl"
     if cache_file.exists():
-        return pickle.loads(cache_file.read_bytes())
+        ids = pickle.loads(cache_file.read_bytes())
+        return ids[:MAX_STOCKS]
     df = dl.taiwan_stock_info()
     ids = sorted(set(
         s.strip() for s in df["stock_id"]
         if s.strip().isdigit() and len(s.strip()) == 4
     ))
+    ids = ids[:MAX_STOCKS]
     cache_file.write_bytes(pickle.dumps(ids))
-    print(f"📋 上市股票總數: {len(ids)}")
+    print(f"📋 上市股票總數: {len(ids)}（限制前 {MAX_STOCKS} 檔）")
     return ids
 
 
@@ -581,7 +585,7 @@ def generate_report(result: dict, metrics: dict, monthly: list):
     lines.append(f"| **停損** | -{STOP_LOSS:.0%} 硬性停損 |")
     lines.append(f"| **停利** | 跌破 MA{TRAILING_PERIOD} 移動停利 |")
     lines.append(f"| **資料來源** | 股價: FinMind / 法人: TWSE 公開 API |")
-    lines.append(f"| **篩選標的數** | 307 檔有完整股價紀錄的上市股票 |")
+    lines.append(f"| **篩選標的數** | 全市場前 {MAX_STOCKS} 檔上市股票 |")
     lines.append("")
     lines.append("## 績效總覽")
     lines.append("")

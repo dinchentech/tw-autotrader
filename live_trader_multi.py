@@ -158,8 +158,8 @@ def _next_market_open(now: datetime) -> datetime:
     return now.replace(hour=8, minute=45) + timedelta(days=1)
 
 
-APP_VERSION = "1.00"
-BUILD_DATE = "2026-06-13"
+APP_VERSION = "1.01"
+BUILD_DATE = "2026-06-14"
 
 def main():
     print(f"🚀 TW AutoTrader v{APP_VERSION} (build {BUILD_DATE}) 多股多策略分流系統啟動")
