@@ -969,6 +969,27 @@ def main():
             f.write(ls_report)
         print(f"  ✅ 已寫入 {ls_path}")
 
+        # ── 长荣替代版（2603 替代 2382）──
+        print("📊 模擬：一筆資金 NT$500,000（長榮替代版）...")
+        lumpsum_evergreen = [
+            ("0050",  "bollinger", 66666),
+            ("006208","bollinger", 66666),
+            ("00878", "bollinger", 66668),
+            ("2330",  "ma_cross",  62500),
+            ("2454",  "ma_cross",  62500),
+            ("2881",  "vwap",      50000),
+            ("2886",  "vwap",      50000),
+            ("2603",  "breakout",  75000),
+        ]
+        assert sum(c[2] for c in lumpsum_evergreen) == 500000
+        ls_eg_result = simulate_lumpsum(lumpsum_evergreen, start_date="2024-01-01", end_date="2025-12-31",
+                                        initial_capital=500000)
+        ls_eg_report = generate_lumpsum_report(ls_eg_result)
+        ls_eg_path = os.path.join(output_dir, "回溯_50万_2024_2025-长荣.MD")
+        with open(ls_eg_path, "w", encoding="utf-8") as f:
+            f.write(ls_eg_report)
+        print(f"  ✅ 已寫入 {ls_eg_path}")
+
 
 if __name__ == "__main__":
     main()
