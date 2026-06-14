@@ -88,7 +88,17 @@ jobs:
       - name: Prepare artifact
         run: |
           cp dashboard.html index.html
-          ls -la dashboard.html index.html
+          # 複製六策略動畫 HTML 到 artifact 目錄，讓 dashboard 可以連結
+          for f in bollinger-animation.html vwap-animation.html ma_cross-animation.html \
+                   breakout-animation.html "keep_wait策略說明.html" "法人動能策略說明.html"; do
+            if [ -f "$f" ]; then
+              cp "$f" .
+              echo "✅ 已複製 $f"
+            else
+              echo "⚠️  $f 不存在（可能是新檔案尚未 push）"
+            fi
+          done
+          ls -la
 
       - name: Upload artifact
         if: steps.check-gitpage.outputs.gitpage == 'on'
