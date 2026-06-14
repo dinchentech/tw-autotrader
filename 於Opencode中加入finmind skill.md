@@ -1,4 +1,5 @@
 於Opencode中加入finmind skill
+(註:1.wsl備份檔已經預裝finmind及oh-my-opencode 2.除了FinMind skill外還需oh-my-opencode)
 
 1.安裝finmind Skill(於wsl下執行):
 
