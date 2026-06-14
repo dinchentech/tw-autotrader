@@ -1,10 +1,20 @@
-# OpenCode 網頁版快速入門
+# OpenCode 快速入門
 
-## 啟動
 
 ```bash
 opencode web --hostname 0.0.0.0
 ```
+
+wsl 本地TUI（終端機版）:
+
+```bash
+cd ~\tw-autotrader
+opencode .
+```
+
+## 如果你的專案在wsl中,請勿使用web版,web版只認識windows目錄!
+
+## 注意:如果使用網頁版請將你的工作目錄放到windwows中
 
 | 參數 | 說明 |
 |------|------|
