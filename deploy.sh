@@ -28,6 +28,20 @@ run_as_user() {
   fi
 }
 
+echo "🔍 檢查 GCP 認證..."
+gcloud_as_user auth print-identity-token &>/dev/null
+AUTH_OK=$?
+if [ $AUTH_OK -ne 0 ]; then
+  echo ""
+  echo "⚠️  GCP 認證已過期或未登入，需要重新認證："
+  echo ""
+  echo "   gcloud auth login"
+  echo ""
+  echo "   瀏覽器會打開 Google 登入頁，完成後再重新執行 deploy。"
+  exit 1
+fi
+echo "   ✅ GCP 認證有效"
+
 echo "🔍 檢查 VM 狀態..."
 VM_STATUS=$(gcloud_as_user compute instances describe "${VM_NAME}" --zone="${ZONE}" --format="get(status)" 2>&1)
 if [ "$VM_STATUS" != "RUNNING" ]; then
