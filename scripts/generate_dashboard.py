@@ -286,6 +286,13 @@ def build_html(trades_df: pd.DataFrame) -> str:
   .empty {{ text-align: center; color: #999; padding: 48px 0; font-size: 1rem; }}
   .group-section {{ background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px;
                     box-shadow: 0 1px 4px rgba(0,0,0,.06); }}
+  .strategy-section {{ background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px;
+                        box-shadow: 0 1px 4px rgba(0,0,0,.06); }}
+  .strategy-links {{ display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }}
+  .strategy-link {{ display: inline-block; padding: 10px 18px; border-radius: 8px;
+                    background: #f0f4ff; color: #2563eb; text-decoration: none; font-weight: 500;
+                    font-size: .9rem; transition: background .15s; }}
+  .strategy-link:hover {{ background: #dbeafe; }}
   @media (max-width: 640px) {{ .charts {{ grid-template-columns: 1fr; }}
      .cards {{ grid-template-columns: repeat(2, 1fr); }} }}
   footer {{ text-align: center; color: #aaa; font-size: .75rem; margin-top: 32px; }}
@@ -403,7 +410,27 @@ def build_html(trades_df: pd.DataFrame) -> str:
     <div class="empty">📭 尚無交易紀錄</div>
   </div>"""
 
+    # ─── 六策略動畫連結 ───
+    STRATEGY_VIDEOS = [
+        ("布林通道反轉", "bollinger-animation.html"),
+        ("VWAP 偏離反轉", "vwap-animation.html"),
+        ("均線交叉", "ma_cross-animation.html"),
+        ("唐奇安突破", "breakout-animation.html"),
+        ("Keep & Wait 低接", "keep_wait策略說明.html"),
+        ("法人抬轎動能", "法人動能策略說明.html"),
+    ]
+    video_links = "".join(
+        f'<a href="{fname}" target="_blank" rel="noopener" class="strategy-link">{name}</a>'
+        for name, fname in STRATEGY_VIDEOS
+    )
+
     html += f"""
+  <div class="strategy-section">
+    <div class="section-title">🎬 六策略動畫說明</div>
+    <div class="strategy-links">
+      {video_links}
+    </div>
+  </div>
   <footer>TW AutoTrader · 資料不構成投資建議 · {updated_at}</footer>
 </div>
 <script>
