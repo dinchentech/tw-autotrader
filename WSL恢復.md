@@ -35,13 +35,30 @@ exit
 > ⚠️ **`~/.ssh/` 沒清的話，買家拿到你的 GitHub / GCP SSH 金鑰。**
 > ⚠️ **`.p12` 憑證是個人數位簽章，移出備份避免外洩。**
 
+## 備份
+在 **PowerShell（系統管理員）** 中執行：
+
+```powershell
+wsl --export <Distribution Name> D:\backup\wsl-backup.tar
+```
+不知道<Distribution Name>可以
+```powershell
+wsl --list --verbose
+```
+例如
+
+C:\Users\frank>wsl --list --verbose
+  NAME                     STATE           VERSION
+* skyworkdistro-skywork    Stopped         2
+  Ubuntu                   Exporting       2
+
+這裡有兩個wsl的安裝, 若要備份哪一個就把<Distribution Name>換成你要備份的.
+
 ## 注意：還原後買家需自行設定
 
 還原後買家第一次進 WSL 要做的：
 
-## 備份
-
-在 **PowerShell（系統管理員）** 中執行：
+## 還原
 
 ```powershell
 wsl --import <自訂系統名稱> <安裝目錄> <備份檔路徑>
