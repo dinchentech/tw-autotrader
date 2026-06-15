@@ -35,13 +35,18 @@ exit
 > ⚠️ **`~/.ssh/` 沒清的話，買家拿到你的 GitHub / GCP SSH 金鑰。**
 > ⚠️ **`.p12` 憑證是個人數位簽章，移出備份避免外洩。**
 
+## 備份
+在 **PowerShell（系統管理員）** 中執行：
+
+```powershell
+wsl --export <Distribution Name> D:\backup\wsl-backup.tar
+```
+
 ## 注意：還原後買家需自行設定
 
 還原後買家第一次進 WSL 要做的：
 
-## 備份
-
-在 **PowerShell（系統管理員）** 中執行：
+## 還原
 
 ```powershell
 wsl --import <自訂系統名稱> <安裝目錄> <備份檔路徑>
