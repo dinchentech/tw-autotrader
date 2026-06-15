@@ -8,7 +8,7 @@
 - **還原後**：買家必須將自己的 `.p12` 憑證放到 `~/tw-autotrader/esun_sdk/` 目錄下
 - 程式會自動偵測該目錄下的 `.p12` 檔案，無需額外設定
 
-## 備份前清理（賣給他人前務必執行）
+## 備份前清理（使用者必須補回）
 
 ```bash
 # 1. 將個人憑證移出（賣給他人時，買家會用自己的憑證）
@@ -84,7 +84,7 @@ wsl --import Ubuntu_New D:\WSL_Storage D:\wsl_backup.tar
 
 ```powershell
 # 以指定使用者登入（假設使用者是 frank）
-Ubuntu_New config --default-user frank
+wsl --set-default-user frank -d Ubuntu_New
 
 # 啟動
 wsl -d Ubuntu_New
