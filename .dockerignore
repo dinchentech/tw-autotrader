@@ -1,0 +1,39 @@
+# Git & CI
+.git/
+.gitignore
+.gitattributes
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pkl
+
+# Cache (downloaded on VM)
+cache/
+# Exclude KGI mock/real and test files from data/
+data/*:Zone.Identifier
+data/*.pyc
+data/test_*.py
+
+# Config / secrets (injected via env_file)
+.env
+.env.*
+config.*.ini
+
+# Logs (mounted volume)
+logs/
+
+# Backup files
+*.bak
+*:Zone.Identifier
+
+# Documentation
+*.md
+
+# Agent/tool config
+.omo/
+.ropeproject/
+
+# Backtest scripts (not part of live trader)
+backtest_*.py
