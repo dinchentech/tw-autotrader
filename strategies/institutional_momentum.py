@@ -40,6 +40,7 @@ class InstitutionalMomentumStrategy:
         self.lookback = int(os.getenv("INST_MOM_LOOKBACK", "20"))               # 天
         self.stop_loss = float(os.getenv("INST_MOM_STOP_LOSS", "0.07"))         # -7%
         self.trailing_period = int(os.getenv("INST_MOM_TRAILING_PERIOD", "10")) # MA10
+        self.exclude_etf = os.getenv("INST_MOM_EXCLUDE_ETF", "true").lower() == "true"  # 預設排除 ETF
 
         # 內部狀態
         self.state = self._load_state()
@@ -172,6 +173,9 @@ class InstitutionalMomentumStrategy:
         # 只保留上市普通股（type="twse" 且 stock_id 為 4 位數字）
         df = df[df["type"] == "twse"]
         ids = [s.strip() for s in df["stock_id"] if s.strip().isdigit() and len(s.strip()) == 4]
+        # 排除 ETF（代號開頭為 0，如 0050、00878），由 .env INST_MOM_EXCLUDE_ETF 控制
+        if self.exclude_etf:
+            ids = [s for s in ids if not s.startswith("0")]
         return sorted(set(ids))[:self.MAX_STOCKS]
 
     def _get_price_data(self, stock_id: str, days: int = 30) -> pd.DataFrame:
