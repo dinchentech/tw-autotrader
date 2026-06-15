@@ -41,6 +41,18 @@ exit
 ```powershell
 wsl --export <Distribution Name> D:\backup\wsl-backup.tar
 ```
+不知道<Distribution Name>可以
+```powershell
+wsl --list --verbose
+```
+例如
+
+C:\Users\frank>wsl --list --verbose
+  NAME                     STATE           VERSION
+* skyworkdistro-skywork    Stopped         2
+  Ubuntu                   Exporting       2
+
+這裡有兩個wsl的安裝, 若要備份哪一個就把<Distribution Name>換成你要備份的.
 
 ## 注意：還原後買家需自行設定
 
