@@ -12,7 +12,7 @@ cd ~\tw-autotrader
 opencode .
 ```
 
-## 如果你的專案在wsl中,請勿使用web版,web版只認識windows目錄!
+## 如果你的專案在wsl中,使用web版請選沙盒中的section,非沙盒的section只認識windows目錄!
 
 ## 注意:如果使用網頁版請將你的工作目錄放到windwows中
 
