@@ -194,3 +194,4 @@ create_tw_autotrader.py
 *.tar
 *.tar.gz
 esun_sdk/
+plans/
