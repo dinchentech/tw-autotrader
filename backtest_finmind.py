@@ -25,7 +25,7 @@ STRATEGIES = {
     },
     "Breakout": {
         "func": breakout_strategy,
-        "params": {"lookback": 20, "atr_period": 14},
+        "params": {"lookback": 25, "atr_period": 14, "atr_threshold": 0.02},
     },
 }
 

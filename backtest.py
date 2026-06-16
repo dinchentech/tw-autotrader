@@ -30,7 +30,7 @@ STRATEGY_CONFIG = {
     },
     "breakout": {
         "func": breakout_strategy,
-        "params": {"lookback": 20, "atr_period": 14}
+        "params": {"lookback": 25, "atr_period": 14, "atr_threshold": 0.02}
     }
 }
 
@@ -56,8 +56,9 @@ STRATEGY_PARAMS = {
         "rsi_period": SHARED_PARAMS["rsi_period"],
     },
     "breakout": {
-        "lookback":   {"default": 20, "type": int,   "help": "突破回溯期間"},
-        "atr_period": {"default": 14, "type": int,   "help": "ATR 計算週期"},
+        "lookback":    {"default": 25,  "type": int,   "help": "突破回溯期間"},
+        "atr_period":  {"default": 14,  "type": int,   "help": "ATR 計算週期"},
+        "atr_threshold": {"default": 0.02, "type": float, "help": "ATR 波動度門檻"},
     },
 }
 
