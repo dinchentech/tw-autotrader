@@ -610,7 +610,7 @@ function updateChart(revealIdx) {
     c.setAttribute('fill', 'hsla(160,60%,50%,0.3)'); c.setAttribute('stroke', '#0D9488'); c.setAttribute('stroke-width', '2');
     g.appendChild(c);
     const t = document.createElementNS(NS, 'text');
-    t.setAttribute('x', cx); t.setAttribute('y', cy - 12); t.setAttribute('text-anchor', 'middle');
+    t.setAttribute('x', cx);     t.setAttribute('y', cy - 40); t.setAttribute('text-anchor', 'middle');
     t.setAttribute('fill', '#0D9488'); t.setAttribute('font-size', '18'); t.setAttribute('font-weight', '700');
     t.textContent = '▲';
     g.appendChild(t);
