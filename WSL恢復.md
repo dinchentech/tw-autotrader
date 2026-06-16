@@ -137,6 +137,7 @@ ls ~/tw-autotrader/esun_sdk/*.p12
 opencode providers login OpenRouter
 ```
 或直接產生 nano ~/.local/share/opencode/auth.json
+```bash
 {
   "openrouter": {
     "type": "api",
@@ -147,6 +148,7 @@ opencode providers login OpenRouter
     "key": "你的key"
   }
 }
+```
 
 接著設定自己：.bashrc 中的FinMind憑證, .env檔中的FinMind key/玉山密碼/TG key, esun_sdk中放上玉山.example,.p12檔
 
