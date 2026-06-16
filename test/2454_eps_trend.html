@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2454 聯發科 EPS 趨勢</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Inter", -apple-system, "Segoe UI", system-ui, sans-serif;
+    background: #0d1117;
+    color: #e6edf3;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 40px 20px;
+  }
+  .container { max-width: 900px; width: 100%; }
+  h1 {
+    font-size: 22px; font-weight: 600; letter-spacing: -0.3px;
+    color: #f0f6fc; margin-bottom: 4px;
+  }
+  .subtitle {
+    font-size: 14px; color: #8b949e; margin-bottom: 28px;
+  }
+
+  .chart-wrap {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 24px 24px 16px;
+    position: relative;
+  }
+
+  canvas { display: block; width: 100%; height: auto; }
+
+  .legend {
+    display: flex; gap: 24px; justify-content: center;
+    margin-top: 16px; font-size: 13px;
+  }
+  .legend-item { display: flex; align-items: center; gap: 8px; }
+  .legend-dot {
+    width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0;
+  }
+
+  .stats-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 12px; margin-top: 20px;
+  }
+  .stat-card {
+    background: #161b22; border: 1px solid #30363d;
+    border-radius: 8px; padding: 14px 16px; text-align: center;
+  }
+  .stat-card .val { font-size: 20px; font-weight: 600; color: #f0f6fc; }
+  .stat-card .lbl { font-size: 11px; color: #8b949e; margin-top: 4px; }
+  .stat-card .val.up { color: #7ee787; }
+  .stat-card .val.down { color: #f85149; }
+
+  .table-wrap {
+    background: #161b22; border: 1px solid #30363d;
+    border-radius: 12px; padding: 20px 24px; margin-top: 20px;
+  }
+  .table-wrap h3 {
+    font-size: 14px; font-weight: 600; color: #f0f6fc;
+    margin-bottom: 12px;
+  }
+  table.data {
+    width: 100%; border-collapse: collapse;
+    font-size: 13px;
+  }
+  table.data th {
+    text-align: left; color: #8b949e; font-weight: 500;
+    padding: 6px 10px; border-bottom: 1px solid #21262d;
+  }
+  table.data td {
+    padding: 6px 10px; border-bottom: 1px solid #21262d;
+  }
+  table.data tr:last-child td { border-bottom: none; }
+  table.data .num { text-align: right; font-variant-numeric: tabular-nums; }
+  table.data .hi { color: #7ee787; font-weight: 500; }
+  table.data .lo { color: #f85149; }
+  table.data .highlight { background: #1c2a3a; }
+
+  @media (max-width: 600px) {
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>📈 2454 聯發科 — 單季 EPS 趨勢</h1>
+  <div class="subtitle">資料來源：FinMind 財報 · 近期 4 季：2025 Q1 → 2025 Q4 呈遞減</div>
+
+  <div class="chart-wrap">
+    <canvas id="epsChart" width="800" height="420"></canvas>
+    <div class="legend">
+      <div class="legend-item"><span class="legend-dot" style="background:#58a6ff"></span>單季 EPS</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#d2a8ff"></span>近 4 季平均 (15.80)</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#f0883e"></span>4 季移動平均</div>
+    </div>
+  </div>
+
+  <div class="stats-grid" id="stats"></div>
+
+  <div class="table-wrap">
+    <h3>📋 季度 EPS 明細</h3>
+    <table class="data">
+      <thead>
+        <tr><th>季度</th><th style="text-align:right">EPS</th><th style="text-align:right">季增</th><th style="text-align:right">年增</th><th>備註</th></tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const quarters = [
+  { label: "2022 Q1", date: "2022-03-31", eps: 21.02 },
+  { label: "2022 Q2", date: "2022-06-30", eps: 22.39 },
+  { label: "2022 Q3", date: "2022-09-30", eps: 19.54 },
+  { label: "2022 Q4", date: "2022-12-31", eps: 11.64 },
+  { label: "2023 Q1", date: "2023-03-31", eps: 10.64 },
+  { label: "2023 Q2", date: "2023-06-30", eps: 10.07 },
+  { label: "2023 Q3", date: "2023-09-30", eps: 11.64 },
+  { label: "2023 Q4", date: "2023-12-31", eps: 16.16 },
+  { label: "2024 Q1", date: "2024-03-31", eps: 19.85 },
+  { label: "2024 Q2", date: "2024-06-30", eps: 16.19 },
+  { label: "2024 Q3", date: "2024-09-30", eps: 15.94 },
+  { label: "2024 Q4", date: "2024-12-31", eps: 14.94 },
+  { label: "2025 Q1", date: "2025-03-31", eps: 18.43 },
+  { label: "2025 Q2", date: "2025-06-30", eps: 17.50 },
+  { label: "2025 Q3", date: "2025-09-30", eps: 15.84 },
+  { label: "2025 Q4", date: "2025-12-31", eps: 14.40 },
+  { label: "2026 Q1", date: "2026-03-31", eps: 15.17 },
+];
+
+// Canvas chart
+const canvas = document.getElementById("epsChart");
+const ctx = canvas.getContext("2d");
+const W = 800, H = 420;
+canvas.width = W; canvas.height = H;
+
+const pad = { top: 30, right: 30, bottom: 50, left: 50 };
+const chartW = W - pad.left - pad.right;
+const chartH = H - pad.top - pad.bottom;
+
+const n = quarters.length;
+const epsMin = 5;
+const epsMax = 26;
+
+function xPos(i) { return pad.left + (i / (n - 1)) * chartW; }
+function yPos(v) { return pad.top + chartH - ((v - epsMin) / (epsMax - epsMin)) * chartH; }
+
+// Grid lines
+ctx.strokeStyle = "#21262d";
+ctx.lineWidth = 1;
+for (let v = 5; v <= 25; v += 5) {
+  const y = yPos(v);
+  ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
+  ctx.fillStyle = "#484f58";
+  ctx.font = "11px Inter, sans-serif";
+  ctx.textAlign = "right";
+  ctx.fillText(v.toFixed(0), pad.left - 6, y + 4);
+}
+
+// X labels (every other)
+ctx.fillStyle = "#484f58";
+ctx.font = "11px Inter, sans-serif";
+ctx.textAlign = "center";
+quarters.forEach((q, i) => {
+  if (i % 1 === 0) {
+    ctx.fillText(q.label, xPos(i), H - pad.bottom + 18);
+  }
+});
+
+// Area fill
+ctx.beginPath();
+ctx.moveTo(xPos(0), yPos(quarters[0].eps));
+quarters.forEach((q, i) => ctx.lineTo(xPos(i), yPos(q.eps)));
+ctx.lineTo(xPos(n-1), yPos(epsMin));
+ctx.lineTo(xPos(0), yPos(epsMin));
+ctx.closePath();
+ctx.fillStyle = "rgba(88, 166, 255, 0.12)";
+ctx.fill();
+
+// Line
+ctx.beginPath();
+ctx.strokeStyle = "#58a6ff";
+ctx.lineWidth = 2.5;
+ctx.lineJoin = "round";
+quarters.forEach((q, i) => {
+  i === 0 ? ctx.moveTo(xPos(i), yPos(q.eps)) : ctx.lineTo(xPos(i), yPos(q.eps));
+});
+ctx.stroke();
+
+// Gradient dots
+quarters.forEach((q, i) => {
+  const y = yPos(q.eps);
+  ctx.beginPath();
+  ctx.arc(xPos(i), y, 5, 0, Math.PI * 2);
+  ctx.fillStyle = "#58a6ff";
+  ctx.fill();
+  ctx.strokeStyle = "#0d1117";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+});
+
+// 4-quarter moving average line
+ctx.beginPath();
+ctx.strokeStyle = "#f0883e";
+ctx.lineWidth = 1.5;
+ctx.setLineDash([4, 4]);
+let started = false;
+quarters.forEach((q, i) => {
+  if (i < 3) return;
+  const avg = (quarters[i-3].eps + quarters[i-2].eps + quarters[i-1].eps + q.eps) / 4;
+  if (!started) { ctx.moveTo(xPos(i), yPos(avg)); started = true; }
+  else { ctx.lineTo(xPos(i), yPos(avg)); }
+});
+ctx.stroke();
+ctx.setLineDash([]);
+
+// Recent 4-quarter average line (horizontal)
+recent4 = quarters.slice(-5, -1); // 2025 Q1-Q4
+const recentAvg = recent4.reduce((s, q) => s + q.eps, 0) / recent4.length;
+ctx.beginPath();
+ctx.strokeStyle = "#d2a8ff";
+ctx.lineWidth = 1.5;
+ctx.setLineDash([6, 4]);
+const avgY = yPos(recentAvg);
+ctx.moveTo(pad.left, avgY);
+ctx.lineTo(W - pad.right, avgY);
+ctx.stroke();
+ctx.setLineDash([]);
+ctx.fillStyle = "#d2a8ff";
+ctx.font = "11px Inter, sans-serif";
+ctx.textAlign = "left";
+ctx.fillText("近4季平均 " + recentAvg.toFixed(2), W - pad.right - 110, avgY - 6);
+
+// Value labels on dots (only last 5)
+ctx.font = "bold 11px Inter, sans-serif";
+ctx.textAlign = "center";
+for (let i = Math.max(0, n - 5); i < n; i++) {
+  const y = yPos(quarters[i].eps);
+  ctx.fillStyle = "#f0f6fc";
+  ctx.fillText(quarters[i].eps.toFixed(2), xPos(i), y - 10);
+}
+
+// Stats
+const recent5Q = quarters.slice(-5); // last 5 quarters to show trend
+const qoq = recent5Q.map((q, i) => i === 0 ? 0 : ((q.eps - recent5Q[i-1].eps) / recent5Q[i-1].eps * 100));
+
+const maxQ = quarters.reduce((a, b) => a.eps > b.eps ? a : b);
+const minQ = quarters.reduce((a, b) => a.eps < b.eps ? a : b);
+const last4 = quarters.slice(-4);
+const sum4 = last4.reduce((s, q) => s + q.eps, 0);
+// YoY for latest
+const latest = quarters[quarters.length - 1];
+const yoyQ = quarters.find(q => q.label === (parseInt(latest.label.slice(0,4))-1) + " Q" + latest.label.slice(-1));
+const yoyChange = yoyQ ? ((latest.eps - yoyQ.eps) / yoyQ.eps * 100) : null;
+
+document.getElementById("stats").innerHTML = `
+  <div class="stat-card">
+    <div class="val">${recentAvg.toFixed(2)}</div>
+    <div class="lbl">近 4 季平均 EPS</div>
+  </div>
+  <div class="stat-card">
+    <div class="val">${sum4.toFixed(2)}</div>
+    <div class="lbl">近 4 季合計 EPS</div>
+  </div>
+  <div class="stat-card">
+    <div class="val ${maxQ.label.includes('2022') ? 'up' : ''}">${maxQ.eps.toFixed(2)}</div>
+    <div class="lbl">🏆 單季最高 ${maxQ.label}</div>
+  </div>
+  <div class="stat-card">
+    <div class="val ${yoyChange !== null && yoyChange > 0 ? 'up' : 'down'}">${yoyChange !== null ? (yoyChange > 0 ? '+' : '') + yoyChange.toFixed(1) + '%' : '—'}</div>
+    <div class="lbl">${latest.label} 年增率</div>
+  </div>
+`;
+
+// Table
+const tbody = document.getElementById("tableBody");
+quarters.slice(-8).reverse().forEach((q, idx, arr) => {
+  const next = arr[idx - 1]; // next in reversed = previous quarter chronologically
+  const qoqChange = next ? ((q.eps - next.eps) / next.eps * 100) : null;
+  const yoyQ = quarters.find(p => p.label === (parseInt(q.label.slice(0,4))-1) + " Q" + q.label.slice(-1));
+  const yoy = yoyQ ? ((q.eps - yoyQ.eps) / yoyQ.eps * 100) : null;
+  const isRecent = quarters.slice(-4).includes(q);
+
+  const tr = document.createElement("tr");
+  if (isRecent) tr.className = "highlight";
+  tr.innerHTML = `
+    <td>${q.label}</td>
+    <td class="num">${q.eps.toFixed(2)}</td>
+    <td class="num ${qoqChange !== null ? (qoqChange > 0 ? 'hi' : qoqChange < 0 ? 'lo' : '') : ''}">${qoqChange !== null ? (qoqChange > 0 ? '+' : '') + qoqChange.toFixed(1) + '%' : '—'}</td>
+    <td class="num ${yoy !== null ? (yoy > 0 ? 'hi' : yoy < 0 ? 'lo' : '') : ''}">${yoy !== null ? (yoy > 0 ? '+' : '') + yoy.toFixed(1) + '%' : '—'}</td>
+    <td style="color:#8b949e;font-size:12px">${isRecent ? '🔵 近4季' : ''}</td>
+  `;
+  tbody.appendChild(tr);
+});
+</script>
+</body>
+</html>

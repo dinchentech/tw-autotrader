@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>策略函式共同模式 — TW AutoTrader</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Inter", -apple-system, "Segoe UI", system-ui, sans-serif;
+    background: #0d1117;
+    color: #e6edf3;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 40px 20px;
+  }
+  .container {
+    max-width: 1100px;
+    width: 100%;
+  }
+  h1 {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+    color: #f0f6fc;
+    margin-bottom: 8px;
+  }
+  .subtitle {
+    font-size: 14px;
+    color: #8b949e;
+    margin-bottom: 32px;
+  }
+  .subtitle code {
+    background: #161b22;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: #7ee787;
+  }
+
+  /* Pipeline */
+  .pipeline {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    margin-bottom: 48px;
+    flex-wrap: nowrap;
+  }
+  .pipe-node {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 16px 22px;
+    text-align: center;
+    min-width: 140px;
+    position: relative;
+  }
+  .pipe-node .label {
+    font-size: 12px;
+    font-weight: 500;
+    color: #8b949e;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .pipe-node .value {
+    font-size: 14px;
+    font-weight: 500;
+    color: #f0f6fc;
+  }
+  .pipe-node .value code {
+    background: #1c2128;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: #ffa657;
+  }
+  .pipe-node.input  { border-color: #58a6ff; }
+  .pipe-node.step   { border-color: #d2a8ff; }
+  .pipe-node.init   { border-color: #7ee787; }
+  .pipe-node.cond   { border-color: #f0883e; }
+  .pipe-node.output { border-color: #f778ba; }
+
+  .pipe-arrow {
+    color: #484f58;
+    font-size: 20px;
+    padding: 0 6px;
+    flex-shrink: 0;
+  }
+
+  /* Strategy cards grid */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  .card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 20px;
+    transition: border-color 0.15s;
+  }
+  .card:hover { border-color: #58a6ff; }
+
+  .card .fn-name {
+    font-family: "JetBrains Mono", "Fira Code", monospace;
+    font-size: 14px;
+    font-weight: 600;
+    color: #f0f6fc;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card .fn-name .badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+  .badge.buy-sell  { background: #1c3a1c; color: #7ee787; }
+  .badge.buy-only  { background: #1c2a3a; color: #58a6ff; }
+  .badge.hold      { background: #2d1c3a; color: #d2a8ff; }
+
+  .card .params {
+    font-size: 13px;
+    color: #8b949e;
+    margin-bottom: 10px;
+    line-height: 1.5;
+  }
+  .card .params code {
+    background: #1c2128;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 12px;
+    color: #ffa657;
+  }
+
+  .card .flow {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #21262d;
+  }
+  .card .flow .row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .card .flow .row .tag {
+    font-size: 11px;
+    font-weight: 500;
+    padding: 1px 7px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+  .tag.indicator { background: #1c2128; color: #d2a8ff; }
+  .tag.condition { background: #1c2128; color: #f0883e; }
+  .tag.signal    { background: #1c2128; color: #f778ba; }
+
+  /* Common pattern summary */
+  .summary {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 20px 24px;
+  }
+  .summary h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #f0f6fc;
+    margin-bottom: 14px;
+  }
+  .summary .steps {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .summary .step-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+    color: #c9d1d9;
+  }
+  .summary .step-num {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: #1f2937;
+    color: #8b949e;
+    font-size: 12px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .step-item .code-snip {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12px;
+    background: #1c2128;
+    padding: 2px 8px;
+    border-radius: 4px;
+    color: #7ee787;
+  }
+
+  /* Responsive */
+  @media (max-width: 720px) {
+    .pipeline { flex-wrap: wrap; gap: 6px; }
+    .pipe-node { min-width: 100px; padding: 10px 14px; }
+    .pipe-arrow { transform: rotate(90deg); padding: 2px 0; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>📐 策略函式共同模式</h1>
+  <div class="subtitle">所有策略遵循同一介面：<code>pd.DataFrame</code> → <code>pd.DataFrame</code>（含 <code>signal</code> 欄位）</div>
+
+  <!-- Pipeline -->
+  <div class="pipeline">
+    <div class="pipe-node input">
+      <div class="label">Input</div>
+      <div class="value"><code>DataFrame</code></div>
+      <div style="font-size:11px;color:#484f58;margin-top:3px;">open, high, low,<br>close, volume</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-node step">
+      <div class="label">Step 1</div>
+      <div class="value"><code>df.copy()</code></div>
+      <div style="font-size:11px;color:#8b949e;margin-top:3px;">保護原始資料</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-node step">
+      <div class="label">Step 2</div>
+      <div class="value">計算技術指標</div>
+      <div style="font-size:11px;color:#8b949e;margin-top:3px;">MA / BB / VWAP / ATR / RSI …</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-node init">
+      <div class="label">Step 3</div>
+      <div class="value"><code>signal = 0</code></div>
+      <div style="font-size:11px;color:#8b949e;margin-top:3px;">初始化訊號欄位</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-node cond">
+      <div class="label">Step 4</div>
+      <div class="value">條件判斷</div>
+      <div style="font-size:11px;color:#8b949e;margin-top:3px;">→ 買 <code>1</code> ／ 賣 <code>-1</code></div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-node output">
+      <div class="label">Output</div>
+      <div class="value"><code>DataFrame</code></div>
+      <div style="font-size:11px;color:#f778ba;margin-top:3px;">+ <code>'signal'</code> column</div>
+    </div>
+  </div>
+
+  <!-- Strategy Cards -->
+  <div class="cards">
+    <!-- 1. MA Cross -->
+    <div class="card">
+      <div class="fn-name">
+        ma_cross_strategy
+        <span class="badge buy-sell">買賣</span>
+      </div>
+      <div class="params">
+        <code>fast_period=9</code> <code>slow_period=21</code><br>
+        <code>atr_period=14</code> <code>atr_threshold=0.005</code>
+      </div>
+      <div class="flow">
+        <div class="row"><span class="tag indicator">指標</span> MA_Fast, MA_Slow, ATR</div>
+        <div class="row"><span class="tag condition">買</span> MA_Fast 上穿 MA_Slow + ATR 足夠大</div>
+        <div class="row"><span class="tag condition">賣</span> MA_Fast 下穿 MA_Slow + ATR 足夠大</div>
+        <div class="row"><span class="tag signal">signal</span> <code>1</code> 買進 · <code>-1</code> 賣出 · <code>0</code> 持有</div>
+      </div>
+    </div>
+
+    <!-- 2. Bollinger -->
+    <div class="card">
+      <div class="fn-name">
+        bollinger_reverse_strategy
+        <span class="badge buy-sell">買賣</span>
+      </div>
+      <div class="params">
+        <code>window=20</code> <code>std_dev=2.0</code><br>
+        <code>rsi_period=5</code> <code>rsi_low=30</code> <code>rsi_high=70</code>
+      </div>
+      <div class="flow">
+        <div class="row"><span class="tag indicator">指標</span> BB_Upper, BB_Lower, RSI</div>
+        <div class="row"><span class="tag condition">買</span> close &lt; BB_Lower + RSI &lt; 30</div>
+        <div class="row"><span class="tag condition">賣</span> close &gt; BB_Upper + RSI &gt; 70</div>
+        <div class="row"><span class="tag signal">signal</span> <code>1</code> 買進 · <code>-1</code> 賣出 · <code>0</code> 持有</div>
+      </div>
+    </div>
+
+    <!-- 3. Breakout -->
+    <div class="card">
+      <div class="fn-name">
+        breakout_strategy
+        <span class="badge buy-sell">買賣</span>
+      </div>
+      <div class="params">
+        <code>lookback=20</code> <code>atr_period=14</code><br>
+        <code>atr_threshold=0.01</code>
+      </div>
+      <div class="flow">
+        <div class="row"><span class="tag indicator">指標</span> Donchian_High, Donchian_Low, ATR</div>
+        <div class="row"><span class="tag condition">買</span> close 突破 N 日高點 + ATR 過濾</div>
+        <div class="row"><span class="tag condition">賣</span> close 跌破 N 日低點 + ATR 過濾</div>
+        <div class="row"><span class="tag signal">signal</span> <code>1</code> 買進 · <code>-1</code> 賣出 · <code>0</code> 持有</div>
+      </div>
+    </div>
+
+    <!-- 4. VWAP -->
+    <div class="card">
+      <div class="fn-name">
+        vwap_deviation_strategy
+        <span class="badge buy-sell">買賣</span>
+      </div>
+      <div class="params">
+        <code>sigma_mult=1.5</code> <code>rsi_period=5</code><br>
+        <code>rsi_low=30</code> <code>rsi_high=70</code>
+      </div>
+      <div class="flow">
+        <div class="row"><span class="tag indicator">指標</span> VWAP, Deviation, Std, RSI</div>
+        <div class="row"><span class="tag condition">買</span> close &lt; VWAP − σ×Std + RSI &lt; 30</div>
+        <div class="row"><span class="tag condition">賣</span> close &gt; VWAP + σ×Std + RSI &gt; 70</div>
+        <div class="row"><span class="tag signal">signal</span> <code>1</code> 買進 · <code>-1</code> 賣出 · <code>0</code> 持有</div>
+      </div>
+    </div>
+
+    <!-- 5. Keep Wait -->
+    <div class="card">
+      <div class="fn-name">
+        keep_wait_strategy
+        <span class="badge hold">持有</span>
+      </div>
+      <div class="params">
+        無技術參數 · signal 恆為 <code>0</code>
+      </div>
+      <div class="flow">
+        <div class="row"><span class="tag indicator">指標</span> 無</div>
+        <div class="row"><span class="tag condition">行為</span> DCA 低接／停利由 pyramid_tracker 管理</div>
+        <div class="row"><span class="tag signal">signal</span> 永遠 <code>0</code>（預留未來擴充）</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Summary -->
+  <div class="summary">
+    <h3>📋 共同契約</h3>
+    <div class="steps">
+      <div class="step-item">
+        <span class="step-num">1</span>
+        <span><span class="code-snip">def strategy(df: pd.DataFrame, **params) → pd.DataFrame</span></span>
+      </div>
+      <div class="step-item">
+        <span class="step-num">2</span>
+        <span><span class="code-snip">df = df.copy()</span> ← 保護原始資料不被修改</span>
+      </div>
+      <div class="step-item">
+        <span class="step-num">3</span>
+        <span>計算技術指標 → 新增暫存欄位（MA / BB / VWAP / RSI / ATR …）</span>
+      </div>
+      <div class="step-item">
+        <span class="step-num">4</span>
+        <span><span class="code-snip">df['signal'] = 0</span> ← 初始化</span>
+      </div>
+      <div class="step-item">
+        <span class="step-num">5</span>
+        <span><span class="code-snip">df.loc[buy_condition, 'signal'] = 1</span> ← 買進訊號</span>
+      </div>
+      <div class="step-item">
+        <span class="step-num">6</span>
+        <span><span class="code-snip">df.loc[sell_condition, 'signal'] = -1</span> ← 賣出訊號</span>
+      </div>
+      <div class="step-item">
+        <span class="step-num">7</span>
+        <span><span class="code-snip">return df</span> ← 回傳含 <code>signal</code> 欄位的 DataFrame</span>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

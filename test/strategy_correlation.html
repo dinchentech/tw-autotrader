@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>策略相關性分析</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Inter",-apple-system,sans-serif;background:#0d1117;color:#e6edf3;display:flex;justify-content:center;padding:40px 20px}
+  .container{max-width:1060px;width:100%}
+  h1{font-size:22px;font-weight:600;letter-spacing:-0.3px;margin-bottom:4px}
+  h2{font-size:16px;font-weight:600;margin-bottom:12px}
+  .sub{color:#8b949e;font-size:14px;margin-bottom:24px}
+
+  .portfolio-box{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:16px;margin-bottom:20px;font-size:13px;line-height:1.6}
+  .portfolio-box code{color:#f0883e;background:#1c2128;padding:1px 6px;border-radius:3px}
+  .portfolio-box .tag{display:inline-block;padding:1px 8px;border-radius:4px;font-size:11px;margin:0 4px}
+  .tag.bollinger{background:#1c3a1c;color:#7ee787}
+  .tag.ma_cross{background:#1c2a3a;color:#58a6ff}
+  .tag.vwap{background:#3a2a1c;color:#f0883e}
+  .tag.breakout{background:#3a1c2a;color:#f85149}
+
+  .chart-wrap{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:20px;margin-bottom:20px}
+  canvas{display:block;width:100%;height:auto}
+  .charts-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+  @media(max-width:800px){.charts-grid{grid-template-columns:1fr}}
+
+  .stats-table{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:20px;margin-bottom:20px;overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{text-align:left;color:#8b949e;font-weight:500;padding:6px 8px;border-bottom:1px solid #21262d}
+  td{padding:6px 8px;border-bottom:1px solid #21262d;font-variant-numeric:tabular-nums;text-align:right}
+  td:first-child{text-align:left;font-weight:500}
+
+  .analysis{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:20px;margin-bottom:20px;font-size:13px;line-height:1.7}
+  .analysis ul{padding-left:18px}
+  .analysis li{margin-bottom:4px}
+  .analysis .pos{color:#7ee787}
+  .analysis .neg{color:#f85149}
+  .analysis .neu{color:#8b949e}
+
+  .tooltip{position:relative;cursor:crosshair}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>策略相關性分析</h1>
+  <div class="sub">2023-2024 · 各策略每日報酬相關性</div>
+
+  <div class="portfolio-box">
+    <strong>投資組合策略配置</strong><br>
+    <code>0050</code> <span class="tag bollinger">布林</span>
+    <code>006208</code> <span class="tag bollinger">布林</span>
+    <code>00878</code> <span class="tag bollinger">布林</span>
+    <code>2330</code> <span class="tag ma_cross">均線</span>
+    <code>2454</code> <span class="" style="color:#8b949e">keep_wait(DCA)</span>
+    <code>2881</code> <span class="tag vwap">VWAP</span>
+    <code>2886</code> <span class="tag vwap">VWAP</span>
+    <code>2382</code> <span class="tag breakout">突破</span>
+    <br><span class="neu">⚠️ keep_wait 無交易訊號，不納入相關性分析</span>
+  </div>
+
+  <div class="charts-grid">
+    <div class="chart-wrap">
+      <h2>策略層級相關性</h2>
+      <canvas id="stratChart" width="480" height="420"></canvas>
+    </div>
+    <div class="chart-wrap">
+      <h2>個股-策略相關性</h2>
+      <canvas id="fullChart" width="480" height="420"></canvas>
+    </div>
+  </div>
+
+  <div class="stats-table">
+    <h2 style="margin-bottom:12px">各策略日報酬統計</h2>
+    <table>
+      <thead><tr><th>策略</th><th>交易日數</th><th>有訊號天數</th><th>訊號佔比</th><th>平均每日報酬</th><th>平均獲利日</th><th>平均虧損日</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>bollinger</td>
+          <td>481</td>
+          <td>66</td>
+          <td>13.7%</td>
+          <td>+0.00008</td>
+          <td class="pos">+0.00516</td>
+          <td class="neg">-0.00394</td>
+        </tr>
+        <tr>
+          <td>ma_cross</td>
+          <td>481</td>
+          <td>28</td>
+          <td>5.8%</td>
+          <td>-0.00021</td>
+          <td class="pos">+0.01133</td>
+          <td class="neg">-0.01466</td>
+        </tr>
+        <tr>
+          <td>breakout</td>
+          <td>481</td>
+          <td>70</td>
+          <td>14.6%</td>
+          <td>+0.00013</td>
+          <td class="pos">+0.02290</td>
+          <td class="neg">-0.01769</td>
+        </tr>
+        <tr>
+          <td>vwap</td>
+          <td>481</td>
+          <td>165</td>
+          <td>34.3%</td>
+          <td>+0.00010</td>
+          <td class="pos">+0.00534</td>
+          <td class="neg">-0.00522</td>
+        </tr>
+
+      </tbody>
+    </table>
+  </div>
+
+  <div class="analysis">
+    <h2 style="margin-bottom:10px">分析摘要</h2>
+    <ul>
+<li><strong>bollinger</strong> — 布林通道反轉（均值回歸，逆勢）</li><li><strong>ma_cross</strong> — 均線交叉（趨勢跟隨，順勢）</li><li><strong>breakout</strong> — 唐奇安突破（趨勢跟隨，順勢）</li><li><strong>vwap</strong> — VWAP 偏離反轉（均值回歸，逆勢）</li><li class="neg">bollinger ↔ ma_cross: -0.097（無相關負相關）</li><li class="neg">bollinger ↔ breakout: -0.201（弱負相關）</li><li class="pos">bollinger ↔ vwap: +0.278（弱正相關）</li><li class="pos">ma_cross ↔ breakout: +0.079（無相關正相關）</li><li class="neg">ma_cross ↔ vwap: -0.051（無相關負相關）</li><li class="neg">breakout ↔ vwap: -0.043（無相關負相關）</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+function drawHeatmap(canvasId, matrix, labels, colors) {
+  const W = 520, H = 500;
+  const pad = {top: 60, right: 40, bottom: 100, left: 100};
+  const canvas = document.getElementById(canvasId);
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext("2d");
+  const n = matrix.length;
+  if (n === 0) return;
+  const cell = Math.min((W - pad.left - pad.right) / n, (H - pad.top - pad.bottom) / n);
+  const ox = pad.left + (W - pad.left - pad.right - cell * n) / 2;
+  const oy = pad.top + (H - pad.top - pad.bottom - cell * n) / 2;
+
+  function getColor(v) {
+    if (v > 0) {
+      const t = Math.min(v, 1);
+      return `rgba(${Math.round(63 + (240-63)*t)}, ${Math.round(185 - 185*t)}, ${Math.round(135 - 135*t)}, 0.9)`;
+    } else {
+      const t = Math.min(-v, 1);
+      return `rgba(248, ${Math.round(81 + (248-81)*t)}, ${Math.round(73 + (248-73)*t)}, 0.9)`;
+    }
+  }
+
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      const x = ox + j * cell, y = oy + i * cell;
+      ctx.fillStyle = getColor(matrix[i][j]);
+      ctx.fillRect(x, y, cell, cell);
+      ctx.fillStyle = Math.abs(matrix[i][j]) > 0.4 ? "#fff" : "#8b949e";
+      ctx.font = Math.min(cell * 0.35, 13) + "px Inter,sans-serif";
+      ctx.fillText(matrix[i][j].toFixed(2), x + cell/2, y + cell/2);
+    }
+  }
+
+  ctx.fillStyle = "#e6edf3"; ctx.font = "12px Inter,sans-serif";
+  ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  for (let i = 0; i < n; i++) {
+    ctx.fillText(labels[i], ox - 8, oy + i * cell + cell/2);
+  }
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  ctx.save();
+  for (let j = 0; j < n; j++) {
+    ctx.translate(ox + j * cell + cell/2, oy - 40);
+    ctx.rotate(-Math.PI / 4);
+    ctx.fillStyle = "#e6edf3"; ctx.font = "12px Inter,sans-serif";
+    ctx.textAlign = "right"; ctx.textBaseline = "top";
+    ctx.fillText(labels[j], 0, 0);
+    ctx.restore();
+    if (j < n-1) ctx.save();
+  }
+}
+
+const sc = {j_scorr};
+const sn = {j_snames};
+drawHeatmap("stratChart", sc, sn);
+
+const fc = {j_corr};
+const fn = {j_cols};
+drawHeatmap("fullChart", fc, fn);
+</script>
+</body></html>
