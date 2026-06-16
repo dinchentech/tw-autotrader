@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>電子股市場狀態分類器</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Inter",-apple-system,"Segoe UI",system-ui,sans-serif;background:#0d1117;color:#e6edf3;display:flex;justify-content:center;padding:40px 20px}
+  .container{max-width:960px;width:100%}
+  h1{font-size:22px;font-weight:600;letter-spacing:-0.3px;color:#f0f6fc;margin-bottom:4px}
+  .sub{font-size:14px;color:#8b949e;margin-bottom:24px}
+  .banner{border-radius:12px;padding:28px 32px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
+  .banner .cls-label{font-size:13px;text-transform:uppercase;letter-spacing:1px;opacity:0.8}
+  .banner .cls-value{font-size:42px;font-weight:700;letter-spacing:-1px}
+  .banner .cls-sub{font-size:14px;opacity:0.7;margin-top:4px}
+  .banner .stats{display:flex;gap:24px}
+  .banner .stat-item{text-align:center}
+  .banner .stat-item .num{font-size:20px;font-weight:600}
+  .banner .stat-item .lbl{font-size:11px;opacity:0.6;margin-top:2px}
+  .banner.trend{background:linear-gradient(135deg,#1a3a1a,#0d2817);border:1px solid #3fb950}
+  .banner.trend .cls-value{color:#7ee787}
+  .banner.range{background:linear-gradient(135deg,#1a2a3a,#0d1a28);border:1px solid #58a6ff}
+  .banner.range .cls-value{color:#58a6ff}
+  .banner.highvol{background:linear-gradient(135deg,#3a1a1a,#280d0d);border:1px solid #f85149}
+  .banner.highvol .cls-value{color:#f85149}
+  .banner.lowvol{background:linear-gradient(135deg,#2a1a3a,#1d0d28);border:1px solid #d2a8ff}
+  .banner.lowvol .cls-value{color:#d2a8ff}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:20px}
+  .card{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:16px;text-align:center}
+  .card .val{font-size:24px;font-weight:600}
+  .card .lbl{font-size:11px;color:#8b949e;margin-top:4px}
+  .chart-wrap{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:20px;margin-bottom:20px}
+  canvas{display:block;width:100%;height:auto}
+  .twrap{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:20px;margin-bottom:20px}
+  .twrap h3{font-size:14px;font-weight:600;color:#f0f6fc;margin-bottom:12px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;color:#8b949e;font-weight:500;padding:6px 8px;border-bottom:1px solid #21262d}
+  td{padding:6px 8px;border-bottom:1px solid #21262d;font-variant-numeric:tabular-nums}
+  .num{text-align:right}
+  .tag{display:inline-block;padding:1px 8px;border-radius:4px;font-size:11px;font-weight:500;letter-spacing:0.3px}
+  .tag.trend{background:#1c3a1c;color:#7ee787}
+  .tag.range{background:#1c2a3a;color:#58a6ff}
+  .tag.highvol{background:#3a1c1c;color:#f85149}
+  .tag.lowvol{background:#2a1c3a;color:#d2a8ff}
+  .tag.up{color:#7ee787} .tag.down{color:#f85149}
+  .hl{background:#1c2128}
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>電子股市場狀態分類器</h1>
+<div class="sub">四大電子股（台積電·聯發科·鴻海·廣達）等權重合成指數 · ADX(14) + ATR(14) 分類</div>
+
+<div class="banner trend">
+  <div>
+    <div class="cls-label">當前市場狀態</div>
+    <div class="cls-value">趨勢</div>
+    <div class="cls-sub">上漲 · 指數 348.5 · 2026-06-16</div>
+  </div>
+  <div class="stats">
+    <div class="stat-item"><div class="num">38.4</div><div class="lbl">ADX(14)</div></div>
+    <div class="stat-item"><div class="num">4.6%</div><div class="lbl">ATR(14)/Close</div></div>
+    <div class="stat-item"><div class="num">29.1/19.5</div><div class="lbl">+DI / -DI</div></div>
+  </div>
+</div>
+
+<div class="grid">
+  <div class="card"><div class="val">348.5</div><div class="lbl">電子指數</div></div>
+  <div class="card"><div class="val" style="color:#f0883e">4.62%</div><div class="lbl">ATR% (高≥3.2% 低≤2.2%)</div></div>
+  <div class="card"><div class="val" style="color:#7ee787">38.4</div><div class="lbl">ADX (≥22=趨勢)</div></div>
+  <div class="card"><div class="val">10/10</div><div class="lbl">近10日趨勢天數</div></div>
+</div>
+
+<div class="chart-wrap">
+  <canvas id="chart" width="920" height="460"></canvas>
+</div>
+
+<div class="twrap">
+  <h3>近30日狀態日報（最新在上）</h3>
+  <table>
+    <thead><tr><th>日期</th><th class="num">指數</th><th class="num">ATR%</th><th class="num">ADX</th><th class="num">+DI</th><th class="num">-DI</th><th>分類</th><th>方向</th></tr></thead>
+    <tbody>
+      <tr class="hl">
+        <td>2026-06-16</td>
+        <td class="num">348.5</td>
+        <td class="num">4.62%</td>
+        <td class="num">38.4</td>
+        <td class="num">29.1</td>
+        <td class="num">19.5</td>
+        <td><span class="tag trend">趨勢</span></td>
+        <td class="num"><span class="tag up">上漲</span></td>
+      </tr>      <tr>
+        <td>2026-06-15</td>
+        <td class="num">345.4</td>
+        <td class="num">4.81%</td>
+        <td class="num">39.9</td>
+        <td class="num">30.4</td>
+        <td class="num">20.4</td>
+        <td><span class="tag trend">趨勢</span></td>
+        <td class="num"><span class="tag up">上漲</span></td>
+      </tr>      <tr>
+        <td>2026-06-12</td>
+        <td class="num">332.8</td>
+        <td class="num">4.96%</td>
+        <td class="num">41.4</td>
+        <td class="num">29.6</td>
+        <td class="num">22.1</td>
+        <td><span class="tag trend">趨勢</span></td>
+        <td class="num"><span class="tag up">上漲</span></td>
+      </tr>      <tr>
+        <td>2026-06-11</td>
+        <td class="num">326.7</td>
+        <td class="num">5.04%</td>
+        <td class="num">43.5</td>
+        <td class="num">26.4</td>
+        <td class="num">23.8</td>
+        <td><span class="tag trend">趨勢</span></td>
+        <td class="num"><span class="tag up">上漲</span></td>
+      </tr>      <tr>
+        <td>2026-06-10</td>
+        <td class="num">331.1</td>
+        <td class="num">4.99%</td>
+        <td class="num">46.4</td>
+        <td class="num">28.4</td>
+        <td class="num">20.1</td>
+        <td><span class="tag trend">趨勢</span></td>
+        <td class="num"><span class="tag up">上漲</span></td>
+      </tr>      <tr>
+        <td>2026-06-09</td>
+        <td class="num">345.4</td>
+        <td class="num">4.74%</td>
+        <td class="num">48.7</td>
+        <td class="num">30.8</td>
+        <td class="num">19.5</td>
+        <td><span class="tag trend">趨勢</span></td>
+        <td class="num"><span class="tag up">上漲</span></td>
+      </tr>      <tr>
+        <td>2026-06-08</td>
+        <td class="num">331.6</td>
+        <td class="num">4.96%</td>
+        <td class="num">50.7</td>
+        <td class="num">26.9</td>
+        <td class="num">21.0</td>
+        <td><span class="tag trend">趨勢</span></td>
+        <td class="num"><span class="tag up">上漲</span></td>
+      </tr>      <tr>
+        <td>2026-06-05</td>
+        <td class="num">346.8</td>
+        <td class="num">4.50%</td>
+        <td class="num">53.6</td>
+        <td class="num">30.5</td>
+        <td class="num">14.8</td>
+        <td><span class="tag trend">趨勢</span></td>
+        <td class="num"><span class="tag up">上漲</span></td>
+      </tr>      <tr>
+        <td>2026-06-04</td>
+        <td class="num">355.2</td>
+        <td class="num">4.35%</td>
+        <td class="num">55.1</td>
+        <td class="num">33.2</td>
+        <td class="num">7.9</td>
+        <td><span class="tag trend">趨勢</span></td>
+        <td class="num"><span class="tag up">上漲</span></td>
+      </tr>      <tr>
+        <td>2026-06-03</td>
+        <td class="num">365.9</td>
+        <td class="num">4.24%</td>
+        <td class="num">54.6</td>
+        <td class="num">35.6</td>
+        <td class="num">7.5</td>
+        <td><span class="tag trend">趨勢</span></td>
+        <td class="num"><span class="tag up">上漲</span></td>
+      </tr>      <tr>
+        <td>2026-06-02</td>
+        <td class="num">359.4</td>
+        <td class="num">4.28%</td>
+        <td class="num">53.8</td>
+        <td class="num">38.7</td>
+        <td class="num">8.1</td>
+        <td><span class="tag trend">趨勢</span></td>
+        <td class="num"><span class="tag up">上漲</span></td>
+      </tr>      <tr>
+        <td>2026-06-01</td>
+        <td class="num">353.6</td>
+        <td class="num">4.12%</td>
+        <td class="num">52.9</td>
+        <td class="num">38.3</td>
+        <td class="num">9.2</td>
+        <td><span class="tag trend">趨勢</span></td>
+        <td class="num"><span class="tag up">上漲</span></td>
+      </tr>      <tr>
+        <td>2026-05-29</td>
+        <td class="num">341.2</td>
+        <td class="num">4.10%</td>
+        <td class="num">52.2</td>
+        <td class="num">34.0</td>
+        <td class="num">10.4</td>
+        <td><span class="tag trend">趨勢</span></td>
+        <td class="num"><span class="tag up">上漲</span></td>
+      </tr>      <tr>
+        <td>2026-05-28</td>
+        <td class="num">331.0</td>
+        <td class="num">4.15%</td>
+        <td class="num">52.2</td>
+        <td class="num">36.0</td>
+        <td class="num">11.4</td>
+        <td><span class="tag trend">趨勢</span></td>
+        <td class="num"><span class="tag up">上漲</span></td>
+      </tr>      <tr>
+        <td>2026-05-27</td>
+        <td class="num">338.4</td>
+        <td class="num">3.92%</td>
+        <td class="num">52.2</td>
+        <td class="num">40.0</td>
+        <td class="num">8.7</td>
+        <td><span class="tag trend">趨勢</span></td>
+        <td class="num"><span class="tag up">上漲</span></td>
+      </tr>      <tr>
+        <td>2026-05-26</td>
+        <td class="num">325.8</td>
+        <td class="num">3.96%</td>
+        <td class="num">51.3</td>
+        <td class="num">39.4</td>
+        <td class="num">9.7</td>
+        <td><span class="tag trend">趨勢</span></td>
+        <td class="num"><span class="tag up">上漲</span></td>
+      </tr>      <tr>
+        <td>2026-05-25</td>
+        <td class="num">327.5</td>
+        <td class="num">3.95%</td>
+        <td class="num">50.5</td>
+        <td class="num">38.6</td>
+        <td class="num">10.4</td>
+        <td><span class="tag trend">趨勢</span></td>
+        <td class="num"><span class="tag up">上漲</span></td>
+      </tr>      <tr>
+        <td>2026-05-22</td>
+        <td class="num">311.3</td>
+        <td class="num">4.03%</td>
+        <td class="num">50.0</td>
+        <td class="num">32.6</td>
+        <td class="num">11.5</td>
+        <td><span class="tag trend">趨勢</span></td>
+        <td class="num"><span class="tag up">上漲</span></td>
+      </tr>      <tr>
+        <td>2026-05-21</td>
+        <td class="num">299.8</td>
+        <td class="num">4.18%</td>
+        <td class="num">50.2</td>
+        <td class="num">28.6</td>
+        <td class="num">12.4</td>
+        <td><span class="tag trend">趨勢</span></td>
+        <td class="num"><span class="tag up">上漲</span></td>
+      </tr>      <tr>
+        <td>2026-05-20</td>
+        <td class="num">284.6</td>
+        <td class="num">4.27%</td>
+        <td class="num">51.0</td>
+        <td class="num">25.0</td>
+        <td class="num">13.8</td>
+        <td><span class="tag trend">趨勢</span></td>
+        <td class="num"><span class="tag up">上漲</span></td>
+      </tr>      <tr>
+        <td>2026-05-19</td>
+        <td class="num">284.6</td>
+        <td class="num">4.36%</td>
+        <td class="num">52.7</td>
+        <td class="num">26.4</td>
+        <td class="num">14.2</td>
+        <td><span class="tag trend">趨勢</span></td>
+        <td class="num"><span class="tag up">上漲</span></td>
+      </tr>      <tr>
+        <td>2026-05-18</td>
+        <td class="num">295.2</td>
+        <td class="num">4.09%</td>
+        <td class="num">54.4</td>
+        <td class="num">29.2</td>
+        <td class="num">14.5</td>
+        <td><span class="tag trend">趨勢</span></td>
+        <td class="num"><span class="tag up">上漲</span></td>
+      </tr>      <tr>
+        <td>2026-05-15</td>
+        <td class="num">293.1</td>
+        <td class="num">3.99%</td>
+        <td class="num">56.0</td>
+        <td class="num">32.4</td>
+        <td class="num">12.4</td>
+        <td><span class="tag trend">趨勢</span></td>
+        <td class="num"><span class="tag up">上漲</span></td>
+      </tr>      <tr>
+        <td>2026-05-14</td>
+        <td class="num">300.0</td>
+        <td class="num">3.74%</td>
+        <td class="num">56.9</td>
+        <td class="num">36.5</td>
+        <td class="num">9.1</td>
+        <td><span class="tag trend">趨勢</span></td>
+        <td class="num"><span class="tag up">上漲</span></td>
+      </tr>      <tr>
+        <td>2026-05-13</td>
+        <td class="num">302.8</td>
+        <td class="num">3.67%</td>
+        <td class="num">56.7</td>
+        <td class="num">39.1</td>
+        <td class="num">9.9</td>
+        <td><span class="tag trend">趨勢</span></td>
+        <td class="num"><span class="tag up">上漲</span></td>
+      </tr>      <tr>
+        <td>2026-05-12</td>
+        <td class="num">309.8</td>
+        <td class="num">3.53%</td>
+        <td class="num">56.4</td>
+        <td class="num">42.7</td>
+        <td class="num">3.8</td>
+        <td><span class="tag trend">趨勢</span></td>
+        <td class="num"><span class="tag up">上漲</span></td>
+      </tr>      <tr>
+        <td>2026-05-11</td>
+        <td class="num">315.0</td>
+        <td class="num">3.44%</td>
+        <td class="num">54.3</td>
+        <td class="num">46.4</td>
+        <td class="num">4.1</td>
+        <td><span class="tag trend">趨勢</span></td>
+        <td class="num"><span class="tag up">上漲</span></td>
+      </tr>      <tr>
+        <td>2026-05-08</td>
+        <td class="num">309.4</td>
+        <td class="num">3.36%</td>
+        <td class="num">52.1</td>
+        <td class="num">45.8</td>
+        <td class="num">4.6</td>
+        <td><span class="tag trend">趨勢</span></td>
+        <td class="num"><span class="tag up">上漲</span></td>
+      </tr>      <tr>
+        <td>2026-05-07</td>
+        <td class="num">305.7</td>
+        <td class="num">3.27%</td>
+        <td class="num">49.8</td>
+        <td class="num">48.4</td>
+        <td class="num">5.2</td>
+        <td><span class="tag trend">趨勢</span></td>
+        <td class="num"><span class="tag up">上漲</span></td>
+      </tr>      <tr>
+        <td>2026-05-06</td>
+        <td class="num">303.3</td>
+        <td class="num">3.32%</td>
+        <td class="num">47.4</td>
+        <td class="num">49.1</td>
+        <td class="num">5.5</td>
+        <td><span class="tag trend">趨勢</span></td>
+        <td class="num"><span class="tag up">上漲</span></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+const data = [{"date": "2025-12-12", "close": 197.3, "atr_pct": 2.33, "adx": 17.6, "pos_di": 22.2, "neg_di": 18.7, "state": "盤整", "direction": "上漲"}, {"date": "2025-12-15", "close": 194.8, "atr_pct": 2.36, "adx": 16.5, "pos_di": 20.6, "neg_di": 21.6, "state": "盤整", "direction": "下跌"}, {"date": "2025-12-16", "close": 191.7, "atr_pct": 2.39, "adx": 16.1, "pos_di": 19.2, "neg_di": 23.8, "state": "盤整", "direction": "下跌"}, {"date": "2025-12-17", "close": 190.3, "atr_pct": 2.36, "adx": 15.8, "pos_di": 18.2, "neg_di": 23.3, "state": "盤整", "direction": "下跌"}, {"date": "2025-12-18", "close": 189.4, "atr_pct": 2.33, "adx": 16.0, "pos_di": 17.2, "neg_di": 25.3, "state": "盤整", "direction": "下跌"}, {"date": "2025-12-19", "close": 191.1, "atr_pct": 2.28, "adx": 15.6, "pos_di": 19.3, "neg_di": 23.7, "state": "盤整", "direction": "下跌"}, {"date": "2025-12-22", "close": 193.2, "atr_pct": 2.24, "adx": 14.7, "pos_di": 21.1, "neg_di": 22.2, "state": "盤整", "direction": "下跌"}, {"date": "2025-12-23", "close": 193.7, "atr_pct": 2.18, "adx": 13.8, "pos_di": 20.3, "neg_di": 21.2, "state": "低波動", "direction": "下跌"}, {"date": "2025-12-24", "close": 193.6, "atr_pct": 2.12, "adx": 12.8, "pos_di": 20.3, "neg_di": 20.2, "state": "低波動", "direction": "上漲"}, {"date": "2025-12-26", "close": 194.7, "atr_pct": 2.04, "adx": 11.9, "pos_di": 19.6, "neg_di": 19.4, "state": "低波動", "direction": "上漲"}, {"date": "2025-12-29", "close": 197.9, "atr_pct": 2.02, "adx": 12.1, "pos_di": 23.6, "neg_di": 17.9, "state": "低波動", "direction": "上漲"}, {"date": "2025-12-30", "close": 196.7, "atr_pct": 1.99, "adx": 12.2, "pos_di": 22.4, "neg_di": 17.0, "state": "低波動", "direction": "上漲"}, {"date": "2025-12-31", "close": 200.1, "atr_pct": 1.98, "adx": 13.1, "pos_di": 25.5, "neg_di": 15.6, "state": "低波動", "direction": "上漲"}, {"date": "2026-01-02", "close": 203.7, "atr_pct": 2.0, "adx": 14.8, "pos_di": 30.4, "neg_di": 14.0, "state": "低波動", "direction": "上漲"}, {"date": "2026-01-05", "close": 209.7, "atr_pct": 2.07, "adx": 17.3, "pos_di": 37.0, "neg_di": 12.2, "state": "低波動", "direction": "上漲"}, {"date": "2026-01-06", "close": 211.8, "atr_pct": 2.11, "adx": 19.8, "pos_di": 35.9, "neg_di": 11.0, "state": "低波動", "direction": "上漲"}, {"date": "2026-01-07", "close": 211.3, "atr_pct": 2.1, "adx": 22.2, "pos_di": 33.9, "neg_di": 10.3, "state": "趨勢", "direction": "上漲"}, {"date": "2026-01-08", "close": 207.0, "atr_pct": 2.24, "adx": 22.9, "pos_di": 30.1, "neg_di": 15.8, "state": "趨勢", "direction": "上漲"}, {"date": "2026-01-09", "close": 207.6, "atr_pct": 2.27, "adx": 23.3, "pos_di": 27.4, "neg_di": 14.9, "state": "趨勢", "direction": "上漲"}, {"date": "2026-01-12", "close": 207.9, "atr_pct": 2.23, "adx": 23.8, "pos_di": 26.0, "neg_di": 14.1, "state": "趨勢", "direction": "上漲"}, {"date": "2026-01-13", "close": 209.2, "atr_pct": 2.19, "adx": 24.4, "pos_di": 25.7, "neg_di": 13.2, "state": "趨勢", "direction": "上漲"}, {"date": "2026-01-14", "close": 212.6, "atr_pct": 2.13, "adx": 25.2, "pos_di": 26.5, "neg_di": 12.4, "state": "趨勢", "direction": "上漲"}, {"date": "2026-01-15", "close": 210.8, "atr_pct": 2.13, "adx": 25.8, "pos_di": 24.8, "neg_di": 12.4, "state": "趨勢", "direction": "上漲"}, {"date": "2026-01-16", "close": 214.5, "atr_pct": 2.11, "adx": 27.1, "pos_di": 28.7, "neg_di": 11.4, "state": "趨勢", "direction": "上漲"}, {"date": "2026-01-19", "close": 212.5, "atr_pct": 2.17, "adx": 27.8, "pos_di": 26.2, "neg_di": 12.1, "state": "趨勢", "direction": "上漲"}, {"date": "2026-01-20", "close": 211.1, "atr_pct": 2.17, "adx": 28.0, "pos_di": 24.4, "neg_di": 13.1, "state": "趨勢", "direction": "上漲"}, {"date": "2026-01-21", "close": 207.6, "atr_pct": 2.21, "adx": 27.3, "pos_di": 22.7, "neg_di": 15.5, "state": "趨勢", "direction": "上漲"}, {"date": "2026-01-22", "close": 211.2, "atr_pct": 2.21, "adx": 27.1, "pos_di": 23.4, "neg_di": 14.1, "state": "趨勢", "direction": "上漲"}, {"date": "2026-01-23", "close": 214.8, "atr_pct": 2.23, "adx": 27.7, "pos_di": 26.6, "neg_di": 12.8, "state": "趨勢", "direction": "上漲"}, {"date": "2026-01-26", "close": 219.7, "atr_pct": 2.25, "adx": 29.0, "pos_di": 30.9, "neg_di": 11.5, "state": "趨勢", "direction": "上漲"}, {"date": "2026-01-27", "close": 221.3, "atr_pct": 2.22, "adx": 30.4, "pos_di": 31.3, "neg_di": 10.7, "state": "趨勢", "direction": "上漲"}, {"date": "2026-01-28", "close": 223.2, "atr_pct": 2.24, "adx": 32.0, "pos_di": 32.0, "neg_di": 9.8, "state": "趨勢", "direction": "上漲"}, {"date": "2026-01-29", "close": 221.6, "atr_pct": 2.25, "adx": 33.5, "pos_di": 29.7, "neg_di": 9.1, "state": "趨勢", "direction": "上漲"}, {"date": "2026-01-30", "close": 218.5, "atr_pct": 2.28, "adx": 33.6, "pos_di": 27.7, "neg_di": 13.7, "state": "趨勢", "direction": "上漲"}, {"date": "2026-02-02", "close": 214.1, "atr_pct": 2.37, "adx": 32.2, "pos_di": 25.2, "neg_di": 19.0, "state": "趨勢", "direction": "上漲"}, {"date": "2026-02-03", "close": 219.1, "atr_pct": 2.38, "adx": 31.6, "pos_di": 28.2, "neg_di": 17.1, "state": "趨勢", "direction": "上漲"}, {"date": "2026-02-04", "close": 219.4, "atr_pct": 2.38, "adx": 31.1, "pos_di": 26.2, "neg_di": 15.9, "state": "趨勢", "direction": "上漲"}, {"date": "2026-02-05", "close": 216.2, "atr_pct": 2.41, "adx": 30.5, "pos_di": 24.4, "neg_di": 15.4, "state": "趨勢", "direction": "上漲"}, {"date": "2026-02-06", "close": 215.8, "atr_pct": 2.46, "adx": 28.8, "pos_di": 22.2, "neg_di": 19.2, "state": "趨勢", "direction": "上漲"}, {"date": "2026-02-09", "close": 222.2, "atr_pct": 2.51, "adx": 28.6, "pos_di": 29.0, "neg_di": 17.0, "state": "趨勢", "direction": "上漲"}, {"date": "2026-02-10", "close": 226.2, "atr_pct": 2.45, "adx": 28.8, "pos_di": 30.3, "neg_di": 15.9, "state": "趨勢", "direction": "上漲"}, {"date": "2026-02-11", "close": 229.7, "atr_pct": 2.44, "adx": 29.4, "pos_di": 31.8, "neg_di": 14.6, "state": "趨勢", "direction": "上漲"}, {"date": "2026-02-23", "close": 227.4, "atr_pct": 2.48, "adx": 30.2, "pos_di": 32.1, "neg_di": 13.5, "state": "趨勢", "direction": "上漲"}, {"date": "2026-02-24", "close": 232.0, "atr_pct": 2.42, "adx": 31.0, "pos_di": 30.3, "neg_di": 12.6, "state": "趨勢", "direction": "上漲"}, {"date": "2026-02-25", "close": 240.8, "atr_pct": 2.45, "adx": 32.7, "pos_di": 37.3, "neg_di": 11.1, "state": "趨勢", "direction": "上漲"}, {"date": "2026-02-26", "close": 240.5, "atr_pct": 2.54, "adx": 34.5, "pos_di": 38.6, "neg_di": 10.0, "state": "趨勢", "direction": "上漲"}, {"date": "2026-03-02", "close": 238.5, "atr_pct": 2.62, "adx": 35.2, "pos_di": 35.0, "neg_di": 13.6, "state": "趨勢", "direction": "上漲"}, {"date": "2026-03-03", "close": 231.0, "atr_pct": 2.78, "adx": 35.2, "pos_di": 31.6, "neg_di": 15.2, "state": "趨勢", "direction": "上漲"}, {"date": "2026-03-04", "close": 220.5, "atr_pct": 3.06, "adx": 33.2, "pos_di": 28.0, "neg_di": 24.4, "state": "趨勢", "direction": "上漲"}, {"date": "2026-03-05", "close": 226.4, "atr_pct": 3.1, "adx": 31.8, "pos_di": 28.9, "neg_di": 21.8, "state": "趨勢", "direction": "上漲"}, {"date": "2026-03-06", "close": 225.4, "atr_pct": 3.03, "adx": 30.2, "pos_di": 27.6, "neg_di": 23.1, "state": "趨勢", "direction": "上漲"}, {"date": "2026-03-09", "close": 215.0, "atr_pct": 3.49, "adx": 29.1, "pos_di": 23.4, "neg_di": 32.0, "state": "趨勢", "direction": "下跌"}, {"date": "2026-03-10", "close": 217.7, "atr_pct": 3.44, "adx": 27.2, "pos_di": 28.4, "neg_di": 29.7, "state": "趨勢", "direction": "下跌"}, {"date": "2026-03-11", "close": 226.6, "atr_pct": 3.39, "adx": 25.7, "pos_di": 30.6, "neg_di": 26.9, "state": "趨勢", "direction": "上漲"}, {"date": "2026-03-12", "close": 223.5, "atr_pct": 3.37, "adx": 24.3, "pos_di": 28.9, "neg_di": 25.4, "state": "趨勢", "direction": "上漲"}, {"date": "2026-03-13", "close": 220.9, "atr_pct": 3.35, "adx": 22.6, "pos_di": 27.4, "neg_di": 27.2, "state": "趨勢", "direction": "上漲"}, {"date": "2026-03-16", "close": 220.2, "atr_pct": 3.25, "adx": 21.1, "pos_di": 26.6, "neg_di": 26.2, "state": "高波動", "direction": "上漲"}, {"date": "2026-03-17", "close": 221.0, "atr_pct": 3.11, "adx": 19.6, "pos_di": 25.8, "neg_di": 25.3, "state": "盤整", "direction": "上漲"}, {"date": "2026-03-18", "close": 222.5, "atr_pct": 2.97, "adx": 18.5, "pos_di": 26.0, "neg_di": 24.4, "state": "盤整", "direction": "上漲"}, {"date": "2026-03-19", "close": 216.6, "atr_pct": 3.05, "adx": 17.7, "pos_di": 24.2, "neg_di": 28.5, "state": "盤整", "direction": "下跌"}, {"date": "2026-03-20", "close": 215.9, "atr_pct": 3.01, "adx": 17.4, "pos_di": 22.8, "neg_di": 29.7, "state": "盤整", "direction": "下跌"}, {"date": "2026-03-23", "close": 210.2, "atr_pct": 3.15, "adx": 17.8, "pos_di": 20.8, "neg_di": 33.6, "state": "盤整", "direction": "下跌"}, {"date": "2026-03-24", "close": 210.0, "atr_pct": 3.13, "adx": 17.7, "pos_di": 22.6, "neg_di": 31.4, "state": "盤整", "direction": "下跌"}, {"date": "2026-03-25", "close": 213.3, "atr_pct": 3.08, "adx": 17.3, "pos_di": 23.0, "neg_di": 29.2, "state": "盤整", "direction": "下跌"}, {"date": "2026-03-26", "close": 212.6, "atr_pct": 3.03, "adx": 16.8, "pos_di": 22.4, "neg_di": 27.6, "state": "盤整", "direction": "下跌"}, {"date": "2026-03-27", "close": 211.6, "atr_pct": 2.98, "adx": 17.0, "pos_di": 21.2, "neg_di": 31.0, "state": "盤整", "direction": "下跌"}, {"date": "2026-03-30", "close": 205.3, "atr_pct": 3.09, "adx": 17.5, "pos_di": 19.6, "neg_di": 32.2, "state": "盤整", "direction": "下跌"}, {"date": "2026-03-31", "close": 201.9, "atr_pct": 3.09, "adx": 18.3, "pos_di": 18.5, "neg_di": 33.8, "state": "盤整", "direction": "下跌"}, {"date": "2026-04-01", "close": 209.2, "atr_pct": 3.11, "adx": 18.1, "pos_di": 22.2, "neg_di": 30.1, "state": "盤整", "direction": "下跌"}, {"date": "2026-04-02", "close": 205.5, "atr_pct": 3.19, "adx": 18.2, "pos_di": 20.4, "neg_di": 30.3, "state": "盤整", "direction": "下跌"}, {"date": "2026-04-07", "close": 208.1, "atr_pct": 3.08, "adx": 18.3, "pos_di": 19.4, "neg_di": 28.7, "state": "盤整", "direction": "下跌"}, {"date": "2026-04-08", "close": 219.9, "atr_pct": 3.1, "adx": 17.4, "pos_di": 28.3, "neg_di": 25.1, "state": "盤整", "direction": "上漲"}, {"date": "2026-04-09", "close": 220.3, "atr_pct": 3.06, "adx": 16.8, "pos_di": 27.9, "neg_di": 23.5, "state": "盤整", "direction": "上漲"}, {"date": "2026-04-10", "close": 223.5, "atr_pct": 2.97, "adx": 16.7, "pos_di": 30.7, "neg_di": 22.2, "state": "盤整", "direction": "上漲"}, {"date": "2026-04-13", "close": 223.9, "atr_pct": 2.89, "adx": 16.8, "pos_di": 30.0, "neg_di": 21.2, "state": "盤整", "direction": "上漲"}, {"date": "2026-04-14", "close": 232.0, "atr_pct": 2.89, "adx": 17.7, "pos_di": 34.8, "neg_di": 19.0, "state": "盤整", "direction": "上漲"}, {"date": "2026-04-15", "close": 233.2, "atr_pct": 2.89, "adx": 19.0, "pos_di": 37.5, "neg_di": 17.5, "state": "盤整", "direction": "上漲"}, {"date": "2026-04-16", "close": 237.6, "atr_pct": 2.85, "adx": 20.3, "pos_di": 35.7, "neg_di": 16.2, "state": "盤整", "direction": "上漲"}, {"date": "2026-04-17", "close": 236.3, "atr_pct": 2.85, "adx": 21.6, "pos_di": 33.6, "neg_di": 15.1, "state": "盤整", "direction": "上漲"}, {"date": "2026-04-20", "close": 236.5, "atr_pct": 2.82, "adx": 22.8, "pos_di": 32.0, "neg_di": 14.2, "state": "趨勢", "direction": "上漲"}, {"date": "2026-04-21", "close": 245.3, "atr_pct": 2.83, "adx": 24.5, "pos_di": 35.3, "neg_di": 12.7, "state": "趨勢", "direction": "上漲"}, {"date": "2026-04-22", "close": 253.0, "atr_pct": 2.85, "adx": 26.8, "pos_di": 40.2, "neg_di": 11.3, "state": "趨勢", "direction": "上漲"}, {"date": "2026-04-23", "close": 251.4, "atr_pct": 3.08, "adx": 29.2, "pos_di": 39.9, "neg_di": 9.8, "state": "趨勢", "direction": "上漲"}, {"date": "2026-04-24", "close": 261.5, "atr_pct": 3.09, "adx": 31.6, "pos_di": 37.6, "neg_di": 8.7, "state": "趨勢", "direction": "上漲"}, {"date": "2026-04-27", "close": 266.9, "atr_pct": 3.16, "adx": 34.3, "pos_di": 42.8, "neg_di": 7.7, "state": "趨勢", "direction": "上漲"}, {"date": "2026-04-28", "close": 268.7, "atr_pct": 3.24, "adx": 36.9, "pos_di": 40.0, "neg_di": 7.0, "state": "趨勢", "direction": "上漲"}, {"date": "2026-04-29", "close": 266.0, "atr_pct": 3.22, "adx": 38.7, "pos_di": 37.8, "neg_di": 8.7, "state": "趨勢", "direction": "上漲"}, {"date": "2026-04-30", "close": 262.4, "atr_pct": 3.32, "adx": 40.6, "pos_di": 37.4, "neg_di": 8.0, "state": "趨勢", "direction": "上漲"}, {"date": "2026-05-04", "close": 278.7, "atr_pct": 3.35, "adx": 42.6, "pos_di": 38.7, "neg_di": 6.9, "state": "趨勢", "direction": "上漲"}, {"date": "2026-05-05", "close": 289.1, "atr_pct": 3.29, "adx": 44.9, "pos_di": 43.1, "neg_di": 6.3, "state": "趨勢", "direction": "上漲"}, {"date": "2026-05-06", "close": 303.3, "atr_pct": 3.32, "adx": 47.4, "pos_di": 49.1, "neg_di": 5.5, "state": "趨勢", "direction": "上漲"}, {"date": "2026-05-07", "close": 305.7, "atr_pct": 3.27, "adx": 49.8, "pos_di": 48.4, "neg_di": 5.2, "state": "趨勢", "direction": "上漲"}, {"date": "2026-05-08", "close": 309.4, "atr_pct": 3.36, "adx": 52.1, "pos_di": 45.8, "neg_di": 4.6, "state": "趨勢", "direction": "上漲"}, {"date": "2026-05-11", "close": 315.0, "atr_pct": 3.44, "adx": 54.3, "pos_di": 46.4, "neg_di": 4.1, "state": "趨勢", "direction": "上漲"}, {"date": "2026-05-12", "close": 309.8, "atr_pct": 3.53, "adx": 56.4, "pos_di": 42.7, "neg_di": 3.8, "state": "趨勢", "direction": "上漲"}, {"date": "2026-05-13", "close": 302.8, "atr_pct": 3.67, "adx": 56.7, "pos_di": 39.1, "neg_di": 9.9, "state": "趨勢", "direction": "上漲"}, {"date": "2026-05-14", "close": 300.0, "atr_pct": 3.74, "adx": 56.9, "pos_di": 36.5, "neg_di": 9.1, "state": "趨勢", "direction": "上漲"}, {"date": "2026-05-15", "close": 293.1, "atr_pct": 3.99, "adx": 56.0, "pos_di": 32.4, "neg_di": 12.4, "state": "趨勢", "direction": "上漲"}, {"date": "2026-05-18", "close": 295.2, "atr_pct": 4.09, "adx": 54.4, "pos_di": 29.2, "neg_di": 14.5, "state": "趨勢", "direction": "上漲"}, {"date": "2026-05-19", "close": 284.6, "atr_pct": 4.36, "adx": 52.7, "pos_di": 26.4, "neg_di": 14.2, "state": "趨勢", "direction": "上漲"}, {"date": "2026-05-20", "close": 284.6, "atr_pct": 4.27, "adx": 51.0, "pos_di": 25.0, "neg_di": 13.8, "state": "趨勢", "direction": "上漲"}, {"date": "2026-05-21", "close": 299.8, "atr_pct": 4.18, "adx": 50.2, "pos_di": 28.6, "neg_di": 12.4, "state": "趨勢", "direction": "上漲"}, {"date": "2026-05-22", "close": 311.3, "atr_pct": 4.03, "adx": 50.0, "pos_di": 32.6, "neg_di": 11.5, "state": "趨勢", "direction": "上漲"}, {"date": "2026-05-25", "close": 327.5, "atr_pct": 3.95, "adx": 50.5, "pos_di": 38.6, "neg_di": 10.4, "state": "趨勢", "direction": "上漲"}, {"date": "2026-05-26", "close": 325.8, "atr_pct": 3.96, "adx": 51.3, "pos_di": 39.4, "neg_di": 9.7, "state": "趨勢", "direction": "上漲"}, {"date": "2026-05-27", "close": 338.4, "atr_pct": 3.92, "adx": 52.2, "pos_di": 40.0, "neg_di": 8.7, "state": "趨勢", "direction": "上漲"}, {"date": "2026-05-28", "close": 331.0, "atr_pct": 4.15, "adx": 52.2, "pos_di": 36.0, "neg_di": 11.4, "state": "趨勢", "direction": "上漲"}, {"date": "2026-05-29", "close": 341.2, "atr_pct": 4.1, "adx": 52.2, "pos_di": 34.0, "neg_di": 10.4, "state": "趨勢", "direction": "上漲"}, {"date": "2026-06-01", "close": 353.6, "atr_pct": 4.12, "adx": 52.9, "pos_di": 38.3, "neg_di": 9.2, "state": "趨勢", "direction": "上漲"}, {"date": "2026-06-02", "close": 359.4, "atr_pct": 4.28, "adx": 53.8, "pos_di": 38.7, "neg_di": 8.1, "state": "趨勢", "direction": "上漲"}, {"date": "2026-06-03", "close": 365.9, "atr_pct": 4.24, "adx": 54.6, "pos_di": 35.6, "neg_di": 7.5, "state": "趨勢", "direction": "上漲"}, {"date": "2026-06-04", "close": 355.2, "atr_pct": 4.35, "adx": 55.1, "pos_di": 33.2, "neg_di": 7.9, "state": "趨勢", "direction": "上漲"}, {"date": "2026-06-05", "close": 346.8, "atr_pct": 4.5, "adx": 53.6, "pos_di": 30.5, "neg_di": 14.8, "state": "趨勢", "direction": "上漲"}, {"date": "2026-06-08", "close": 331.6, "atr_pct": 4.96, "adx": 50.7, "pos_di": 26.9, "neg_di": 21.0, "state": "趨勢", "direction": "上漲"}, {"date": "2026-06-09", "close": 345.4, "atr_pct": 4.74, "adx": 48.7, "pos_di": 30.8, "neg_di": 19.5, "state": "趨勢", "direction": "上漲"}, {"date": "2026-06-10", "close": 331.1, "atr_pct": 4.99, "adx": 46.4, "pos_di": 28.4, "neg_di": 20.1, "state": "趨勢", "direction": "上漲"}, {"date": "2026-06-11", "close": 326.7, "atr_pct": 5.04, "adx": 43.5, "pos_di": 26.4, "neg_di": 23.8, "state": "趨勢", "direction": "上漲"}, {"date": "2026-06-12", "close": 332.8, "atr_pct": 4.96, "adx": 41.4, "pos_di": 29.6, "neg_di": 22.1, "state": "趨勢", "direction": "上漲"}, {"date": "2026-06-15", "close": 345.4, "atr_pct": 4.81, "adx": 39.9, "pos_di": 30.4, "neg_di": 20.4, "state": "趨勢", "direction": "上漲"}, {"date": "2026-06-16", "close": 348.5, "atr_pct": 4.62, "adx": 38.4, "pos_di": 29.1, "neg_di": 19.5, "state": "趨勢", "direction": "上漲"}];
+const aThresh = 22.0;
+
+const W=920, H=460, pad={top:30,right:40,bottom:40,left:55};
+const cw=W-pad.left-pad.right, ch=H-pad.top-pad.bottom;
+const canvas=document.getElementById("chart");
+canvas.width=W; canvas.height=H;
+const ctx=canvas.getContext("2d");
+
+const closeMax=Math.max(...data.map(d=>d.close))*1.05;
+const closeMin=Math.min(...data.map(d=>d.close))*0.95;
+const n=data.length;
+
+function cx(i){return pad.left+(i/(n-1||1))*cw;}
+function cy(v,mn,mx){return pad.top+ch-((v-mn)/(mx-mn||1))*ch;}
+
+// Grid
+ctx.strokeStyle="#21262d"; ctx.lineWidth=1;
+for(let i=0;i<5;i++){let y=pad.top+ch*i/4; ctx.beginPath();ctx.moveTo(pad.left,y);ctx.lineTo(W-pad.right,y);ctx.stroke()}
+ctx.fillStyle="#484f58"; ctx.font="11px Inter,sans-serif"; ctx.textAlign="right";
+[closeMin,(closeMin+closeMax)/2,closeMax].forEach(v=>{ctx.fillText(v.toFixed(0),pad.left-6,cy(v,closeMin,closeMax)+4)});
+
+// Background state coloring
+const fills={'趨勢':'rgba(63,185,80,0.08)','盤整':'rgba(88,166,255,0.06)','高波動':'rgba(248,81,73,0.08)','低波動':'rgba(210,168,255,0.06)'};
+data.forEach((d,i)=>{
+  if(i===0) return;
+  const f=fills[d.state]||'transparent';
+  if(f!=='transparent'){ctx.fillStyle=f; ctx.fillRect(cx(i-1),pad.top,cx(i)-cx(i-1),ch);}
+});
+
+// Price line
+ctx.beginPath(); ctx.strokeStyle="#e6edf3"; ctx.lineWidth=2; ctx.lineJoin="round";
+data.forEach((d,i)=>{i===0?ctx.moveTo(cx(i),cy(d.close,closeMin,closeMax)):ctx.lineTo(cx(i),cy(d.close,closeMin,closeMax))});
+ctx.stroke();
+
+// ADX line (secondary axis)
+const adxMax=Math.max(...data.map(d=>d.adx||0))*1.2||50;
+function cy2(v){return pad.top+ch-(v/adxMax)*ch;}
+ctx.beginPath(); ctx.strokeStyle="#f0883e"; ctx.lineWidth=1.5; ctx.setLineDash([4,4]);
+data.forEach((d,i)=>{
+  if(d.adx==null) return;
+  i===0||data[i-1].adx==null?ctx.moveTo(cx(i),cy2(d.adx)):ctx.lineTo(cx(i),cy2(d.adx));
+});
+ctx.stroke(); ctx.setLineDash([]);
+
+// ADX threshold
+const thY=cy2(aThresh);
+ctx.beginPath(); ctx.strokeStyle="#f0883e"; ctx.lineWidth=1; ctx.setLineDash([3,3]);
+ctx.moveTo(pad.left,thY); ctx.lineTo(W-pad.right,thY); ctx.stroke(); ctx.setLineDash([]);
+ctx.fillStyle="#f0883e"; ctx.font="10px Inter,sans-serif"; ctx.textAlign="right";
+ctx.fillText("ADX="+aThresh.toFixed(0),W-pad.right-10,thY-4);
+
+// X labels
+ctx.fillStyle="#484f58"; ctx.font="11px Inter,sans-serif"; ctx.textAlign="center";
+data.forEach((d,i)=>{if(i%15===0||i===n-1)ctx.fillText(d.date.slice(5),cx(i),H-pad.bottom+16)});
+
+// Legend
+const leg=[{l:"電子指數",c:"#e6edf3"},{l:"ADX(14)",c:"#f0883e"},{l:"ADX="+aThresh.toFixed(0)+"門檻",c:"#f0883e",d:1}];
+ctx.font="11px Inter,sans-serif"; ctx.textAlign="left";
+leg.forEach((l,i)=>{
+  let x=pad.left+10+i*140, y=14;
+  ctx.strokeStyle=l.c; ctx.lineWidth=2;
+  if(l.d) ctx.setLineDash([3,3]);
+  ctx.beginPath(); ctx.moveTo(x,y-3); ctx.lineTo(x+20,y-3); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle="#8b949e"; ctx.fillText(l.l,x+26,y+1);
+});
+</script>
+</div></body></html>

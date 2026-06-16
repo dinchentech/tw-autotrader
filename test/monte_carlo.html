@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>蒙地卡羅模擬 — 策略穩定性評估</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Inter",-apple-system,"Segoe UI",system-ui,sans-serif;background:#0d1117;color:#e6edf3;display:flex;justify-content:center;padding:40px 20px}
+  .container{max-width:960px;width:100%}
+  h1{font-size:22px;font-weight:600;letter-spacing:-0.3px;color:#f0f6fc;margin-bottom:4px}
+  .sub{font-size:14px;color:#8b949e;margin-bottom:24px}
+
+  .summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:20px}
+  .card{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:16px;text-align:center}
+  .card .val{font-size:24px;font-weight:600}
+  .card .lbl{font-size:11px;color:#8b949e;margin-top:4px}
+  .card .val.green{color:#7ee787}.card .val.red{color:#f85149}.card .val.orange{color:#f0883e}.card .val.blue{color:#58a6ff}
+
+  .chart-wrap{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:20px;margin-bottom:20px}
+  canvas{display:block;width:100%;height:auto}
+
+  .stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+  .stat-box{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:16px}
+  .stat-box h3{font-size:13px;font-weight:600;color:#f0f6fc;margin-bottom:10px}
+  .stat-row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px;border-bottom:1px solid #1c2128}
+  .stat-row:last-child{border-bottom:none}
+  .stat-row .lbl{color:#8b949e}
+  .stat-row .val{font-variant-numeric:tabular-nums;font-weight:500}
+
+  .twrap{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:20px;margin-bottom:20px}
+  .twrap h3{font-size:14px;font-weight:600;color:#f0f6fc;margin-bottom:12px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;color:#8b949e;font-weight:500;padding:6px 8px;border-bottom:1px solid #21262d}
+  td{padding:6px 8px;border-bottom:1px solid #21262d;font-variant-numeric:tabular-nums}
+  .num{text-align:right}
+
+  .method-tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:4px;margin-left:6px}
+  .method-tag.boot{background:#1c3a1c;color:#7ee787}
+  .method-tag.shuf{background:#1c2a3a;color:#58a6ff}
+  .method-tag.act{background:#3a2a1c;color:#f0883e}
+
+  @media(max-width:640px){.stats-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>蒙地卡羅模擬 — 策略穩定性評估</h1>
+<div class="sub">ma_cross (fast=5, slow=20) · 測試期 2023-2024 · 四大電子股 · 10,000 次模擬</div>
+
+<div class="summary">
+  <div class="card">
+    <div class="val green">+1.14%</div>
+    <div class="lbl">📊 實際策略總報酬 <span class="method-tag act">實際</span></div>
+  </div>
+  <div class="card">
+    <div class="val orange">+1.14%</div>
+    <div class="lbl">🎯 靴帶抽樣中位數 <span class="method-tag boot">MC</span></div>
+  </div>
+  <div class="card">
+    <div class="val">56%</div>
+    <div class="lbl">📈 靴帶模擬正報酬機率</div>
+  </div>
+  <div class="card">
+    <div class="val blue">56%</div>
+    <div class="lbl">📈 實際值 > X% 的模擬結果</div>
+  </div>
+</div>
+
+<div class="chart-wrap">
+  <canvas id="chart" width="920" height="420"></canvas>
+</div>
+<div class="chart-wrap">
+  <canvas id="chartDD" width="920" height="420"></canvas>
+</div>
+
+<div class="stats-grid">
+  <div class="stat-box">
+    <h3>📦 靴帶抽樣 <span class="method-tag boot">Bootstrap</span></h3>
+    <div class="stat-row"><span class="lbl">模擬次數</span><span class="val">{N_SIM:,}</span></div>
+    <div class="stat-row"><span class="lbl">平均報酬</span><span class="val">{boot_stat['mean']:+.2%}</span></div>
+    <div class="stat-row"><span class="lbl">中位數報酬</span><span class="val">{boot_stat['median']:+.2%}</span></div>
+    <div class="stat-row"><span class="lbl">標準差</span><span class="val">±{boot_stat['std']:.2%}</span></div>
+    <div class="stat-row"><span class="lbl">P5 / P95</span><span class="val">{boot_stat['p5']:+.2%} ~ {boot_stat['p95']:+.2%}</span></div>
+    <div class="stat-row"><span class="lbl">正報酬機率</span><span class="val">{boot_stat['pos_prob']:.0%}</span></div>
+    <div class="stat-row"><span class="lbl">實際值排名</span><span class="val">{boot_stat['actual_rank']:.0%}</span></div>
+    <div class="stat-row"><span class="lbl">Sharpe-like</span><span class="val">{boot_stat['sharpe']}</span></div>
+  </div>
+  <div class="stat-box">
+    <h3>⬇️ 最大回撤分析 <span class="method-tag shuf">Permutation</span></h3>
+    <div class="stat-row"><span class="lbl">模擬次數</span><span class="val">{N_SIM:,}</span></div>
+    <div class="stat-row"><span class="lbl">平均最大回撤</span><span class="val">{dd_stat['mean']:.2%}</span></div>
+    <div class="stat-row"><span class="lbl">中位數最大回撤</span><span class="val">{dd_stat['median']:.2%}</span></div>
+    <div class="stat-row"><span class="lbl">標準差</span><span class="val">±{dd_stat['std']:.2%}</span></div>
+    <div class="stat-row"><span class="lbl">P5 / P95</span><span class="val">{dd_stat['p5']:.2%} ~ {dd_stat['p95']:.2%}</span></div>
+    <div class="stat-row"><span class="lbl">實際最大回撤</span><span class="val">{actual_mdd:.2%}</span></div>
+    <div class="stat-row"><span class="lbl">實際回撤排名</span><span class="val">{dd_stat['actual_rank']:.0%}</span></div>
+    <div class="stat-row"><span class="lbl">（越低越好）</span><span class="val">{'優於' if dd_stat['actual_rank'] < 0.5 else '差於'}{abs(dd_stat['actual_rank']-0.5)*2:.0%} 的隨機順序</span></div>
+  </div>
+</div>
+
+<div class="twrap">
+  <h3>各標的交易明細</h3>
+  <table>
+    <thead><tr><th>標的</th><th class="num">交易次數</th><th class="num">總報酬</th><th class="num">勝率</th><th class="num">平均每筆報酬</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>2330</td>
+        <td class="num">31</td>
+        <td class="num red">-9.77%</td>
+        <td class="num">39%</td>
+        <td class="num">-0.0032</td>
+      </tr>      <tr>
+        <td>2454</td>
+        <td class="num">28</td>
+        <td class="num red">-4.65%</td>
+        <td class="num">43%</td>
+        <td class="num">-0.0017</td>
+      </tr>      <tr>
+        <td>2317</td>
+        <td class="num">29</td>
+        <td class="num green">+3.28%</td>
+        <td class="num">38%</td>
+        <td class="num">+0.0011</td>
+      </tr>      <tr>
+        <td>2382</td>
+        <td class="num">21</td>
+        <td class="num green">+15.68%</td>
+        <td class="num">62%</td>
+        <td class="num">+0.0075</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+function drawHist(canvasId, data, actualVal, xLabel, colorPos, colorNeg, actualColor, actLabel, legItems) {
+  const W=920, H=420, pad={top:30,right:30,bottom:45,left:65};
+  const cw=W-pad.left-pad.right, ch=H-pad.top-pad.bottom;
+  const canvas=document.getElementById(canvasId);
+  canvas.width=W; canvas.height=H;
+  const ctx=canvas.getContext("2d");
+
+  const maxY = Math.max(...data.map(d=>d.y)) * 1.2;
+  const xMin = data[0].x;
+  const xMax = data[data.length-1].x;
+
+  function cx(v){return pad.left + ((v - xMin) / (xMax - xMin || 1)) * cw;}
+  function cy(v){return pad.top + ch - (v / maxY) * ch;}
+
+  ctx.strokeStyle="#21262d"; ctx.lineWidth=1;
+  for(let i=0;i<5;i++){let y=pad.top+ch*i/4; ctx.beginPath();ctx.moveTo(pad.left,y);ctx.lineTo(W-pad.right,y);ctx.stroke()}
+
+  ctx.fillStyle="#484f58"; ctx.font="11px Inter,sans-serif"; ctx.textAlign="right";
+  ctx.fillText("0",pad.left-6,cy(0)+4);
+  ctx.fillText(maxY.toFixed(0),pad.left-6,cy(maxY)+4);
+
+  data.forEach(d=>{
+    const color = d.x < 0 ? colorNeg : colorPos;
+    ctx.fillStyle = color;
+    const w = Math.max(2, cx(data[1].x) - cx(data[0].x) - 1);
+    ctx.fillRect(cx(d.x)-w/2, cy(d.y), w, ch - cy(d.y) + pad.top);
+  });
+
+  if (actualVal !== null) {
+    const actX = cx(actualVal);
+    ctx.beginPath(); ctx.strokeStyle=actualColor; ctx.lineWidth=3;
+    ctx.moveTo(actX, pad.top); ctx.lineTo(actX, pad.top+ch); ctx.stroke();
+    ctx.fillStyle=actualColor; ctx.font="bold 12px Inter,sans-serif"; ctx.textAlign="center";
+    const prefix = actualVal >= 0 ? "+" : "";
+    ctx.fillText("實際值 "+ prefix + (actualVal*100).toFixed(1)+"%", actX, pad.top-6);
+  }
+
+  ctx.fillStyle="#484f58"; ctx.font="11px Inter,sans-serif"; ctx.textAlign="center";
+  const xStep = Math.ceil((xMax - xMin) / 10 * 100) / 100;
+  for(let v=Math.ceil(xMin/xStep)*xStep; v<=xMax; v+=xStep){
+    ctx.fillText((v*100).toFixed(1)+"%", cx(v), H-pad.bottom+16);
+  }
+
+  ctx.fillStyle="#8b949e"; ctx.font="11px Inter,sans-serif"; ctx.textAlign="left";
+  ctx.fillText(xLabel, pad.left+5, H-6);
+
+  ctx.textAlign="left";
+  legItems.forEach((l,i)=>{
+    let x=pad.left+10+i*180, y=14;
+    ctx.fillStyle=l.c;
+    ctx.fillRect(x,y-6,18,10);
+    ctx.fillStyle="#8b949e"; ctx.font="11px Inter,sans-serif";
+    ctx.fillText(l.l,x+24,y+3);
+  });
+}
+
+// Chart 1: Bootstrap return distribution
+drawHist("chart", [{"x": -0.0951, "y": 39}, {"x": -0.09, "y": 0}, {"x": -0.0849, "y": 156}, {"x": -0.0799, "y": 0}, {"x": -0.0748, "y": 0}, {"x": -0.0697, "y": 227}, {"x": -0.0646, "y": 174}, {"x": -0.0595, "y": 157}, {"x": -0.0544, "y": 490}, {"x": -0.0493, "y": 0}, {"x": -0.0442, "y": 48}, {"x": -0.0391, "y": 461}, {"x": -0.034, "y": 389}, {"x": -0.029, "y": 170}, {"x": -0.0239, "y": 0}, {"x": -0.0188, "y": 926}, {"x": -0.0137, "y": 0}, {"x": -0.0086, "y": 653}, {"x": -0.0035, "y": 471}, {"x": 0.0016, "y": 147}, {"x": 0.0067, "y": 152}, {"x": 0.0118, "y": 1086}, {"x": 0.0169, "y": 0}, {"x": 0.0219, "y": 496}, {"x": 0.027, "y": 40}, {"x": 0.0321, "y": 706}, {"x": 0.0372, "y": 0}, {"x": 0.0423, "y": 955}, {"x": 0.0474, "y": 0}, {"x": 0.0525, "y": 0}, {"x": 0.0576, "y": 245}, {"x": 0.0627, "y": 614}, {"x": 0.0677, "y": 0}, {"x": 0.0728, "y": 432}, {"x": 0.0779, "y": 0}, {"x": 0.083, "y": 0}, {"x": 0.0881, "y": 0}, {"x": 0.0932, "y": 388}, {"x": 0.0983, "y": 0}, {"x": 0.1034, "y": 0}, {"x": 0.1085, "y": 174}, {"x": 0.1136, "y": 0}, {"x": 0.1186, "y": 0}, {"x": 0.1237, "y": 166}, {"x": 0.1288, "y": 0}, {"x": 0.1339, "y": 0}, {"x": 0.139, "y": 0}, {"x": 0.1441, "y": 0}, {"x": 0.1492, "y": 0}, {"x": 0.1543, "y": 38}], 0.01136503512725362, "總報酬",
+  "rgba(63,185,80,0.55)", "rgba(248,81,73,0.55)", "#f0883e",
+  "實際報酬", [
+    {l:"靴帶抽樣分布",c:"rgba(63,185,80,0.55)"},
+    {l:"實際策略報酬",c:"#f0883e"}
+  ]);
+
+// Chart 2: Drawdown distribution (permutation test)
+drawHist("chartDD", [{"x": 0.0194, "y": 1647}, {"x": 0.0219, "y": 148}, {"x": 0.0244, "y": 585}, {"x": 0.0269, "y": 313}, {"x": 0.0294, "y": 502}, {"x": 0.0319, "y": 1590}, {"x": 0.0343, "y": 215}, {"x": 0.0368, "y": 0}, {"x": 0.0393, "y": 472}, {"x": 0.0418, "y": 464}, {"x": 0.0443, "y": 608}, {"x": 0.0468, "y": 147}, {"x": 0.0493, "y": 461}, {"x": 0.0518, "y": 0}, {"x": 0.0543, "y": 0}, {"x": 0.0568, "y": 235}, {"x": 0.0592, "y": 0}, {"x": 0.0617, "y": 0}, {"x": 0.0642, "y": 933}, {"x": 0.0667, "y": 48}, {"x": 0.0692, "y": 0}, {"x": 0.0717, "y": 223}, {"x": 0.0742, "y": 647}, {"x": 0.0767, "y": 0}, {"x": 0.0792, "y": 0}, {"x": 0.0817, "y": 0}, {"x": 0.0841, "y": 0}, {"x": 0.0866, "y": 0}, {"x": 0.0891, "y": 227}, {"x": 0.0916, "y": 166}, {"x": 0.0941, "y": 0}, {"x": 0.0966, "y": 0}, {"x": 0.0991, "y": 0}, {"x": 0.1016, "y": 0}, {"x": 0.1041, "y": 0}, {"x": 0.1066, "y": 0}, {"x": 0.109, "y": 174}, {"x": 0.1115, "y": 156}, {"x": 0.114, "y": 0}, {"x": 0.1165, "y": 0}, {"x": 0.119, "y": 0}, {"x": 0.1215, "y": 0}, {"x": 0.124, "y": 0}, {"x": 0.1265, "y": 0}, {"x": 0.129, "y": 0}, {"x": 0.1315, "y": 0}, {"x": 0.1339, "y": 0}, {"x": 0.1364, "y": 0}, {"x": 0.1389, "y": 0}, {"x": 0.1414, "y": 39}], null, "最大回撤",
+  "rgba(248,81,73,0.55)", "rgba(248,81,73,0.55)", null,
+  "實際回撤", [
+    {l:"回撤分布（排列測試）",c:"rgba(248,81,73,0.55)"}
+  ]);
+</script>
+</div></body></html>
