@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>布林反轉策略 — 合適標的掃描</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Inter",-apple-system,sans-serif;background:#0d1117;color:#e6edf3;display:flex;justify-content:center;padding:40px 20px}
+  .container{max-width:1060px;width:100%}
+  h1{font-size:22px;font-weight:600;margin-bottom:4px}
+  .sub{color:#8b949e;font-size:14px;margin-bottom:20px}
+  .chart-wrap{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:20px;margin-bottom:20px;overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{text-align:left;color:#8b949e;font-weight:500;padding:6px 8px;border-bottom:1px solid #21262d;white-space:nowrap}
+  td{padding:6px 8px;border-bottom:1px solid #21262d;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+  td:first-child{text-align:center;font-weight:500}
+  td:nth-child(2){text-align:left;font-weight:600}
+  .tag{display:inline-block;font-size:10px;padding:1px 6px;border-radius:3px;margin-left:4px}
+  .tag.active{background:#1c3a1c;color:#7ee787}
+  .tag.used{background:#3a2a1c;color:#f0883e}
+  .pos{color:#7ee787}.neg{color:#f85149}
+  .score-bar{display:inline-block;height:6px;border-radius:3px;vertical-align:middle;margin-right:6px}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>📊 布林反轉策略 — 合適標的掃描</h1>
+  <div class="sub">近 6 個月數據 · 評分依據：低 ADX（盤整）+ 高觸及頻率 + RSI 擺盪 + 勝率</div>
+
+  <div class="chart-wrap">
+    <table>
+      <thead><tr>
+        <th>#</th><th>代號</th><th>總分</th><th>ADX</th><th>觸及%</th><th>勝率%</th><th>均報酬</th><th>總報酬</th><th>交易</th><th>布林寬%</th><th>RSI極端%</th><th></th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td>8028 </td>
+          <td><span class="score-bar" style="width:100px;background:#7ee787"></span>83</td>
+          <td>17.5</td>
+          <td>11.3%</td>
+          <td>91%</td>
+          <td class="pos">+2.06%</td>
+          <td class="pos">+23.96%</td>
+          <td>11</td>
+          <td>29.06%</td>
+          <td>54%</td>
+        </tr>        <tr>
+          <td>2</td>
+          <td>6861 </td>
+          <td><span class="score-bar" style="width:98px;background:#7ee787"></span>82</td>
+          <td>18.6</td>
+          <td>20.8%</td>
+          <td>18%</td>
+          <td class="neg">-6.08%</td>
+          <td class="neg">-75.59%</td>
+          <td>22</td>
+          <td>72.53%</td>
+          <td>68%</td>
+        </tr>        <tr>
+          <td>3</td>
+          <td>8215 </td>
+          <td><span class="score-bar" style="width:96px;background:#7ee787"></span>80</td>
+          <td>17.3</td>
+          <td>11.3%</td>
+          <td>67%</td>
+          <td class="pos">+2.03%</td>
+          <td class="pos">+24.03%</td>
+          <td>12</td>
+          <td>22.99%</td>
+          <td>49%</td>
+        </tr>        <tr>
+          <td>4</td>
+          <td>3481 </td>
+          <td><span class="score-bar" style="width:95px;background:#7ee787"></span>80</td>
+          <td>21.8</td>
+          <td>8.5%</td>
+          <td>75%</td>
+          <td class="pos">+2.86%</td>
+          <td class="pos">+23.09%</td>
+          <td>8</td>
+          <td>44.84%</td>
+          <td>58%</td>
+        </tr>        <tr>
+          <td>5</td>
+          <td>5534 </td>
+          <td><span class="score-bar" style="width:95px;background:#7ee787"></span>80</td>
+          <td>36.8</td>
+          <td>13.2%</td>
+          <td>77%</td>
+          <td class="pos">+0.50%</td>
+          <td class="pos">+6.64%</td>
+          <td>13</td>
+          <td>9.32%</td>
+          <td>59%</td>
+        </tr>        <tr>
+          <td>6</td>
+          <td>6285 </td>
+          <td><span class="score-bar" style="width:95px;background:#7ee787"></span>79</td>
+          <td>16.0</td>
+          <td>15.1%</td>
+          <td>50%</td>
+          <td class="neg">-1.56%</td>
+          <td class="neg">-21.57%</td>
+          <td>14</td>
+          <td>42.20%</td>
+          <td>60%</td>
+        </tr>        <tr>
+          <td>7</td>
+          <td>00878 <span class="tag active">已配置</span></td>
+          <td><span class="score-bar" style="width:94px;background:#7ee787"></span>79</td>
+          <td>20.9</td>
+          <td>17.0%</td>
+          <td>33%</td>
+          <td class="neg">-0.37%</td>
+          <td class="neg">-6.57%</td>
+          <td>18</td>
+          <td>14.63%</td>
+          <td>72%</td>
+        </tr>        <tr>
+          <td>8</td>
+          <td>2885 </td>
+          <td><span class="score-bar" style="width:94px;background:#7ee787"></span>79</td>
+          <td>18.5</td>
+          <td>18.9%</td>
+          <td>42%</td>
+          <td class="neg">-0.35%</td>
+          <td class="neg">-6.85%</td>
+          <td>19</td>
+          <td>15.62%</td>
+          <td>54%</td>
+        </tr>        <tr>
+          <td>9</td>
+          <td>2368 </td>
+          <td><span class="score-bar" style="width:94px;background:#7ee787"></span>79</td>
+          <td>19.7</td>
+          <td>14.2%</td>
+          <td>60%</td>
+          <td class="pos">+1.04%</td>
+          <td class="pos">+16.00%</td>
+          <td>15</td>
+          <td>32.55%</td>
+          <td>54%</td>
+        </tr>        <tr>
+          <td>10</td>
+          <td>6830 </td>
+          <td><span class="score-bar" style="width:93px;background:#7ee787"></span>78</td>
+          <td>25.1</td>
+          <td>20.8%</td>
+          <td>33%</td>
+          <td class="neg">-4.48%</td>
+          <td class="neg">-63.29%</td>
+          <td>21</td>
+          <td>60.17%</td>
+          <td>63%</td>
+        </tr>        <tr>
+          <td>11</td>
+          <td>8926 </td>
+          <td><span class="score-bar" style="width:93px;background:#7ee787"></span>78</td>
+          <td>13.1</td>
+          <td>17.9%</td>
+          <td>35%</td>
+          <td class="neg">-1.10%</td>
+          <td class="neg">-18.25%</td>
+          <td>17</td>
+          <td>19.54%</td>
+          <td>49%</td>
+        </tr>        <tr>
+          <td>12</td>
+          <td>2383 </td>
+          <td><span class="score-bar" style="width:93px;background:#7ee787"></span>78</td>
+          <td>16.5</td>
+          <td>16.0%</td>
+          <td>50%</td>
+          <td class="pos">+0.38%</td>
+          <td class="pos">+4.88%</td>
+          <td>16</td>
+          <td>37.55%</td>
+          <td>50%</td>
+        </tr>        <tr>
+          <td>13</td>
+          <td>3312 </td>
+          <td><span class="score-bar" style="width:91px;background:#7ee787"></span>77</td>
+          <td>17.4</td>
+          <td>16.0%</td>
+          <td>47%</td>
+          <td class="neg">-0.62%</td>
+          <td class="neg">-12.52%</td>
+          <td>17</td>
+          <td>27.40%</td>
+          <td>56%</td>
+        </tr>        <tr>
+          <td>14</td>
+          <td>2884 </td>
+          <td><span class="score-bar" style="width:91px;background:#7ee787"></span>76</td>
+          <td>38.0</td>
+          <td>12.3%</td>
+          <td>69%</td>
+          <td class="pos">+0.20%</td>
+          <td class="pos">+2.56%</td>
+          <td>13</td>
+          <td>7.54%</td>
+          <td>59%</td>
+        </tr>        <tr>
+          <td>15</td>
+          <td>2891 </td>
+          <td><span class="score-bar" style="width:90px;background:#7ee787"></span>76</td>
+          <td>20.2</td>
+          <td>15.1%</td>
+          <td>64%</td>
+          <td class="pos">+0.02%</td>
+          <td class="neg">-0.63%</td>
+          <td>14</td>
+          <td>11.94%</td>
+          <td>53%</td>
+        </tr>        <tr>
+          <td>16</td>
+          <td>2388 </td>
+          <td><span class="score-bar" style="width:90px;background:#7ee787"></span>76</td>
+          <td>17.5</td>
+          <td>15.1%</td>
+          <td>56%</td>
+          <td class="neg">-0.21%</td>
+          <td class="neg">-5.09%</td>
+          <td>16</td>
+          <td>28.71%</td>
+          <td>52%</td>
+        </tr>        <tr>
+          <td>17</td>
+          <td>4958 </td>
+          <td><span class="score-bar" style="width:90px;background:#7ee787"></span>75</td>
+          <td>15.3</td>
+          <td>15.1%</td>
+          <td>47%</td>
+          <td class="pos">+0.40%</td>
+          <td class="pos">+5.48%</td>
+          <td>15</td>
+          <td>43.38%</td>
+          <td>49%</td>
+        </tr>        <tr>
+          <td>18</td>
+          <td>3189 </td>
+          <td><span class="score-bar" style="width:90px;background:#7ee787"></span>75</td>
+          <td>21.3</td>
+          <td>18.9%</td>
+          <td>50%</td>
+          <td class="neg">-1.04%</td>
+          <td class="neg">-18.92%</td>
+          <td>18</td>
+          <td>47.03%</td>
+          <td>47%</td>
+        </tr>        <tr>
+          <td>19</td>
+          <td>3406 </td>
+          <td><span class="score-bar" style="width:89px;background:#7ee787"></span>75</td>
+          <td>21.6</td>
+          <td>15.1%</td>
+          <td>67%</td>
+          <td class="pos">+0.66%</td>
+          <td class="pos">+9.46%</td>
+          <td>15</td>
+          <td>18.83%</td>
+          <td>45%</td>
+        </tr>        <tr>
+          <td>20</td>
+          <td>3702 </td>
+          <td><span class="score-bar" style="width:89px;background:#7ee787"></span>74</td>
+          <td>16.8</td>
+          <td>13.2%</td>
+          <td>50%</td>
+          <td class="neg">-0.42%</td>
+          <td class="neg">-5.76%</td>
+          <td>12</td>
+          <td>22.73%</td>
+          <td>59%</td>
+        </tr>        <tr>
+          <td>21</td>
+          <td>5215 </td>
+          <td><span class="score-bar" style="width:89px;background:#7ee787"></span>74</td>
+          <td>18.6</td>
+          <td>10.4%</td>
+          <td>54%</td>
+          <td class="neg">-0.57%</td>
+          <td class="neg">-6.80%</td>
+          <td>11</td>
+          <td>14.30%</td>
+          <td>72%</td>
+        </tr>        <tr>
+          <td>22</td>
+          <td>3673 </td>
+          <td><span class="score-bar" style="width:89px;background:#7ee787"></span>74</td>
+          <td>14.6</td>
+          <td>15.1%</td>
+          <td>31%</td>
+          <td class="neg">-2.08%</td>
+          <td class="neg">-30.00%</td>
+          <td>16</td>
+          <td>36.18%</td>
+          <td>58%</td>
+        </tr>        <tr>
+          <td>23</td>
+          <td>2377 </td>
+          <td><span class="score-bar" style="width:88px;background:#7ee787"></span>74</td>
+          <td>22.3</td>
+          <td>16.0%</td>
+          <td>62%</td>
+          <td class="pos">+0.43%</td>
+          <td class="pos">+6.47%</td>
+          <td>16</td>
+          <td>20.11%</td>
+          <td>46%</td>
+        </tr>        <tr>
+          <td>24</td>
+          <td>5007 </td>
+          <td><span class="score-bar" style="width:88px;background:#7ee787"></span>74</td>
+          <td>36.5</td>
+          <td>14.2%</td>
+          <td>53%</td>
+          <td class="pos">+0.15%</td>
+          <td class="pos">+2.16%</td>
+          <td>15</td>
+          <td>8.79%</td>
+          <td>58%</td>
+        </tr>        <tr>
+          <td>25</td>
+          <td>6719 </td>
+          <td><span class="score-bar" style="width:88px;background:#7ee787"></span>74</td>
+          <td>26.7</td>
+          <td>15.1%</td>
+          <td>56%</td>
+          <td class="pos">+0.40%</td>
+          <td class="pos">+5.33%</td>
+          <td>16</td>
+          <td>23.93%</td>
+          <td>62%</td>
+        </tr>        <tr>
+          <td>26</td>
+          <td>0050 <span class="tag active">已配置</span></td>
+          <td><span class="score-bar" style="width:87px;background:#7ee787"></span>73</td>
+          <td>23.9</td>
+          <td>16.0%</td>
+          <td>44%</td>
+          <td class="neg">-0.24%</td>
+          <td class="neg">-3.91%</td>
+          <td>16</td>
+          <td>15.74%</td>
+          <td>64%</td>
+        </tr>        <tr>
+          <td>27</td>
+          <td>9940 </td>
+          <td><span class="score-bar" style="width:87px;background:#7ee787"></span>73</td>
+          <td>43.3</td>
+          <td>15.1%</td>
+          <td>53%</td>
+          <td class="neg">-0.33%</td>
+          <td class="neg">-4.97%</td>
+          <td>15</td>
+          <td>7.64%</td>
+          <td>54%</td>
+        </tr>        <tr>
+          <td>28</td>
+          <td>006208 <span class="tag active">已配置</span></td>
+          <td><span class="score-bar" style="width:87px;background:#7ee787"></span>73</td>
+          <td>22.9</td>
+          <td>16.0%</td>
+          <td>38%</td>
+          <td class="neg">-0.38%</td>
+          <td class="neg">-6.07%</td>
+          <td>16</td>
+          <td>15.68%</td>
+          <td>65%</td>
+        </tr>        <tr>
+          <td>29</td>
+          <td>2356 </td>
+          <td><span class="score-bar" style="width:86px;background:#7ee787"></span>72</td>
+          <td>23.9</td>
+          <td>15.1%</td>
+          <td>50%</td>
+          <td class="neg">-0.88%</td>
+          <td class="neg">-15.42%</td>
+          <td>16</td>
+          <td>24.21%</td>
+          <td>62%</td>
+        </tr>        <tr>
+          <td>30</td>
+          <td>2303 </td>
+          <td><span class="score-bar" style="width:86px;background:#7ee787"></span>72</td>
+          <td>21.7</td>
+          <td>13.2%</td>
+          <td>54%</td>
+          <td class="neg">-0.12%</td>
+          <td class="neg">-3.42%</td>
+          <td>13</td>
+          <td>37.69%</td>
+          <td>62%</td>
+        </tr>      </tbody>
+    </table>
+  </div>
+</div></body></html>

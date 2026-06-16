@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Breakout 參數掃描 — 2382 廣達</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Inter",-apple-system,sans-serif;background:#0d1117;color:#e6edf3;display:flex;justify-content:center;padding:40px 20px}
+  .container{max-width:960px;width:100%}
+  h1{font-size:22px;font-weight:600;margin-bottom:4px}
+  .sub{color:#8b949e;font-size:14px;margin-bottom:20px}
+  .chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+  @media(max-width:700px){.chart-grid{grid-template-columns:1fr}}
+  .chart-wrap{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:16px;text-align:center}
+  canvas{width:100%;height:auto;max-width:460px}
+  .tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:4px;margin:0 4px}
+  .tag.train{background:#1c3a1c;color:#7ee787}
+  .tag.test{background:#3a2a1c;color:#f0883e}
+  h2{font-size:14px;font-weight:600;margin-bottom:8px;color:#f0f6fc}
+  .best-table{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:16px;margin-bottom:20px;overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{text-align:left;color:#8b949e;font-weight:500;padding:5px 6px;border-bottom:1px solid #21262d}
+  td{padding:5px 6px;border-bottom:1px solid #21262d;font-variant-numeric:tabular-nums;text-align:right}
+  td:first-child{text-align:left;font-weight:500}
+  .pos{color:#7ee787}.neg{color:#f85149}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Breakout 參數掃描 — 2382 廣達</h1>
+  <div class="sub">訓練期 2023-2024 → 測試期 2025</div>
+
+  <div class="chart-grid">
+    <div class="chart-wrap">
+      <h2>訓練期報酬 <span class="tag train">2023-2024</span></h2>
+      <canvas id="trainChart" width="460" height="400"></canvas>
+    </div>
+    <div class="chart-wrap">
+      <h2>測試期報酬 <span class="tag test">2025</span></h2>
+      <canvas id="testChart" width="460" height="400"></canvas>
+    </div>
+  </div>
+
+  <div class="best-table">
+    <h2 style="margin-bottom:8px">訓練期正報酬 → 測試期 TOP 10</h2>
+    <table>
+      <thead><tr><th>lookback</th><th>ATR threshold</th><th>訓練報酬</th><th>測試報酬</th><th>訓練交易</th><th>測試交易</th><th>訓練勝率</th><th>測試勝率</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>25</td>
+          <td>0.020</td>
+          <td class="pos">+9.49%</td>
+          <td class="pos">+25.14%</td>
+          <td>49</td>
+          <td>34</td>
+          <td>45%</td>
+          <td>68%</td>
+        </tr>        <tr>
+          <td>10</td>
+          <td>0.020</td>
+          <td class="pos">+13.55%</td>
+          <td class="pos">+24.50%</td>
+          <td>79</td>
+          <td>47</td>
+          <td>46%</td>
+          <td>60%</td>
+        </tr>        <tr>
+          <td>30</td>
+          <td>0.020</td>
+          <td class="pos">+7.85%</td>
+          <td class="pos">+24.47%</td>
+          <td>46</td>
+          <td>32</td>
+          <td>43%</td>
+          <td>69%</td>
+        </tr>        <tr>
+          <td>30</td>
+          <td>0.003</td>
+          <td class="pos">+7.38%</td>
+          <td class="pos">+24.04%</td>
+          <td>65</td>
+          <td>35</td>
+          <td>46%</td>
+          <td>66%</td>
+        </tr>        <tr>
+          <td>30</td>
+          <td>0.005</td>
+          <td class="pos">+7.38%</td>
+          <td class="pos">+24.04%</td>
+          <td>65</td>
+          <td>35</td>
+          <td>46%</td>
+          <td>66%</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+function drawHeatmap(canvasId, matrix, xLabels, yLabels) {
+  const W = 460, H = 400;
+  const pad = {top: 30, right: 20, bottom: 50, left: 70};
+  const canvas = document.getElementById(canvasId);
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext("2d");
+  const rows = matrix.length, cols = matrix[0].length;
+  if (rows === 0 || cols === 0) return;
+  const cellW = (W - pad.left - pad.right) / cols;
+  const cellH = (H - pad.top - pad.bottom) / rows;
+
+  let minV = Infinity, maxV = -Infinity;
+  for (let r of matrix) for (let v of r) { if (v < minV) minV = v; if (v > maxV) maxV = v; }
+  const absMax = Math.max(Math.abs(minV), Math.abs(maxV));
+
+  function getColor(v) {
+    if (v > 0) { let t = v / absMax; return `rgba(${Math.round(63+(192-63)*t)}, ${Math.round(185-(185-100)*t)}, ${Math.round(135-(135-80)*t)}, 0.85)`; }
+    if (v < 0) { let t = -v / absMax; return `rgba(248, ${Math.round(81-(81-60)*t)}, ${Math.round(73-(73-50)*t)}, 0.85)`; }
+    return "rgba(48,54,61,0.5)";
+  }
+
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  for (let i = 0; i < rows; i++) {
+    for (let j = 0; j < cols; j++) {
+      const x = pad.left + j * cellW, y = pad.top + i * cellH;
+      ctx.fillStyle = getColor(matrix[i][j]);
+      ctx.fillRect(x, y, cellW, cellH);
+      ctx.fillStyle = Math.abs(matrix[i][j]) > absMax * 0.4 ? "#fff" : "#8b949e";
+      ctx.font = Math.min(cellW * 0.32, 11) + "px Inter,sans-serif";
+      ctx.fillText((matrix[i][j]*100).toFixed(1)+"%", x + cellW/2, y + cellH/2);
+    }
+  }
+
+  ctx.fillStyle = "#e6edf3"; ctx.font = "11px Inter,sans-serif";
+  ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  for (let i = 0; i < rows; i++) {
+    ctx.fillText(yLabels[i], pad.left - 6, pad.top + i * cellH + cellH/2);
+  }
+  ctx.fillStyle = "#8b949e"; ctx.font = "10px Inter,sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  for (let j = 0; j < cols; j++) {
+    ctx.fillText(xLabels[j], pad.left + j * cellW + cellW/2, H - pad.bottom + 8);
+  }
+  ctx.fillStyle = "#8b949e"; ctx.font = "10px Inter,sans-serif"; ctx.textAlign = "center";
+  ctx.fillText("ATR Threshold", pad.left + (W-pad.left-pad.right)/2, H - 6);
+  ctx.save(); ctx.translate(18, pad.top + (H-pad.top-pad.bottom)/2); ctx.rotate(-Math.PI/2);
+  ctx.fillStyle = "#8b949e"; ctx.font = "10px Inter,sans-serif"; ctx.textAlign = "center";
+  ctx.fillText("Lookback", 0, 0); ctx.restore();
+}
+
+drawHeatmap("trainChart", {j_train}, {j_th}, {j_lb});
+drawHeatmap("testChart", {j_test}, {j_th}, {j_lb});
+</script>
+</body></html>

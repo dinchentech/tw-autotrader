@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MA Cross 參數掃描 Heatmap</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Inter", -apple-system, "Segoe UI", system-ui, sans-serif;
+    background: #0d1117;
+    color: #e6edf3;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 40px 20px;
+  }
+  .container { max-width: 900px; width: 100%; }
+  h1 {
+    font-size: 22px; font-weight: 600; letter-spacing: -0.3px;
+    color: #f0f6fc; margin-bottom: 4px;
+  }
+  .subtitle {
+    font-size: 14px; color: #8b949e; margin-bottom: 28px;
+  }
+
+  .heatmap-wrap {
+    overflow-x: auto;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 24px;
+  }
+
+  table.heatmap {
+    border-collapse: separate;
+    border-spacing: 6px;
+    width: 100%;
+    min-width: 500px;
+  }
+
+  /* Row/column labels */
+  table.heatmap th.label {
+    font-size: 13px; font-weight: 500; color: #8b949e;
+    padding: 4px 10px;
+    text-align: center;
+    background: none;
+    border: none;
+  }
+  table.heatmap th.label.row-label {
+    text-align: right;
+    padding-right: 12px;
+    min-width: 40px;
+  }
+  table.heatmap th.label.col-label {
+    padding-bottom: 8px;
+  }
+  table.heatmap th.label .sub {
+    font-size: 11px; color: #484f58; font-weight: 400;
+  }
+
+  /* Corner */
+  table.heatmap th.corner {
+    border: none; background: none;
+    min-width: 60px;
+  }
+
+  /* Cells */
+  table.heatmap td {
+    text-align: center;
+    padding: 12px 10px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    min-width: 80px;
+    transition: transform 0.12s, box-shadow 0.12s;
+    cursor: default;
+    position: relative;
+  }
+  table.heatmap td:hover {
+    transform: scale(1.08);
+    box-shadow: 0 0 20px rgba(255,255,255,0.12);
+    z-index: 2;
+  }
+
+  table.heatmap td .pct  { font-size: 16px; font-weight: 600; }
+  table.heatmap td .meta { font-size: 11px; opacity: 0.75; margin-top: 3px; }
+  table.heatmap td .meta2 { font-size: 10px; opacity: 0.55; margin-top: 1px; }
+
+  /* Legend */
+  .legend {
+    display: flex; align-items: center; gap: 16px;
+    margin-top: 20px;
+    justify-content: center;
+    font-size: 12px; color: #8b949e;
+  }
+  .legend-bar {
+    display: flex; height: 14px; border-radius: 6px; overflow: hidden;
+  }
+  .legend-bar span {
+    width: 40px;
+  }
+
+  /* Stats row */
+  .stats {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 12px; margin-top: 24px;
+  }
+  .stat-card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 14px 16px;
+    text-align: center;
+  }
+  .stat-card .val {
+    font-size: 20px; font-weight: 600; color: #f0f6fc;
+  }
+  .stat-card .lbl {
+    font-size: 11px; color: #8b949e; margin-top: 4px;
+  }
+  .stat-card.best { border-color: #3fb950; }
+  .stat-card.best .val { color: #7ee787; }
+
+  @media (max-width: 600px) {
+    table.heatmap td { padding: 8px 6px; min-width: 60px; font-size: 12px; }
+    table.heatmap td .pct { font-size: 14px; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>📊 MA Cross 參數掃描</h1>
+  <div class="subtitle">11 檔標的 · 訓練期 2020-2021 掃描（無 look-ahead bias）· 顏色越深綠 = 報酬越高</div>
+
+  <div class="heatmap-wrap">
+    <table class="heatmap" id="hm">
+      <thead>
+        <tr>
+          <th class="corner"></th>
+          <th class="label col-label">slow=20<br><span class="sub">慢線週期</span></th>
+          <th class="label col-label">slow=30</th>
+          <th class="label col-label">slow=40</th>
+          <th class="label col-label">slow=50</th>
+          <th class="label col-label">slow=60</th>
+        </tr>
+      </thead>
+      <tbody id="hm-body">
+      </tbody>
+    </table>
+
+    <div class="legend">
+      <span>-6%</span>
+      <div class="legend-bar">
+        <span style="background:#8b1a1a"></span>
+        <span style="background:#b13a3a"></span>
+        <span style="background:#d15a5a"></span>
+        <span style="background:#e8a0a0"></span>
+        <span style="background:#f0d0d0"></span>
+        <span style="background:#d0f0d0"></span>
+        <span style="background:#a0e8a0"></span>
+        <span style="background:#5ad15a"></span>
+        <span style="background:#3fb950"></span>
+        <span style="background:#1a8b1a"></span>
+      </div>
+      <span>+8%</span>
+    </div>
+  </div>
+
+  <div class="stats" id="stats"></div>
+</div>
+
+<script>
+// Data from TRAINING PERIOD scan (2020-2021) — no look-ahead bias
+const data = [
+  {fast:5, slow:20, ret: 0.02329, win:0.4939, trades:319, pos:0.636},
+  {fast:5, slow:30, ret: 0.02186, win:0.4830, trades:262, pos:0.727},
+  {fast:5, slow:40, ret:-0.01632, win:0.4712, trades:235, pos:0.545},
+  {fast:5, slow:50, ret:-0.00916, win:0.4613, trades:213, pos:0.273},
+  {fast:5, slow:60, ret: 0.00322, win:0.5126, trades:194, pos:0.545},
+  {fast:10,slow:20, ret:-0.02962, win:0.4211, trades:265, pos:0.364},
+  {fast:10,slow:30, ret:-0.03731, win:0.4195, trades:213, pos:0.364},
+  {fast:10,slow:40, ret:-0.05582, win:0.3469, trades:170, pos:0.182},
+  {fast:10,slow:50, ret:-0.02149, win:0.4253, trades:155, pos:0.364},
+  {fast:10,slow:60, ret:-0.01396, win:0.5000, trades:130, pos:0.455},
+  {fast:15,slow:20, ret: 0.00331, win:0.4568, trades:279, pos:0.636},
+  {fast:15,slow:30, ret:-0.01844, win:0.4379, trades:221, pos:0.455},
+  {fast:15,slow:40, ret:-0.01197, win:0.4092, trades:177, pos:0.273},
+  {fast:15,slow:50, ret:-0.02494, win:0.4288, trades:155, pos:0.364},
+  {fast:15,slow:60, ret:-0.02478, win:0.4184, trades:130, pos:0.273},
+  {fast:20,slow:20, ret: null,    win:null,  trades:null, pos:null},
+  {fast:20,slow:30, ret: 0.00107, win:0.4592, trades:236, pos:0.545},
+  {fast:20,slow:40, ret:-0.01321, win:0.5005, trades:187, pos:0.455},
+  {fast:20,slow:50, ret:-0.00820, win:0.4190, trades:163, pos:0.364},
+  {fast:20,slow:60, ret:-0.01413, win:0.4340, trades:131, pos:0.364},
+];
+
+const fastVals = [5, 10, 15, 20];
+const slowVals = [20, 30, 40, 50, 60];
+
+function fmtPct(v) {
+  if (v == null) return "—";
+  return (v >= 0 ? "+" : "") + (v * 100).toFixed(2) + "%";
+}
+
+// Color: diverging from deep red (-4%) → neutral → deep green (+8%)
+// Returns { bg, text }
+function colorFor(ret) {
+  if (ret == null) return { bg: "#161b22", text: "#484f58" };
+  // clamp to [-0.04, 0.08]
+  const t = Math.max(-0.04, Math.min(0.08, ret));
+  const p = (t + 0.04) / 0.12;  // 0=red end, 1=green end
+  if (p < 0.5) {
+    // red side: #8b1a1a → #f0d0d0
+    const q = p * 2;
+    const r = Math.round(139 + (240 - 139) * q);
+    const g = Math.round(26  + (208 - 26)  * q);
+    const b = Math.round(26  + (208 - 26)  * q);
+    return { bg: `rgb(${r},${g},${b})`, text: q < 0.4 ? "#f0f6fc" : "#0d1117" };
+  } else {
+    // green side: #d0f0d0 → #1a8b1a
+    const q = (p - 0.5) * 2;
+    const r = Math.round(208 - (208 - 26)  * q);
+    const g = Math.round(240 - (240 - 139) * q);
+    const b = Math.round(208 - (208 - 26)  * q);
+    return { bg: `rgb(${r},${g},${b})`, text: q > 0.6 ? "#f0f6fc" : "#0d1117" };
+  }
+}
+
+// Build table
+const tbody = document.getElementById("hm-body");
+fastVals.forEach(fast => {
+  const tr = document.createElement("tr");
+  // Row label
+  const label = document.createElement("th");
+  label.className = "label row-label";
+  label.innerHTML = `fast=${fast}<br><span class="sub">快線</span>`;
+  tr.appendChild(label);
+
+  slowVals.forEach(slow => {
+    const d = data.find(r => r.fast === fast && r.slow === slow);
+    const td = document.createElement("td");
+    if (!d || d.ret == null) {
+      td.style.background = "#0d1117";
+      td.style.color = "#21262d";
+      td.style.cursor = "default";
+      td.innerHTML = `<span style="font-size:18px;">✕</span>`;
+    } else {
+      const c = colorFor(d.ret);
+      td.style.background = c.bg;
+      td.style.color = c.text;
+      td.innerHTML = `
+        <div class="pct">${fmtPct(d.ret)}</div>
+        <div class="meta">勝率 ${fmtPct(d.win)}</div>
+        <div class="meta2">${d.trades} 次交易 · ${(d.pos*100).toFixed(0)}%標的正報酬</div>
+      `;
+    }
+    tr.appendChild(td);
+  });
+  tbody.appendChild(tr);
+});
+
+// Stats
+const best = data.filter(d => d.ret != null).sort((a,b) => b.ret - a.ret)[0];
+const worst = data.filter(d => d.ret != null).sort((a,b) => a.ret - b.ret)[0];
+const totalCombos = data.filter(d => d.ret != null).length;
+const positiveCombos = data.filter(d => d.ret != null && d.ret > 0).length;
+
+document.getElementById("stats").innerHTML = `
+  <div class="stat-card best">
+    <div class="val">${fmtPct(best.ret)}</div>
+    <div class="lbl">🏆 訓練期最佳 fast=${best.fast}, slow=${best.slow}<br>勝率 ${fmtPct(best.win)} · ${best.trades} 次交易</div>
+  </div>
+  <div class="stat-card">
+    <div class="val">${fmtPct(worst.ret)}</div>
+    <div class="lbl">⚠️ 最差組合 fast=${worst.fast}, slow=${worst.slow}<br>勝率 ${fmtPct(worst.win)} · ${worst.trades} 次交易</div>
+  </div>
+  <div class="stat-card">
+    <div class="val">${positiveCombos}/${totalCombos}</div>
+    <div class="lbl">✅ 正報酬組合佔比（訓練期）</div>
+  </div>
+  <div class="stat-card">
+    <div class="val">fast=${best.fast}, slow=${best.slow}</div>
+    <div class="lbl">🥇 Walk-Forward 驗證結果<br>👉 驗證期 +2.61% · 測試期 +1.50%</div>
+  </div>
+`;
+</script>
+</body>
+</html>
