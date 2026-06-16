@@ -71,11 +71,11 @@ else:
     from data.kgi_mock import KGIMockAPI as BrokerAPI
     print("🧪 【模擬測試】使用凱基 API 模擬器（雙通知，不動用真錢）")
 
-from strategies.vwap_strategy import VWAPDeviationStrategy
-from strategies.ma_cross_strategy import MACrossStrategy
-from strategies.bollinger_strategy import BollingerReverseStrategy
-from strategies.breakout_strategy import BreakoutStrategy
-from strategies.keep_wait_strategy import KeepWaitStrategy
+from strategies.vwap_deviation import vwap_deviation_strategy
+from strategies.ma_cross import ma_cross_strategy
+from strategies.bollinger import bollinger_reverse_strategy
+from strategies.breakout import breakout_strategy
+from strategies.keep_wait import keep_wait_strategy
 from strategies.institutional_momentum import InstitutionalMomentumStrategy
 from utils.telegram import send_trade_alert, send_telegram_message
 from core.risk_manager import RiskManager
@@ -296,29 +296,27 @@ def main():
         max_daily_trades=int(os.getenv("MAX_DAILY_TRADES", 10))
     )
     
-    strategy_instances = {
-        "vwap": VWAPDeviationStrategy(
-            sigma_mult=float(os.getenv("VWAP_SIGMA_MULT", 1.5)),
-            rsi_period=int(os.getenv("VWAP_RSI_PERIOD", 5)),
-        ),
-        "ma_cross": MACrossStrategy(
-            fast_period=int(os.getenv("MA_CROSS_FAST_PERIOD", 9)),
-            slow_period=int(os.getenv("MA_CROSS_SLOW_PERIOD", 21)),
-            atr_threshold=float(os.getenv("MA_CROSS_ATR_THRESHOLD", 0.005)),
-        ),
-        "bollinger": BollingerReverseStrategy(
-            window=int(os.getenv("BOLLINGER_WINDOW", 20)),
-            std_dev=float(os.getenv("BOLLINGER_STD_DEV", 2.0)),
-            rsi_period=int(os.getenv("BOLLINGER_RSI_PERIOD", 5)),
-        ),
-        "breakout": BreakoutStrategy(
-            lookback=int(os.getenv("BREAKOUT_LOOKBACK", 20)),
-            atr_period=int(os.getenv("BREAKOUT_ATR_PERIOD", 14)),
-            atr_threshold=float(os.getenv("BREAKOUT_ATR_THRESHOLD", 0.01)),
-        ),
-        "keep_wait": KeepWaitStrategy(
-            take_profit_pct=float(os.getenv("KW_TP_TRIGGER_PCT", 15)),
-        )
+    strategy_configs = {
+        "vwap": (vwap_deviation_strategy, {
+            "sigma_mult": float(os.getenv("VWAP_SIGMA_MULT", 1.5)),
+            "rsi_period": int(os.getenv("VWAP_RSI_PERIOD", 5)),
+        }),
+        "ma_cross": (ma_cross_strategy, {
+            "fast_period": int(os.getenv("MA_CROSS_FAST_PERIOD", 9)),
+            "slow_period": int(os.getenv("MA_CROSS_SLOW_PERIOD", 21)),
+            "atr_threshold": float(os.getenv("MA_CROSS_ATR_THRESHOLD", 0.005)),
+        }),
+        "bollinger": (bollinger_reverse_strategy, {
+            "window": int(os.getenv("BOLLINGER_WINDOW", 20)),
+            "std_dev": float(os.getenv("BOLLINGER_STD_DEV", 2.0)),
+            "rsi_period": int(os.getenv("BOLLINGER_RSI_PERIOD", 5)),
+        }),
+        "breakout": (breakout_strategy, {
+            "lookback": int(os.getenv("BREAKOUT_LOOKBACK", 20)),
+            "atr_period": int(os.getenv("BREAKOUT_ATR_PERIOD", 14)),
+            "atr_threshold": float(os.getenv("BREAKOUT_ATR_THRESHOLD", 0.01)),
+        }),
+        "keep_wait": (keep_wait_strategy, {}),
     }
 
     inst_momentum = InstitutionalMomentumStrategy(
@@ -357,7 +355,6 @@ def main():
                 if symbol not in portfolio_history:
                     continue
                 try:
-                    strategy = strategy_instances[strategy_name]
                     accumulated_data = portfolio_history[symbol]
 
                     if USE_REAL_API:
@@ -376,7 +373,8 @@ def main():
                         accumulated_data = accumulated_data.iloc[-100:]
                     portfolio_history[symbol] = accumulated_data
 
-                    signal = strategy.trade(accumulated_data)
+                    strat_func, strat_params = strategy_configs[strategy_name]
+                    signal = strat_func(accumulated_data, **strat_params)['signal'].iloc[-1]
                     current_price = accumulated_data['close'].iloc[-1]
 
                     if strategy_name == "keep_wait":
