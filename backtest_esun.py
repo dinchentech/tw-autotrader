@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from config.symbols import ALL_SYMBOLS
+from core.config_loader import load_portfolio_config, get_strategy_params
 from strategies.vwap_deviation import vwap_deviation_strategy
 from strategies.ma_cross import ma_cross_strategy
 from strategies.bollinger import bollinger_reverse_strategy
@@ -148,7 +149,22 @@ def main():
     strategy_name = args.strategy.lower()
     config = STRATEGY_CONFIG[strategy_name]
     params = config["params"].copy()
-    for pname in STRATEGY_PARAMS[strategy_name]:
+
+    # 若有 PC_ 設定且指定 --symbol，以 PC_ 參數為基底
+    pc_config = load_portfolio_config()
+    if args.symbol and args.symbol in pc_config:
+        sym_cfg = pc_config[args.symbol]
+        pc_strat = sym_cfg.get("strategy", strategy_name)
+        if not args.strategy:
+            strategy_name = pc_strat
+            config = STRATEGY_CONFIG[strategy_name]
+            params = config["params"].copy()
+        pc_params = get_strategy_params(sym_cfg, strategy_name)
+        if pc_params:
+            params.update(pc_params)
+        print(f"📋 {args.symbol} 使用 PC_ 設定：策略={strategy_name}, 參數={params}")
+
+    for pname in STRATEGY_PARAMS.get(strategy_name, {}):
         cli = getattr(args, pname, None)
         if cli is not None:
             params[pname] = cli

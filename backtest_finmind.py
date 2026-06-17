@@ -3,6 +3,7 @@ import os
 import numpy as np
 import pandas as pd
 from FinMind.data import DataLoader
+from core.config_loader import load_portfolio_config, get_strategy_params
 
 # 匯入 function-based 策略（與 backtest.py 同一套）
 from strategies.vwap_deviation import vwap_deviation_strategy
@@ -124,11 +125,35 @@ def run_finmind_backtest(symbol: str = "2330", start_date: str = "2023-01-01"):
         }, index=pd.date_range(start=start_date, periods=250, freq="D"))
         stock_price.index.name = "date"
 
+    # 若有 PC_ 設定，覆蓋對應策略參數
+    pc_config = load_portfolio_config()
+    pc_params_cache = {}
+    if symbol in pc_config:
+        sym_cfg = pc_config[symbol]
+        for pc_strat in ["vwap", "ma_cross", "bollinger", "breakout"]:
+            pp = get_strategy_params(sym_cfg, pc_strat)
+            if pp:
+                pc_params_cache[pc_strat] = pp
+        if pc_params_cache:
+            print(f"📋 偵測到 {symbol} 的 PC_ 設定，將覆蓋對應策略參數: {pc_params_cache}")
+
+    # 策略名稱映射表：顯示名 → 內部名
+    STRAT_NAME_MAP = {
+        "VWAP Deviation": "vwap",
+        "MA Cross": "ma_cross",
+        "Bollinger Reverse": "bollinger",
+        "Breakout": "breakout",
+    }
+
     # 執行各策略
     results = {}
     for name, cfg in STRATEGIES.items():
+        params = dict(cfg["params"])
+        internal_name = STRAT_NAME_MAP.get(name)
+        if internal_name and internal_name in pc_params_cache:
+            params.update(pc_params_cache[internal_name])
+            print(f"  ⚙️  {name} 使用 PC_ 參數: {pc_params_cache[internal_name]}")
         try:
-            params = cfg["params"]
             df = cfg["func"](stock_price.copy(), **params)
             final_equity, total_txn, win_rate, avg_return = compute_backtest(df)
             results[name] = {

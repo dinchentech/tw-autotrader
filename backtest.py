@@ -7,6 +7,7 @@ from datetime import datetime
 from config.symbols import ALL_SYMBOLS, get_yahoo_suffix
 from core.strategy_engine import StrategyEngine
 from data.yahoo_loader import load_historical_data
+from core.config_loader import load_portfolio_config, get_strategy_params
 
 # 匯入所有策略
 from strategies.vwap_deviation import vwap_deviation_strategy
@@ -81,6 +82,8 @@ def get_strategy_from_env_or_args():
             "  python backtest.py --strategy vwap --sigma_mult 2.0"
         )
     )
+    parser.add_argument('--symbol', type=str, default=None,
+                        help='股票代號（如有 PC_ 設定，自動採用其策略與參數）')
     parser.add_argument('--strategy', type=str, default=None,
                         help='選擇策略: vwap, ma_cross, bollinger, breakout')
     parser.add_argument('--start', type=str, default="2023-01-01",
@@ -101,21 +104,36 @@ def get_strategy_from_env_or_args():
 
     args = parser.parse_args()
 
+    # 從 PC_ 設定覆蓋預設策略與參數（當指定 --symbol 時）
+    pc_config = load_portfolio_config()
+
     strategy_name = args.strategy or os.getenv("STRATEGY", "vwap")
     strategy_name = strategy_name.lower()
 
-    if strategy_name not in STRATEGY_CONFIG:
-        print(f"❌ 無效策略: {strategy_name}，使用預設 'vwap'")
-        strategy_name = "vwap"
+    if args.symbol and args.symbol in pc_config:
+        sym_cfg = pc_config[args.symbol]
+        pc_strategy = sym_cfg.get("strategy", strategy_name)
+        if not args.strategy:
+            strategy_name = pc_strategy
+        # 以 PC_ 參數為基底，CLI 可覆蓋
+        params = get_strategy_params(sym_cfg, strategy_name)
+        if not params:
+            params = STRATEGY_CONFIG.get(strategy_name, {}).get("params", {}).copy()
+        print(f"📋 {args.symbol} 使用 PC_ 設定：策略={strategy_name}, 參數={params}")
+    else:
+        if strategy_name not in STRATEGY_CONFIG:
+            print(f"❌ 無效策略: {strategy_name}，使用預設 'vwap'")
+            strategy_name = "vwap"
+        params = STRATEGY_CONFIG[strategy_name]["params"].copy()
 
-    # 只取出當前策略相關的參數，有傳入則覆蓋預設值
-    params = STRATEGY_CONFIG[strategy_name]["params"].copy()
-    for pname in STRATEGY_PARAMS[strategy_name]:
-        cli_val = getattr(args, pname, None)
-        if cli_val is not None:
-            params[pname] = cli_val
+    # CLI 參數覆蓋（所有策略通用）
+    if strategy_name in STRATEGY_PARAMS:
+        for pname in STRATEGY_PARAMS[strategy_name]:
+            cli_val = getattr(args, pname, None)
+            if cli_val is not None:
+                params[pname] = cli_val
 
-    return strategy_name, args.start, params
+    return strategy_name, args.start, params, args.symbol
 
 def calculate_performance(df: pd.DataFrame) -> dict:
     """計算策略績效"""
@@ -188,7 +206,7 @@ def export_results_to_csv(results: list, strategy_name: str):
     print(f"\n✅ 績效結果已匯出: {filename}")
 
 def main():
-    strategy_name, start_date, params = get_strategy_from_env_or_args()
+    strategy_name, start_date, params, symbol_override = get_strategy_from_env_or_args()
     config = {"func": STRATEGY_CONFIG[strategy_name]["func"], "params": params}
     
     print(f"📊 開始回測 TW AutoTrader")
@@ -198,8 +216,11 @@ def main():
     
     engine = StrategyEngine(config["func"], **config["params"])
     
+    # 若指定 --symbol 則只回測該檔，否則回測全部
+    symbols_to_test = [symbol_override] if symbol_override else ALL_SYMBOLS
+    
     all_results = []
-    for symbol in ALL_SYMBOLS:
+    for symbol in symbols_to_test:
         yf_symbol = symbol + get_yahoo_suffix(symbol)
         print(f"  → 回測 {symbol} ({yf_symbol})...")
         
