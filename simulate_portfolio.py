@@ -20,6 +20,7 @@ import calendar
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from data.yahoo_loader import load_historical_data
 from config.symbols import get_yahoo_suffix
+from core.config_loader import load_portfolio_config, get_strategy_params
 
 # ── strategies ──────────────────────────────────────────────
 from strategies.vwap_deviation import vwap_deviation_strategy
@@ -71,7 +72,10 @@ def run_strategy(symbol: str, strategy_name: str, start: str = "2023-01-01",
     df = get_data(symbol, start=start)
     if df.empty:
         return df
-    p = {**DEFAULT_PARAMS.get(strategy_name, {}), **(params or {})}
+    # 從 PC_ 設定讀取策略參數（如有）
+    pc_config = load_portfolio_config()
+    pc_params = get_strategy_params(pc_config.get(symbol, {}), strategy_name) if symbol in pc_config else {}
+    p = {**DEFAULT_PARAMS.get(strategy_name, {}), **pc_params, **(params or {})}
     func = STRATEGY_MAP[strategy_name]
     return func(df, **p)
 
@@ -926,25 +930,49 @@ def main():
 
     output_dir = args.output_dir
 
-    # ── DCA config ──
-    dca_config = [
-        ("0050", "bollinger", 10000),
-        ("2330", "ma_cross",  4000),
-        ("2382", "breakout",  3000),
-        ("2881", "vwap",      3000),
-    ]
+    # 從 PC_ 環境變數讀取投資組合設定
+    pc_config = load_portfolio_config()
+    if pc_config:
+        total_alloc = sum(float(cfg.get("alloc", 20)) for cfg in pc_config.values())
+        monthly_total = 20000
+        lumpsum_total = 500000
 
-    # ── Lump sum config ──
-    lumpsum_config = [
-        ("0050",  "bollinger", 66666),
-        ("006208","bollinger", 66666),
-        ("00878", "bollinger", 66668),
-        ("2330",  "ma_cross",  62500),
-        ("2454",  "ma_cross",  62500),
-        ("2881",  "vwap",      50000),
-        ("2886",  "vwap",      50000),
-        ("2382",  "breakout",  75000),
-    ]
+        dca_config = []
+        lumpsum_config = []
+        for sym, cfg in pc_config.items():
+            strat = cfg["strategy"]
+            alloc_pct = float(cfg.get("alloc", 20)) / total_alloc if total_alloc > 0 else (1.0 / len(pc_config))
+            dca_config.append((sym, strat, int(monthly_total * alloc_pct)))
+            lumpsum_config.append((sym, strat, int(lumpsum_total * alloc_pct)))
+
+        # 補償整數誤差
+        ls_diff = lumpsum_total - sum(c[2] for c in lumpsum_config)
+        if ls_diff != 0 and lumpsum_config:
+            lumpsum_config[-1] = (lumpsum_config[-1][0], lumpsum_config[-1][1],
+                                  lumpsum_config[-1][2] + ls_diff)
+
+        print(f"📋 從 PC_ 設定建立投資組合，共 {len(pc_config)} 檔")
+        for sym, strat, amt in dca_config:
+            print(f"   {sym} → {strat} (DCA NT${amt:,}/月)")
+    else:
+        # ── 預設 DCA config ──
+        dca_config = [
+            ("0050", "bollinger", 10000),
+            ("2330", "ma_cross",  4000),
+            ("2382", "breakout",  3000),
+            ("2881", "vwap",      3000),
+        ]
+        # ── 預設 Lump sum config ──
+        lumpsum_config = [
+            ("0050",  "bollinger", 66666),
+            ("006208","bollinger", 66666),
+            ("00878", "bollinger", 66668),
+            ("2330",  "ma_cross",  62500),
+            ("2454",  "ma_cross",  62500),
+            ("2881",  "vwap",      50000),
+            ("2886",  "vwap",      50000),
+            ("2382",  "breakout",  75000),
+        ]
 
     total_ls = sum(c[2] for c in lumpsum_config)
     assert total_ls == 500000, f"Lumpsum config totals {total_ls}, expected 500000"

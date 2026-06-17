@@ -8,6 +8,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from config.symbols import get_yahoo_suffix
 from data.yahoo_loader import load_historical_data
+from core.config_loader import load_portfolio_config, get_strategy_params, get_keep_wait_params
 from strategies.bollinger import bollinger_reverse_strategy
 from strategies.ma_cross import ma_cross_strategy
 from strategies.vwap_deviation import vwap_deviation_strategy
@@ -43,6 +44,47 @@ def load_data(symbol: str) -> pd.DataFrame:
 
 def run_signal_strategy(df: pd.DataFrame, strategy: str, params: dict) -> pd.DataFrame:
     return STRATEGY_FUNCS[strategy](df, **params)
+
+
+def _build_portfolio_from_env(mode: str = "lumpsum") -> dict:
+    """從 PC_ 環境變數建立回測用投資組合，格式同 run_lump_sum_simulation()"""
+    pc_config = load_portfolio_config()
+    if not pc_config:
+        return {}
+
+    portfolio = {}
+    total_alloc = sum(float(cfg.get("alloc", 0)) for cfg in pc_config.values())
+    for sym, cfg in pc_config.items():
+        strat = cfg["strategy"]
+        pct = (float(cfg.get("alloc", 20)) / total_alloc) if total_alloc > 0 else (1.0 / len(pc_config))
+        entry = {"strategy": strat, "pct": pct}
+        params = get_strategy_params(cfg, strat)
+        if params:
+            entry["params"] = params
+        if strat == "keep_wait":
+            kw_params = get_keep_wait_params(cfg)
+            if kw_params:
+                # backtest_2024_2025 用 kw_ 前綴
+                mapped = {}
+                mapping = {
+                    "initial_shares": "kw_initial_shares",
+                    "add_drop_pct": "kw_add_drop_pct",
+                    "add_shares": "kw_add_shares",
+                    "max_additions": "kw_max_additions",
+                    "tp_trigger_pct": "kw_tp_pct",
+                    "tp_sell_ratio": "kw_tp_sell_ratio",
+                    "cooldown_days": "kw_cooldown_days",
+                }
+                for pc_key, bt_key in mapping.items():
+                    if pc_key in kw_params:
+                        mapped[bt_key] = kw_params[pc_key]
+                entry["kw_params"] = mapped
+        portfolio[sym] = entry
+
+    print(f"📋 從 PC_ 設定建立投資組合（{mode}），共 {len(portfolio)} 檔")
+    for sym, e in portfolio.items():
+        print(f"   {sym} → {e['strategy']} (pct={e['pct']:.1%})")
+    return portfolio
 
 
 def simulate_keep_wait(df: pd.DataFrame,
@@ -244,45 +286,49 @@ def simulate_portfolio(portfolio: dict, mode: str = "dca",
 
 
 def run_dca_simulation():
-    portfolio = {
-        "0050":  {"strategy": "bollinger", "pct": 0.50,
-                  "params": {"window": 20, "std_dev": 2.0, "rsi_period": 5}},
-        "2330":  {"strategy": "ma_cross",  "pct": 0.15,
-                  "params": {"fast_period": 9, "slow_period": 21, "atr_threshold": 0.005}},
-        "2382":  {"strategy": "breakout",  "pct": 0.15,
-                  "params": {"lookback": 20, "atr_period": 14}},
-        "2881":  {"strategy": "vwap",      "pct": 0.20,
-                  "params": {"sigma_mult": 1.5, "rsi_period": 5}},
-    }
+    portfolio = _build_portfolio_from_env("dca")
+    if not portfolio:
+        portfolio = {
+            "0050":  {"strategy": "bollinger", "pct": 0.50,
+                      "params": {"window": 20, "std_dev": 2.0, "rsi_period": 5}},
+            "2330":  {"strategy": "ma_cross",  "pct": 0.15,
+                      "params": {"fast_period": 9, "slow_period": 21, "atr_threshold": 0.005}},
+            "2382":  {"strategy": "breakout",  "pct": 0.15,
+                      "params": {"lookback": 20, "atr_period": 14}},
+            "2881":  {"strategy": "vwap",      "pct": 0.20,
+                      "params": {"sigma_mult": 1.5, "rsi_period": 5}},
+        }
     return simulate_portfolio(portfolio, mode="dca", monthly_budget=20_000)
 
 
 def run_lump_sum_simulation():
-    portfolio = {
-        "0050":  {"strategy": "bollinger", "pct": 0.117,
-                  "params": {"window": 20, "std_dev": 2.0, "rsi_period": 5}},
-        "006208": {"strategy": "bollinger", "pct": 0.117,
-                   "params": {"window": 20, "std_dev": 2.0, "rsi_period": 5}},
-        "00878": {"strategy": "bollinger", "pct": 0.116,
-                  "params": {"window": 20, "std_dev": 2.0, "rsi_period": 5}},
-        "2330":  {"strategy": "ma_cross",  "pct": 0.15,
-                  "params": {"fast_period": 9, "slow_period": 21, "atr_threshold": 0.005}},
-        "2454":  {"strategy": "keep_wait", "pct": 0.15, "kw_params": {
-            "kw_initial_shares": 45,
-            "kw_add_drop_pct": 5.0,
-            "kw_add_shares": 45,
-            "kw_max_additions": 2,
-            "kw_tp_pct": 15.0,
-            "kw_tp_sell_ratio": 50.0,
-            "kw_cooldown_days": 30,
-        }},
-        "2881":  {"strategy": "vwap",      "pct": 0.10,
-                  "params": {"sigma_mult": 1.5, "rsi_period": 5}},
-        "2886":  {"strategy": "vwap",      "pct": 0.10,
-                  "params": {"sigma_mult": 1.5, "rsi_period": 5}},
-        "2382":  {"strategy": "breakout",  "pct": 0.15,
-                  "params": {"lookback": 20, "atr_period": 14}},
-    }
+    portfolio = _build_portfolio_from_env("lumpsum")
+    if not portfolio:
+        portfolio = {
+            "0050":  {"strategy": "bollinger", "pct": 0.117,
+                      "params": {"window": 20, "std_dev": 2.0, "rsi_period": 5}},
+            "006208": {"strategy": "bollinger", "pct": 0.117,
+                       "params": {"window": 20, "std_dev": 2.0, "rsi_period": 5}},
+            "00878": {"strategy": "bollinger", "pct": 0.116,
+                      "params": {"window": 20, "std_dev": 2.0, "rsi_period": 5}},
+            "2330":  {"strategy": "ma_cross",  "pct": 0.15,
+                      "params": {"fast_period": 9, "slow_period": 21, "atr_threshold": 0.005}},
+            "2454":  {"strategy": "keep_wait", "pct": 0.15, "kw_params": {
+                "kw_initial_shares": 45,
+                "kw_add_drop_pct": 5.0,
+                "kw_add_shares": 45,
+                "kw_max_additions": 2,
+                "kw_tp_pct": 15.0,
+                "kw_tp_sell_ratio": 50.0,
+                "kw_cooldown_days": 30,
+            }},
+            "2881":  {"strategy": "vwap",      "pct": 0.10,
+                      "params": {"sigma_mult": 1.5, "rsi_period": 5}},
+            "2886":  {"strategy": "vwap",      "pct": 0.10,
+                      "params": {"sigma_mult": 1.5, "rsi_period": 5}},
+            "2382":  {"strategy": "breakout",  "pct": 0.15,
+                      "params": {"lookback": 20, "atr_period": 14}},
+        }
     return simulate_portfolio(portfolio, mode="lumpsum", total_capital=500_000)
 
 
