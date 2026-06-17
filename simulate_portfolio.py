@@ -214,9 +214,9 @@ def simulate_dca(config_list, start_date="2024-01-01", end_date="2025-12-31",
             sig = int(sig)
             pos = positions[sym]
 
-            if sig == 1:  # 買進
+            if sig == 1 or strategy_name == "keep_wait":  # 買進
                 available = cash_buckets[sym]
-                if available > 0 and pos.shares == 0:
+                if available > 0 and (pos.shares == 0 or strategy_name == "keep_wait"):
                     spent = pos.buy(current_date, price, available)
                     cash_buckets[sym] -= spent
                     if spent > 0:
@@ -1035,7 +1035,7 @@ def main():
         dca_config = [
             ("0050", "bollinger", 10000),
             ("2330", "ma_cross",  4000),
-            ("2382", "breakout",  3000),
+            ("2382", "keep_wait", 3000),
             ("2881", "vwap",      3000),
         ]
         # ── 預設 Lump sum config ──
