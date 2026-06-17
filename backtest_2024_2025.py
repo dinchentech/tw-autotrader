@@ -292,9 +292,9 @@ def run_dca_simulation():
             "0050":  {"strategy": "bollinger", "pct": 0.50,
                       "params": {"window": 20, "std_dev": 2.0, "rsi_period": 5}},
             "2330":  {"strategy": "ma_cross",  "pct": 0.15,
-                      "params": {"fast_period": 9, "slow_period": 21, "atr_threshold": 0.005}},
+                      "params": {"fast_period": 14, "slow_period": 60, "atr_threshold": 0.0}},
             "2382":  {"strategy": "breakout",  "pct": 0.15,
-                      "params": {"lookback": 20, "atr_period": 14}},
+                      "params": {"lookback": 25, "atr_period": 14, "atr_threshold": 0.02}},
             "2881":  {"strategy": "vwap",      "pct": 0.20,
                       "params": {"sigma_mult": 1.5, "rsi_period": 5}},
         }
@@ -312,7 +312,7 @@ def run_lump_sum_simulation():
             "00878": {"strategy": "bollinger", "pct": 0.116,
                       "params": {"window": 20, "std_dev": 2.0, "rsi_period": 5}},
             "2330":  {"strategy": "ma_cross",  "pct": 0.15,
-                      "params": {"fast_period": 9, "slow_period": 21, "atr_threshold": 0.005}},
+                      "params": {"fast_period": 14, "slow_period": 60, "atr_threshold": 0.0}},
             "2454":  {"strategy": "keep_wait", "pct": 0.15, "kw_params": {
                 "kw_initial_shares": 45,
                 "kw_add_drop_pct": 5.0,
@@ -327,7 +327,7 @@ def run_lump_sum_simulation():
             "2886":  {"strategy": "vwap",      "pct": 0.10,
                       "params": {"sigma_mult": 1.5, "rsi_period": 5}},
             "2382":  {"strategy": "breakout",  "pct": 0.15,
-                      "params": {"lookback": 20, "atr_period": 14}},
+                      "params": {"lookback": 25, "atr_period": 14, "atr_threshold": 0.02}},
         }
     return simulate_portfolio(portfolio, mode="lumpsum", total_capital=500_000)
 
