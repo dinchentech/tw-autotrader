@@ -38,9 +38,9 @@ STRATEGY_MAP = {
 # 預設參數（與 backtest.py 一致）
 DEFAULT_PARAMS = {
     "vwap":     {"sigma_mult": 1.5, "rsi_period": 5},
-    "ma_cross": {"fast_period": 9, "slow_period": 21, "atr_threshold": 0.005},
+    "ma_cross": {"fast_period": 14, "slow_period": 60, "atr_threshold": 0.0},
     "bollinger": {"window": 20, "std_dev": 2.0, "rsi_period": 5},
-    "breakout":  {"lookback": 20, "atr_period": 14},
+    "breakout":  {"lookback": 25, "atr_period": 14, "atr_threshold": 0.02},
 }
 
 # 標的類別（判斷證交稅率）
@@ -71,6 +71,10 @@ def run_strategy(symbol: str, strategy_name: str, start: str = "2023-01-01",
     """下載資料 + 執行策略，回傳含 signal 欄位的 DataFrame"""
     df = get_data(symbol, start=start)
     if df.empty:
+        return df
+    if strategy_name == "keep_wait":
+        # keep_wait 不需要訊號，直接回傳原始資料（signal=0）
+        df["signal"] = 0
         return df
     # 從 PC_ 設定讀取策略參數（如有）
     pc_config = load_portfolio_config()
@@ -280,6 +284,19 @@ def simulate_lumpsum(config_list, start_date="2024-01-01", end_date="2025-12-31"
     # 多餘現金進 general pool
     general_cash = float(initial_capital) - total_initial
 
+    # keep_wait 追蹤狀態
+    KEEP_WAIT_PARAMS = {
+        "2412": {"initial_shares": 12, "add_drop_pct": 5.0, "add_shares": 6,
+                 "max_additions": 2, "tp_pct": 15.0, "tp_sell_ratio": 50.0, "cooldown_days": 30},
+    }
+    kw_state = {}
+    for sym, strategy_name, alloc in config_list:
+        if strategy_name == "keep_wait":
+            kw_state[sym] = {
+                "buy_count": 0, "avg_cost": 0.0, "cooldown_until": None,
+                "total_cost": 0.0, "total_shares": 0,
+            }
+
     all_dates = pd.DatetimeIndex(sorted(set(
         d for df in signal_data.values() for d in df.index
     )))
@@ -295,12 +312,71 @@ def simulate_lumpsum(config_list, start_date="2024-01-01", end_date="2025-12-31"
             if current_date not in df.index:
                 continue
             row = df.loc[current_date]
-            sig = row.get("signal", 0)
             price = row.get("close", 0)
-            if pd.isna(sig) or pd.isna(price) or price <= 0:
+            if pd.isna(price) or price <= 0:
+                continue
+            pos = positions[sym]
+
+            if strategy_name == "keep_wait":
+                st = kw_state.get(sym)
+                if not st:
+                    continue
+                if st["cooldown_until"] and current_date < st["cooldown_until"]:
+                    continue
+
+                if st["buy_count"] == 0:
+                    kw_init = KEEP_WAIT_PARAMS.get(sym, {}).get("initial_shares", 12)
+                    if cash_buckets[sym] >= kw_init * price * (1 + COMMISSION_RATE):
+                        spent = pos.buy(current_date, price, kw_init * price)
+                        if spent > 0:
+                            cash_buckets[sym] -= spent
+                            st["total_cost"] += spent
+                            st["total_shares"] += kw_init
+                            st["avg_cost"] = price
+                            st["buy_count"] = 1
+                            transaction_log.append(pos.trades[-1].copy())
+                else:
+                    kw_p = KEEP_WAIT_PARAMS.get(sym, {})
+                    kw_add = kw_p.get("add_shares", 6)
+                    kw_drop = kw_p.get("add_drop_pct", 5.0)
+                    kw_max = kw_p.get("max_additions", 2)
+                    kw_tp = kw_p.get("tp_pct", 15.0)
+                    kw_sell_ratio = kw_p.get("tp_sell_ratio", 50.0)
+                    kw_cd = kw_p.get("cooldown_days", 30)
+
+                    avg_cost = st["avg_cost"]
+                    drop_pct = (avg_cost - price) / avg_cost * 100 if avg_cost > 0 else 0
+                    profit_pct = (price - avg_cost) / avg_cost * 100 if avg_cost > 0 else 0
+
+                    if profit_pct >= kw_tp and st["total_shares"] > 0:
+                        if pos.shares > 0:
+                            proceeds = pos.sell(current_date, price)
+                            cash_buckets[sym] += proceeds
+                            if proceeds > 0:
+                                transaction_log.append(pos.trades[-1].copy())
+                        st["avg_cost"] = 0.0
+                        st["buy_count"] = 0
+                        st["total_cost"] = 0.0
+                        st["total_shares"] = 0
+                        st["cooldown_until"] = current_date + timedelta(days=kw_cd)
+                    elif drop_pct >= kw_drop and st["buy_count"] < kw_max:
+                        if cash_buckets[sym] >= kw_add * price * (1 + COMMISSION_RATE):
+                            spent = pos.buy(current_date, price, kw_add * price)
+                            if spent > 0:
+                                cash_buckets[sym] -= spent
+                                prev_shares = st["total_shares"]
+                                st["total_cost"] += spent
+                                st["total_shares"] += kw_add
+                                st["avg_cost"] = (avg_cost * prev_shares + price * kw_add) / st["total_shares"]
+                                st["buy_count"] += 1
+                                transaction_log.append(pos.trades[-1].copy())
+                continue
+
+            # ── 訊號策略 ──
+            sig = row.get("signal", 0)
+            if pd.isna(sig):
                 continue
             sig = int(sig)
-            pos = positions[sym]
 
             if sig == 1:  # 買進
                 available = cash_buckets[sym]
@@ -967,11 +1043,11 @@ def main():
             ("0050",  "bollinger", 66666),
             ("006208","bollinger", 66666),
             ("00878", "bollinger", 66668),
-            ("2330",  "ma_cross",  62500),
-            ("2454",  "ma_cross",  62500),
+            ("2330",  "ma_cross",  75000),
+            ("2454",  "ma_cross",  75000),
             ("2881",  "vwap",      50000),
             ("2886",  "vwap",      50000),
-            ("2382",  "breakout",  75000),
+            ("2412",  "keep_wait", 50000),
         ]
 
     total_ls = sum(c[2] for c in lumpsum_config)
@@ -997,26 +1073,8 @@ def main():
             f.write(ls_report)
         print(f"  ✅ 已寫入 {ls_path}")
 
-        # ── 长荣替代版（2603 替代 2382）──
-        print("📊 模擬：一筆資金 NT$500,000（長榮替代版）...")
-        lumpsum_evergreen = [
-            ("0050",  "bollinger", 66666),
-            ("006208","bollinger", 66666),
-            ("00878", "bollinger", 66668),
-            ("2330",  "ma_cross",  62500),
-            ("2454",  "ma_cross",  62500),
-            ("2881",  "vwap",      50000),
-            ("2886",  "vwap",      50000),
-            ("2603",  "breakout",  75000),
-        ]
-        assert sum(c[2] for c in lumpsum_evergreen) == 500000
-        ls_eg_result = simulate_lumpsum(lumpsum_evergreen, start_date="2024-01-01", end_date="2025-12-31",
-                                        initial_capital=500000)
-        ls_eg_report = generate_lumpsum_report(ls_eg_result)
-        ls_eg_path = os.path.join(output_dir, "回溯_50万_2024_2025-长荣.MD")
-        with open(ls_eg_path, "w", encoding="utf-8") as f:
-            f.write(ls_eg_report)
-        print(f"  ✅ 已寫入 {ls_eg_path}")
+        # ── 方案二主報告已包含全部 8 檔（含 keep_wait）──
+        # 長榮替代版不再需要（已移除 breakout 策略）
 
 
 if __name__ == "__main__":
