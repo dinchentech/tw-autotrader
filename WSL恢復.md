@@ -15,6 +15,7 @@
 #    建議移到 Windows 磁碟暫存
 mv ~/tw-autotrader/esun_sdk/*.p12 /mnt/c/Users/frank/Documents/tw_autotrader_backup/
 mv ~/tw-autotrader/esun_sdk/*.example /mnt/c/Users/frank/Documents/tw_autotrader_backup/
+mv ~/tw-autotrader/esun_sdk/*.ini /mnt/c/Users/frank/Documents/tw_autotrader_backup/
 
 # 2. 移 .env（含玉山密碼、Telegram Token、FinMind Token）
 mv ~/tw-autotrader/.env /mnt/c/Users/frank/Documents/tw_autotrader_backup/
