@@ -31,7 +31,7 @@ from esun_trade.order import OrderObject
 from esun_trade.constant import Action, APCode, PriceFlag, Trade, BSFlag
 
 # Default path relative to project root
-_DEFAULT_INI = "esun_sdk/config.simulation.ini.example"
+_DEFAULT_INI = "esun_sdk/config.simulation.ini"
 
 
 def _resolve_cert_path(cfg):
