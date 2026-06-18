@@ -416,8 +416,17 @@ def main():
                             else:
                                 trk["buy_count"] = 0  # 冷卻結束，重新開始
 
-                        # 初始進場
+                        # 初始進場（先檢查是否已有持股）
                         if trk["buy_count"] == 0:
+                            existing = holdings.get(symbol, 0)
+                            if existing > 0:
+                                trk["total_shares"] = existing
+                                trk["total_cost"] = current_price * existing
+                                trk["last_buy_price"] = current_price
+                                trk["buy_count"] = 1
+                                signal = 0
+                                print(f"📋 {symbol} keep_wait 偵測到既有持股 {existing} 股，恢復 tracker 狀態")
+                                continue
                             signal = 1
                             position_size = kw_initial
                             trk["last_buy_price"] = current_price
