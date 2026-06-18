@@ -27,7 +27,7 @@ class InstitutionalMomentumStrategy:
     屬於 Group 2（獨立資金），有獨立的起始本金、損益追蹤。
     """
 
-    def __init__(self, broker=None, capital=0, top_n=2):
+    def __init__(self, broker=None, capital=0, top_n=3):
         self.broker = broker
         self.capital = capital                     # 獨立起始資金（0 = 不啟用）
         self.top_n = top_n                         # 持有標的數量
