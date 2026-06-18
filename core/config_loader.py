@@ -1,5 +1,5 @@
 """
-core/config_loader.py — 共用設定載入器（V1.1）
+core/config_loader.py — 共用設定載入器（V1.11）
 
 從 PC_<代號> 環境變數載入個股策略設定 (JSON 格式)，
 供 live_trader_multi.py 及所有回測檔案共用。
