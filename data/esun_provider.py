@@ -65,6 +65,13 @@ def load_config():
         _apply_cert_override(cfg)
         return cfg
 
+    # Source 2b: fallback to .example (使用者還沒複製 .ini 時可暫用)
+    example_ini = "esun_sdk/config.simulation.ini.example"
+    if os.path.exists(example_ini):
+        cfg.read(example_ini)
+        _apply_cert_override(cfg)
+        return cfg
+
     # Source 3: build from individual env vars
     cfg.add_section("Core")
     cfg.set("Core", "Entry", os.getenv("ESUN_ENTRY", ""))

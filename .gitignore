@@ -190,8 +190,9 @@ create_tw_autotrader.py
 .idea/inspectionProfiles/profiles_settings.xml
 /.omo
 /.omo
-#usun_sdk
-*.tar
-*.tar.gz
-esun_sdk/
+# E.Sun SDK: 憑證(p12)、WHL 套件、以及環境設定檔（.example 是範本，.ini 是實際設定）
+esun_sdk/*.p12
+esun_sdk/*.whl
+esun_sdk/config.simulation.ini
+esun_sdk/config.simulation.ini.example
 plans/
