@@ -270,10 +270,22 @@ def main():
         if cap <= 0:
             return True
         net = alloc.get(symbol, {}).get("total_buy_cost", 0)
-        if net + cost > cap:
+        new_total = net + cost
+        if new_total > cap:
             remaining = cap - net
             print(f"⚠️  {symbol} 配置已達上限：已用 {net:.0f} / {cap:.0f} 元（剩 {remaining:.0f}），跳過")
             return False
+        # 資金使用率超過 70% 時通知使用者
+        usage = new_total / cap
+        warned_key = f"{symbol}_cap_70pct"
+        if usage >= 0.7 and not alloc.get(symbol, {}).get("_cap_warned", False):
+            alloc.setdefault(symbol, {})["_cap_warned"] = True
+            save_stock_allocation(alloc)
+            msg = (f"⚠️ *{symbol}* 資金配置已使用 {usage:.0%}\n"
+                   f"目前：NT${new_total:,.0f} / 上限 NT${cap:,.0f}\n"
+                   f"如需要提高上限，請調整 `.env` 中該股票的 `alloc` 百分比")
+            send_telegram_message(msg)
+            print(f"📢 {symbol} 資金使用率 {usage:.0%}，已通知使用者")
         return True
 
     stock_alloc = load_stock_allocation()
