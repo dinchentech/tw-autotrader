@@ -16,10 +16,15 @@ class RiskManager:
         self._ensure_log_dir()
     
     def _ensure_log_dir(self):
-        """確保日誌目錄存在"""
+        """確保日誌目錄與 CSV 存在"""
         import os
         if not os.path.exists("logs"):
             os.makedirs("logs")
+        if not os.path.exists(self.log_file):
+            with open(self.log_file, 'w', newline='', encoding='utf-8') as csvfile:
+                import csv
+                writer = csv.writer(csvfile)
+                writer.writerow(["timestamp", "symbol", "signal", "price", "quantity", "action"])
     
     def _load_today_trades(self):
         """載入今日交易紀錄"""
