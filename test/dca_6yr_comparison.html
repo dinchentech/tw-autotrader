@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>0050 六年期 DCA 報酬比較</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Inter",-apple-system,sans-serif;background:#0d1117;color:#e6edf3;display:flex;justify-content:center;padding:40px 20px}
+  .container{max-width:900px;width:100%}
+  h1{font-size:24px;font-weight:600;margin-bottom:4px}
+  .sub{color:#8b949e;font-size:14px;margin-bottom:28px}
+  .chart-wrap{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:30px 30px 20px 30px;margin-bottom:20px}
+  .bar-row{display:flex;align-items:center;margin-bottom:14px;gap:10px}
+  .bar-label{width:95px;font-size:13px;font-weight:500;text-align:right;flex-shrink:0;color:#c9d1d9}
+  .bar-track{flex:1;height:30px;background:#0d1117;border-radius:6px;position:relative;overflow:visible}
+  .bar-fill{height:100%;border-radius:6px;display:flex;align-items:center;padding-left:10px;font-size:12px;font-weight:600;white-space:nowrap;min-width:60px;transition:width .6s ease}
+  .bar-fill.positive{background:linear-gradient(90deg,#1a6b3c,#2ea043);color:#7ee787}
+  .bar-fill.negative{background:linear-gradient(90deg,#a13030,#da3633);color:#ffa198}
+  .bar-fill.champion{background:linear-gradient(90deg,#bb8009,#d29922);color:#f0e6a0;box-shadow:0 0 12px rgba(210,153,34,.35)}
+  .bar-val{width:70px;font-size:13px;font-weight:500;text-align:right;flex-shrink:0;font-variant-numeric:tabular-nums}
+  .bar-val.pos{color:#7ee787}
+  .bar-val.neg{color:#ffa198}
+  .bar-val.gold{color:#d29922}
+  .bar-desc{width:160px;font-size:11px;color:#8b949e;text-align:left;flex-shrink:0;line-height:1.3}
+
+  .legend{display:flex;gap:24px;margin-top:16px;flex-wrap:wrap;font-size:12px;color:#8b949e}
+  .legend-item{display:flex;align-items:center;gap:6px}
+  .legend-dot{width:12px;height:12px;border-radius:3px;flex-shrink:0}
+  
+  .summary-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:20px}
+  .summary-table th{text-align:left;color:#8b949e;font-weight:500;padding:8px 10px;border-bottom:1px solid #21262d}
+  .summary-table td{padding:8px 10px;border-bottom:1px solid #21262d;font-variant-numeric:tabular-nums}
+  .summary-table tr:first-child td{color:#d29922;font-weight:600}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>0050 六年 DCA 報酬比較</h1>
+  <div class="sub">每月定投 NT$20,000 · 各 6 年期</div>
+
+  <div class="chart-wrap" id="chart"></div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#d29922"></div> 2020-2025（史上最強）</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#2ea043"></div> 正報酬</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#da3633"></div> 負報酬</div>
+  </div>
+
+  <table class="summary-table">
+    <thead><tr>
+      <th>期間</th><th>DCA 報酬</th><th>vs 2020-2025</th><th style="text-align:right">終值</th><th>行情特徵</th>
+    </tr></thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<script>
+const data = [
+  {period:"2020-2025", roi:156.2, val:"+156.2%", diff:"—", target:0, color:"champion", desc:"疫情V轉 + AI 狂潮"},
+  {period:"2010~2016", roi:-44.9, val:"−44.9%", diff:"−201pp", desc:"金融海嘯後反彈完 + 歐債 + 2015 股災"},
+  {period:"2011~2017", roi:-22.1, val:"−22.1%", diff:"−178pp", desc:"買在 2011 高點 → 等 6 年才回本"},
+  {period:"2012~2018", roi:2.5, val:"+2.5%", diff:"−154pp", desc:"白忙 6 年"},
+  {period:"2013~2019", roi:5.2, val:"+5.2%", diff:"−151pp", desc:"快 6 年才剛打平"},
+  {period:"2014~2020", roi:51.0, val:"+51.0%", diff:"−105pp", desc:"正常多頭"},
+  {period:"2015~2021", roi:77.5, val:"+77.5%", diff:"−79pp", desc:"正常多頭"},
+  {period:"2016~2022", roi:89.6, val:"+89.6%", diff:"−67pp", desc:"正常多頭（含 2022 大跌）"},
+  {period:"2017~2023", roi:29.8, val:"+29.8%", diff:"−126pp", desc:"平淡"},
+  {period:"2018~2024", roi:48.0, val:"+48.0%", diff:"−108pp", desc:"正常多頭"},
+  {period:"2019~2025", roi:90.9, val:"+90.9%", diff:"−65pp", desc:"接近但還是差一截"},
+];
+
+// 排序 (ROI descending)
+data.sort((a,b) => b.roi - a.roi);
+
+const maxRoi = 156.2;
+const minRoi = -44.9;
+const range = maxRoi - minRoi;
+
+// 繪製長條圖
+const chart = document.getElementById("chart");
+const tbody = document.getElementById("tbody");
+
+data.forEach(d => {
+  // bar
+  const pctAbs = Math.abs(d.roi);
+  let barW;
+  if (d.roi >= 0) {
+    barW = 10 + (d.roi / maxRoi) * 80;
+  } else {
+    barW = 10 + (Math.abs(d.roi) / Math.abs(minRoi)) * 50;
+  }
+  const barLeft = d.roi >= 0 ? 50 : 50 - barW;
+
+  const row = document.createElement("div");
+  row.className = "bar-row";
+
+  const label = document.createElement("div");
+  label.className = "bar-label";
+  label.textContent = d.period;
+  row.appendChild(label);
+
+  const track = document.createElement("div");
+  track.className = "bar-track";
+
+  const fill = document.createElement("div");
+  fill.className = `bar-fill ${d.color === "champion" ? "champion" : d.roi >= 0 ? "positive" : "negative"}`;
+  fill.style.width = barW + "%";
+  if (d.roi >= 0) {
+    fill.style.marginLeft = "50%";
+  } else {
+    fill.style.marginLeft = (50 - barW) + "%";
+    fill.style.justifyContent = "flex-end";
+    fill.style.paddingRight = "10px";
+    fill.style.paddingLeft = "0";
+  }
+  fill.textContent = d.roi >= 0 ? "+" + d.roi.toFixed(1) + "%" : d.roi.toFixed(1) + "%";
+
+  track.appendChild(fill);
+  row.appendChild(track);
+
+  const val = document.createElement("div");
+  val.className = `bar-val ${d.color === "champion" ? "gold" : d.roi >= 0 ? "pos" : "neg"}`;
+  val.textContent = d.roi >= 0 ? "+" + d.roi.toFixed(1) + "%" : d.roi.toFixed(1) + "%";
+  row.appendChild(val);
+
+  const desc = document.createElement("div");
+  desc.className = "bar-desc";
+  desc.textContent = d.desc;
+  row.appendChild(desc);
+
+  chart.appendChild(row);
+
+  // table row
+  const tr = document.createElement("tr");
+  if (d.period === "2020-2025") tr.style.background = "rgba(210,153,34,.08)";
+  tr.innerHTML = `
+    <td style="font-weight:600">${d.period}</td>
+    <td style="color:${d.color === "champion" ? "#d29922" : d.roi >= 0 ? "#7ee787" : "#ffa198"}">${d.val}</td>
+    <td style="color:#8b949e">${d.diff}</td>
+    <td style="text-align:right;color:#8b949e">—</td>
+    <td style="color:#8b949e;font-size:12px">${d.desc}</td>
+  `;
+  tbody.appendChild(tr);
+});
+
+// 中間基準線
+const midline = document.createElement("div");
+midline.style.cssText = "position:relative;height:1px;background:#30363d;margin:2px 105px 4px 105px";
+chart.appendChild(midline);
+const zeroLabel = document.createElement("div");
+zeroLabel.style.cssText = "text-align:center;font-size:11px;color:#484f58;margin-bottom:8px";
+zeroLabel.textContent = "0%";
+chart.appendChild(zeroLabel);
+</script>
+</body>
+</html>

@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>2023 策略 vs 0050 DCA</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Inter",-apple-system,sans-serif;background:#0d1117;color:#e6edf3;display:flex;justify-content:center;padding:30px 16px}
+  .wrap{width:100%;max-width:800px}
+  h1{font-size:22px;font-weight:600;margin-bottom:4px}
+  .subtitle{font-size:13px;color:#8b949e;margin-bottom:20px}
+
+  /* Metrics row */
+  .metrics{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}
+  .card{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:20px 16px}
+  .metric{background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:12px}
+  .metric .label{font-size:11px;color:#8b949e;margin-bottom:4px}
+  .metric .value{font-size:22px;font-weight:700}
+  .metric .subv{font-size:11px;color:#484f58;margin-top:2px}
+  .metric .value.gold{color:#d29922}
+  .metric .value.blue{color:#58a6ff}
+
+  /* Chart area */
+  .chart-wrap{position:relative;width:100%;background:#161b22;border:1px solid #30363d;border-radius:12px;padding:16px}
+  .chart-title{font-size:13px;font-weight:500;color:#f0f6fc;margin-bottom:12px}
+  .chart-inner{position:relative;width:100%;height:300px}
+  .y-labels{position:absolute;left:0;top:0;bottom:24px;width:60px;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-end;padding:2px 6px 2px 0;font-size:10px;color:#484f58}
+  .canvas-area{position:absolute;left:64px;right:0;top:0;bottom:24px;overflow:hidden}
+  .canvas-area svg{width:100%;height:100%}
+  .x-labels{position:absolute;left:64px;right:0;bottom:0;height:22px;display:flex;justify-content:space-between;align-items:flex-end;padding:0 4px;font-size:9px;color:#484f58}
+
+  .legend{display:flex;gap:20px;font-size:12px;padding:10px 0 4px}
+  .legend-item{display:flex;align-items:center;gap:6px}
+  .legend-line{width:20px;height:3px;border-radius:2px}
+
+  /* Drawdown */
+  .dd-area{position:relative;width:100%;height:50px;margin-top:4px}
+  .dd-canvas{position:absolute;left:64px;right:0;top:0;bottom:0;overflow:hidden}
+  .dd-canvas svg{width:100%;height:100%}
+
+  .footnote{font-size:12px;color:#484f58;margin-top:12px;line-height:1.6}
+  .footnote span{color:#8b949e}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>2023 年 — 策略 vs 0050 定期定額</h1>
+  <div class="subtitle">每月投入 NT$20,000 · 已含交易成本</div>
+
+  <div class="metrics" id="metrics"></div>
+
+  <div class="card">
+    <div class="chart-title">📈 權益曲線（Equity Curve）</div>
+    <div class="chart-wrap">
+      <div class="chart-inner" id="chartArea">
+        <div class="y-labels" id="yLabels"></div>
+        <div class="canvas-area" id="canvasArea"><svg id="mainSvg"></svg></div>
+        <div class="x-labels" id="xLabels"></div>
+      </div>
+
+      <div class="legend">
+        <div class="legend-item"><div class="legend-line" style="background:#58a6ff"></div> 0050 DCA</div>
+        <div class="legend-item"><div class="legend-line" style="background:#d29922"></div> 策略配置</div>
+        <div class="legend-item"><div class="legend-line" style="background:#484f58;stroke-dasharray:4,2"></div> 累計投入</div>
+      </div>
+
+      <div style="font-size:13px;font-weight:500;color:#f0f6fc;margin-top:16px">📉 回撤（Drawdown）</div>
+      <div class="dd-area"><div class="dd-canvas"><svg id="ddSvg"></svg></div></div>
+    </div>
+  </div>
+
+  <div class="footnote">
+    <div>⚠️ 回撤 = 從歷史高點到當前的跌幅（drawdown），不是從總投入算的虧損。</div>
+    <div>投入 NT$720K → 940K（每月 +20K），策略終值 NT$1,630K vs 0050 終值 NT$1,194K。</div>
+  </div>
+</div>
+
+<script>
+const DATA = [
+  {"date":"2023-01","strategy":762472.46,"buyhold":819667.52,"invested":720000,"strat_dd":0,"bh_dd":0},
+  {"date":"2023-02","strategy":800547.87,"buyhold":843098.25,"invested":740000,"strat_dd":0,"bh_dd":0},
+  {"date":"2023-03","strategy":861293.05,"buyhold":883346.27,"invested":760000,"strat_dd":0,"bh_dd":0},
+  {"date":"2023-04","strategy":854567.97,"buyhold":872240.93,"invested":780000,"strat_dd":-0.78,"bh_dd":-1.26},
+  {"date":"2023-05","strategy":1004831.92,"buyhold":958686.19,"invested":800000,"strat_dd":0,"bh_dd":0},
+  {"date":"2023-06","strategy":1139371.89,"buyhold":1001736.25,"invested":820000,"strat_dd":0,"bh_dd":0},
+  {"date":"2023-07","strategy":1447583.52,"buyhold":1034000.96,"invested":840000,"strat_dd":0,"bh_dd":0},
+  {"date":"2023-08","strategy":1497930.66,"buyhold":1028534.85,"invested":860000,"strat_dd":0,"bh_dd":-0.53},
+  {"date":"2023-09","strategy":1470847.43,"buyhold":1023062.14,"invested":880000,"strat_dd":-1.81,"bh_dd":-1.06},
+  {"date":"2023-10","strategy":1356853.83,"buyhold":1030051.11,"invested":900000,"strat_dd":-9.42,"bh_dd":-0.38},
+  {"date":"2023-11","strategy":1493473.21,"buyhold":1138351.50,"invested":920000,"strat_dd":-0.30,"bh_dd":0},
+  {"date":"2023-12","strategy":1630376.48,"buyhold":1194438.08,"invested":940000,"strat_dd":0,"bh_dd":0}
+];
+
+const last = DATA[DATA.length-1];
+const first = DATA[0];
+const totalInv = last.invested;
+const stratAdded = totalInv - first.invested;
+const bhAdded = stratAdded;
+
+const stratGain = (last.strategy - first.strategy - stratAdded) / first.strategy * 100;
+const bhGain = (last.buyhold - first.buyhold - bhAdded) / first.buyhold * 100;
+
+// ── Metrics ──
+document.getElementById("metrics").innerHTML = `
+  <div class="metric"><div class="label">策略總報酬</div><div class="value gold">+${stratGain.toFixed(1)}%</div><div class="subv">NT$${(last.strategy).toLocaleString()}（含投入 NT$${(totalInv).toLocaleString()}）</div></div>
+  <div class="metric"><div class="label">0050 DCA 總報酬</div><div class="value blue">+${bhGain.toFixed(1)}%</div><div class="subv">NT$${(last.buyhold).toLocaleString()}（含投入 NT$${(totalInv).toLocaleString()}）</div></div>
+`;
+
+// ── SVG helpers ──
+const W = 700, H = 270, DD_H = 44;
+
+const stratVals = DATA.map(d => d.strategy);
+const bhVals = DATA.map(d => d.buyhold);
+const invVals = DATA.map(d => d.invested);
+const allVals = [...stratVals, ...bhVals, ...invVals];
+const minV = Math.min(...allVals);
+const maxV = Math.max(...allVals);
+const pad = (maxV - minV) * 0.08;
+const yMin = minV - pad;
+const yMax = maxV + pad;
+
+const stratDd = DATA.map(d => d.strat_dd);
+const bhDd = DATA.map(d => d.bh_dd);
+const ddMin = -16;
+const ddMax = 1;
+
+function xPos(i) { return (i / (DATA.length - 1)) * W; }
+function yPos(v) { return H - ((v - yMin) / (yMax - yMin)) * H; }
+function ddPos(v) { return DD_H - ((v - ddMin) / (ddMax - ddMin)) * DD_H; }
+
+function makePath(data, min, max, h) {
+  return data.map((v,i) => {
+    const x = xPos(i);
+    const y = h - ((v - min) / (max - min)) * h;
+    return (i===0?"M":"L") + x.toFixed(1) + "," + y.toFixed(1);
+  }).join("");
+}
+
+// ── Y labels ──
+const yLabelEl = document.getElementById("yLabels");
+const ySteps = 5;
+for (let i = 0; i <= ySteps; i++) {
+  const val = yMin + (yMax - yMin) * (1 - i / ySteps);
+  yLabelEl.innerHTML += `<div>$${Math.round(val/10000)/100}萬</div>`;
+}
+
+// ── X labels (6 months) ──
+const xLabelEl = document.getElementById("xLabels");
+const xSteps = 6;
+for (let i = 0; i <= xSteps; i++) {
+  const idx = Math.round(i * (DATA.length - 1) / xSteps);
+  if (idx < DATA.length) xLabelEl.innerHTML += `<div>${DATA[idx].date}</div>`;
+}
+
+// ── Main chart ──
+const svg = document.getElementById("mainSvg");
+svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+
+// Inv line
+const invPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+invPath.setAttribute("d", makePath(invVals, yMin, yMax, H));
+invPath.setAttribute("fill", "none");
+invPath.setAttribute("stroke", "#484f58");
+invPath.setAttribute("stroke-width", "1.5");
+invPath.setAttribute("stroke-dasharray", "5,4");
+svg.appendChild(invPath);
+
+// 0050 line
+const bhLine = document.createElementNS("http://www.w3.org/2000/svg", "path");
+bhLine.setAttribute("d", makePath(bhVals, yMin, yMax, H));
+bhLine.setAttribute("fill", "none");
+bhLine.setAttribute("stroke", "#58a6ff");
+bhLine.setAttribute("stroke-width", "2");
+svg.appendChild(bhLine);
+
+// Strategy line
+const stPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+stPath.setAttribute("d", makePath(stratVals, yMin, yMax, H));
+stPath.setAttribute("fill", "none");
+stPath.setAttribute("stroke", "#d29922");
+stPath.setAttribute("stroke-width", "2.5");
+svg.appendChild(stPath);
+
+// ── Drawdown chart ──
+const ddSvg = document.getElementById("ddSvg");
+ddSvg.setAttribute("viewBox", `0 0 ${W} ${DD_H}`);
+
+// Zero line
+const zero = document.createElementNS("http://www.w3.org/2000/svg", "line");
+zero.setAttribute("x1", "0"); zero.setAttribute("y1", ddPos(0));
+zero.setAttribute("x2", W); zero.setAttribute("y2", ddPos(0));
+zero.setAttribute("stroke", "#30363d");
+zero.setAttribute("stroke-width", "1");
+ddSvg.appendChild(zero);
+
+// 0050 dd
+const bhDdPath = bhDd.map((v,i) => {
+  const x = xPos(i);
+  const y = ddPos(v);
+  return (i===0?"M":"L") + x.toFixed(1) + "," + y.toFixed(1);
+}).join("");
+const bhDdLine = document.createElementNS("http://www.w3.org/2000/svg", "path");
+bhDdLine.setAttribute("d", bhDdPath);
+bhDdLine.setAttribute("fill", "none");
+bhDdLine.setAttribute("stroke", "#58a6ff");
+bhDdLine.setAttribute("stroke-width", "1.5");
+ddSvg.appendChild(bhDdLine);
+
+// Strategy dd
+const stDdPath = stratDd.map((v,i) => {
+  const x = xPos(i);
+  const y = ddPos(v);
+  return (i===0?"M":"L") + x.toFixed(1) + "," + y.toFixed(1);
+}).join("");
+const stDdLine = document.createElementNS("http://www.w3.org/2000/svg", "path");
+stDdLine.setAttribute("d", stDdPath);
+stDdLine.setAttribute("fill", "none");
+stDdLine.setAttribute("stroke", "#d29922");
+stDdLine.setAttribute("stroke-width", "2");
+ddSvg.appendChild(stDdLine);
+
+// ── DD labels ──
+const ddLabels = document.createElementNS("http://www.w3.org/2000/svg", "text");
+ddLabels.setAttribute("x", "4");
+ddLabels.setAttribute("y", "12");
+ddLabels.setAttribute("fill", "#484f58");
+ddLabels.setAttribute("font-size", "9");
+ddLabels.textContent = "0%";
+ddSvg.appendChild(ddLabels);
+
+const ddLabels2 = document.createElementNS("http://www.w3.org/2000/svg", "text");
+ddLabels2.setAttribute("x", "4");
+ddLabels2.setAttribute("y", DD_H - 2);
+ddLabels2.setAttribute("fill", "#484f58");
+ddLabels2.setAttribute("font-size", "9");
+ddLabels2.textContent = "-16%";
+ddSvg.appendChild(ddLabels2);
+</script>
+</body>
+</html>

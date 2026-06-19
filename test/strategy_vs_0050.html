@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>策略 vs 0050 — 權益曲線</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Inter",-apple-system,sans-serif;background:#0d1117;color:#e6edf3;display:flex;justify-content:center;padding:30px 16px}
+  .container{max-width:960px;width:100%}
+  h1{font-size:22px;font-weight:600;margin-bottom:4px}
+  .sub{color:#8b949e;font-size:13px;margin-bottom:24px}
+  .card{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:20px 16px;margin-bottom:16px}
+
+  /* Chart area */
+  .chart-area{position:relative;width:100%;height:360px;margin-bottom:8px}
+  .y-label{position:absolute;left:0;top:0;bottom:24px;width:58px;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-end;padding:4px 8px 4px 0;font-size:10px;color:#484f58}
+  .chart-canvas{position:absolute;left:62px;right:0;top:0;bottom:24px;overflow:hidden}
+  .chart-canvas svg{width:100%;height:100%}
+  .x-label{position:absolute;left:62px;right:0;bottom:0;height:20px;display:flex;justify-content:space-between;align-items:flex-end;padding:0 4px;font-size:9px;color:#484f58}
+
+  /* Tooltip */
+  .tooltip{position:absolute;background:#1c2128;border:1px solid #30363d;border-radius:8px;padding:10px 14px;font-size:12px;pointer-events:none;opacity:0;transition:opacity .15s;z-index:10;min-width:180px;box-shadow:0 4px 16px rgba(0,0,0,.5)}
+  .tooltip.show{opacity:1}
+  .tooltip .tt-date{color:#8b949e;font-size:11px;margin-bottom:4px}
+  .tooltip .tt-row{display:flex;justify-content:space-between;gap:16px;padding:2px 0}
+  .tooltip .tt-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+
+  /* Legend */
+  .legend{display:flex;gap:20px;flex-wrap:wrap;font-size:12px;padding:8px 0}
+  .legend-item{display:flex;align-items:center;gap:6px}
+  .legend-line{width:20px;height:3px;border-radius:2px}
+
+  /* Summary metrics */
+  .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin:12px 0}
+  .metric{background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:12px}
+  .metric .label{font-size:11px;color:#8b949e;margin-bottom:2px}
+  .metric .value{font-size:18px;font-weight:600}
+  .metric .subv{font-size:11px;color:#484f58;margin-top:2px}
+  .text-green{color:#7ee787}
+  .text-gold{color:#d29922}
+  .text-red{color:#ff7b72}
+  .text-muted{color:#8b949e}
+
+  .drawdown-area{position:relative;width:100%;height:60px;margin-bottom:4px}
+  .drawdown-canvas{position:absolute;left:62px;right:0;top:0;bottom:0;overflow:hidden}
+  .drawdown-canvas svg{width:100%;height:100%}
+
+  .annotations{font-size:12px;line-height:1.6;margin-top:12px;padding:12px;background:#0d1117;border-radius:8px;border:1px solid #21262d}
+  .annotations li{margin-left:16px;padding:2px 0;color:#c9d1d9}
+  .highlight{background:rgba(210,153,34,.1);border-left:3px solid #d29922;padding:8px 12px;margin:12px 0;border-radius:0 6px 6px 0;font-size:13px;color:#f0e6d0}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>策略 vs 0050 定期定額</h1>
+  <div class="sub">每月 NT$20,000 · 2020-01 ~ 2025-12 · 策略每月選近 3 月表現最佳配置</div>
+
+  <!-- Metrics -->
+  <div class="card" style="padding:16px 20px">
+    <div class="metrics" id="metrics"></div>
+  </div>
+
+  <!-- Equity curve -->
+  <div class="card">
+    <div style="font-size:13px;font-weight:500;color:#f0f6fc;margin-bottom:8px">📈 權益曲線</div>
+    <div class="chart-area" id="chartArea">
+      <div class="y-label" id="yLabel"></div>
+      <div class="chart-canvas" id="chartCanvas"><svg id="mainChart"></svg></div>
+      <div class="x-label" id="xLabel"></div>
+      <div class="tooltip" id="tooltip"></div>
+    </div>
+
+    <!-- Drawdown -->
+    <div style="font-size:13px;font-weight:500;color:#f0f6fc;margin:8px 0">📉 回撤（Drawdown）</div>
+    <div class="drawdown-area" id="ddArea">
+      <div class="y-label" style="width:58px;font-size:9px;color:#484f58;padding-right:6px;justify-content:center">
+        <span>0%</span><span style="color:#ff7b72">-15%</span>
+      </div>
+      <div class="drawdown-canvas"><svg id="ddChart"></svg></div>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item"><div class="legend-line" style="background:#58a6ff"></div> 0050 DCA</div>
+      <div class="legend-item"><div class="legend-line" style="background:#d29922"></div> 策略配置</div>
+      <div class="legend-item"><div class="legend-line" style="background:#484f58;stroke-dasharray:4,3"></div> 累計投入</div>
+    </div>
+  </div>
+
+  <!-- Annotations -->
+  <div class="card">
+    <div class="annotations">
+      <div class="highlight">
+        ⚡ 策略最大回撤 <strong id="ddStratLabel"></strong>，0050 最大回撤 <strong id="ddBHLabekl"></strong> —
+        壞年護本、好年跟漲
+      </div>
+      <ul>
+        <li><strong>2022 空頭年</strong>：0050 大跌 −21.7%，策略因訊號空手 / 輕倉，回撤遠小於大盤</li>
+        <li><strong>2023-2025 多頭</strong>：策略輪動到強勢股（2330 / 0050），跟上漲幅但無法全吃（有停利）</li>
+        <li><strong>總報酬</strong>：0050 DCA <span id="finalStratLabel"></span> vs 策略 <span id="finalBHLabe3"></span> — 多頭時領先、空頭時風險較高</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Data (embedded from Python) ──
+const DATA = [
+  {"date": "2020-02", "strategy": 17245.89, "buyhold": 38656.80, "invested": 20000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2020-03", "strategy": 15267.21, "buyhold": 50641.66, "invested": 40000, "strat_dd": -11.47, "bh_dd": 0.0},
+  {"date": "2020-04", "strategy": 17176.96, "buyhold": 79389.29, "invested": 60000, "strat_dd": -0.4, "bh_dd": 0.0},
+  {"date": "2020-05", "strategy": 39900.43, "buyhold": 98763.71, "invested": 80000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2020-06", "strategy": 71872.80, "buyhold": 126315.34, "invested": 100000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2020-07", "strategy": 111973.25, "buyhold": 170011.22, "invested": 120000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2020-08", "strategy": 108103.81, "buyhold": 186696.23, "invested": 140000, "strat_dd": -3.46, "bh_dd": 0.0},
+  {"date": "2020-09", "strategy": 136730.90, "buyhold": 208829.24, "invested": 160000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2020-10", "strategy": 167985.38, "buyhold": 228819.54, "invested": 180000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2020-11", "strategy": 199584.82, "buyhold": 273616.41, "invested": 200000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2020-12", "strategy": 234940.93, "buyhold": 316621.45, "invested": 220000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2021-01", "strategy": 283191.58, "buyhold": 360336.39, "invested": 240000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2021-02", "strategy": 313806.00, "buyhold": 395357.56, "invested": 260000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2021-03", "strategy": 353208.31, "buyhold": 419553.37, "invested": 280000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2021-04", "strategy": 416328.62, "buyhold": 458482.28, "invested": 300000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2021-05", "strategy": 400229.66, "buyhold": 466902.82, "invested": 320000, "strat_dd": -3.87, "bh_dd": 0.0},
+  {"date": "2021-06", "strategy": 413998.40, "buyhold": 493384.68, "invested": 340000, "strat_dd": -0.56, "bh_dd": 0.0},
+  {"date": "2021-07", "strategy": 430144.74, "buyhold": 504047.80, "invested": 360000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2021-08", "strategy": 455795.02, "buyhold": 540334.06, "invested": 380000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2021-09", "strategy": 473299.48, "buyhold": 547069.15, "invested": 400000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2021-10", "strategy": 497143.17, "buyhold": 562355.64, "invested": 420000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2021-11", "strategy": 540580.16, "buyhold": 591685.76, "invested": 440000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2021-12", "strategy": 608325.19, "buyhold": 644583.79, "invested": 460000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2022-01", "strategy": 607612.21, "buyhold": 660600.21, "invested": 480000, "strat_dd": -0.12, "bh_dd": 0.0},
+  {"date": "2022-02", "strategy": 630591.92, "buyhold": 665831.94, "invested": 500000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2022-03", "strategy": 621133.57, "buyhold": 683574.37, "invested": 520000, "strat_dd": -1.5, "bh_dd": 0.0},
+  {"date": "2022-04", "strategy": 608351.12, "buyhold": 656095.72, "invested": 540000, "strat_dd": -3.53, "bh_dd": -4.02},
+  {"date": "2022-05", "strategy": 627412.37, "buyhold": 681759.46, "invested": 560000, "strat_dd": -0.5, "bh_dd": -0.27},
+  {"date": "2022-06", "strategy": 579254.43, "buyhold": 626158.62, "invested": 580000, "strat_dd": -8.14, "bh_dd": -8.4},
+  {"date": "2022-07", "strategy": 619711.98, "buyhold": 669647.09, "invested": 600000, "strat_dd": -1.73, "bh_dd": -2.04},
+  {"date": "2022-08", "strategy": 645359.55, "buyhold": 688714.96, "invested": 620000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2022-09", "strategy": 606474.60, "buyhold": 623814.56, "invested": 640000, "strat_dd": -6.03, "bh_dd": -9.42},
+  {"date": "2022-10", "strategy": 610469.77, "buyhold": 616665.67, "invested": 660000, "strat_dd": -5.41, "bh_dd": -10.46},
+  {"date": "2022-11", "strategy": 709242.08, "buyhold": 747735.41, "invested": 680000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2022-12", "strategy": 687106.54, "buyhold": 726834.53, "invested": 700000, "strat_dd": -3.12, "bh_dd": -2.8},
+  {"date": "2023-01", "strategy": 762472.46, "buyhold": 819667.52, "invested": 720000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2023-02", "strategy": 800547.87, "buyhold": 843098.25, "invested": 740000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2023-03", "strategy": 861293.05, "buyhold": 883346.27, "invested": 760000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2023-04", "strategy": 854567.97, "buyhold": 872240.93, "invested": 780000, "strat_dd": -0.78, "bh_dd": -1.26},
+  {"date": "2023-05", "strategy": 1004831.92, "buyhold": 958686.19, "invested": 800000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2023-06", "strategy": 1139371.89, "buyhold": 1001736.25, "invested": 820000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2023-07", "strategy": 1447583.52, "buyhold": 1034000.96, "invested": 840000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2023-08", "strategy": 1497930.66, "buyhold": 1028534.85, "invested": 860000, "strat_dd": 0.0, "bh_dd": -0.53},
+  {"date": "2023-09", "strategy": 1470847.43, "buyhold": 1023062.14, "invested": 880000, "strat_dd": -1.81, "bh_dd": -1.06},
+  {"date": "2023-10", "strategy": 1356853.83, "buyhold": 1030051.11, "invested": 900000, "strat_dd": -9.42, "bh_dd": -0.38},
+  {"date": "2023-11", "strategy": 1493473.21, "buyhold": 1138351.50, "invested": 920000, "strat_dd": -0.3, "bh_dd": 0.0},
+  {"date": "2023-12", "strategy": 1630376.48, "buyhold": 1194438.08, "invested": 940000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2024-01", "strategy": 1709276.87, "buyhold": 1232748.07, "invested": 960000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2024-02", "strategy": 1781329.03, "buyhold": 1336202.32, "invested": 980000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2024-03", "strategy": 2012743.82, "buyhold": 1493508.50, "invested": 1000000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2024-04", "strategy": 1896529.66, "buyhold": 1517875.59, "invested": 1020000, "strat_dd": -5.77, "bh_dd": 0.0},
+  {"date": "2024-05", "strategy": 2094250.52, "buyhold": 1613472.23, "invested": 1040000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2024-06", "strategy": 2350559.81, "buyhold": 1834234.03, "invested": 1060000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2024-07", "strategy": 2169707.67, "buyhold": 1807716.99, "invested": 1080000, "strat_dd": -7.69, "bh_dd": -1.45},
+  {"date": "2024-08", "strategy": 2199421.11, "buyhold": 1832426.87, "invested": 1100000, "strat_dd": -6.43, "bh_dd": -0.1},
+  {"date": "2024-09", "strategy": 2183042.06, "buyhold": 1879040.92, "invested": 1120000, "strat_dd": -7.13, "bh_dd": 0.0},
+  {"date": "2024-10", "strategy": 2396016.26, "buyhold": 1980121.67, "invested": 1140000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2024-11", "strategy": 2337383.89, "buyhold": 1952806.73, "invested": 1160000, "strat_dd": -2.45, "bh_dd": -1.38},
+  {"date": "2024-12", "strategy": 2447745.61, "buyhold": 2061874.65, "invested": 1180000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2025-01", "strategy": 2471749.88, "buyhold": 2170673.72, "invested": 1200000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2025-02", "strategy": 2442576.80, "buyhold": 2095760.12, "invested": 1220000, "strat_dd": -1.18, "bh_dd": -3.45},
+  {"date": "2025-03", "strategy": 2245293.81, "buyhold": 1899113.35, "invested": 1240000, "strat_dd": -9.16, "bh_dd": -12.51},
+  {"date": "2025-04", "strategy": 2265342.14, "buyhold": 1872617.07, "invested": 1260000, "strat_dd": -8.35, "bh_dd": -13.73},
+  {"date": "2025-05", "strategy": 2379073.15, "buyhold": 2017178.98, "invested": 1280000, "strat_dd": -3.75, "bh_dd": -7.07},
+  {"date": "2025-06", "strategy": 2495323.09, "buyhold": 2192804.60, "invested": 1300000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2025-07", "strategy": 2645378.16, "buyhold": 2375266.36, "invested": 1320000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2025-08", "strategy": 2597252.90, "buyhold": 2439587.45, "invested": 1340000, "strat_dd": -1.82, "bh_dd": 0.0},
+  {"date": "2025-09", "strategy": 2770955.23, "buyhold": 2708100.33, "invested": 1360000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2025-10", "strategy": 2905023.24, "buyhold": 3056017.49, "invested": 1380000, "strat_dd": 0.0, "bh_dd": 0.0},
+  {"date": "2025-11", "strategy": 2868427.19, "buyhold": 2962182.94, "invested": 1400000, "strat_dd": -1.26, "bh_dd": -3.07},
+  {"date": "2025-12", "strategy": 2897115.16, "buyhold": 3116395.27, "invested": 1420000, "strat_dd": -0.27, "bh_dd": 0.0}
+];
+
+// ── Render ──
+function fmt(n) { return n.toLocaleString("en-US", {maximumFractionDigits:0}); }
+
+// Metrics
+const last = DATA[DATA.length-1];
+const totalInv = last.invested;
+const stratRoi = (last.strategy / totalInv - 1) * 100;
+const bhRoi = (last.buyhold / totalInv - 1) * 100;
+const maxDdS = Math.min(...DATA.map(d => d.strat_dd));
+const maxDdB = Math.min(...DATA.map(d => d.bh_dd));
+
+document.getElementById("metrics").innerHTML = `
+  <div class="metric"><div class="label">策略終值</div><div class="value">NT$${fmt(last.strategy)}</div><div class="subv">投入 NT$${fmt(totalInv)}</div></div>
+  <div class="metric"><div class="label">0050 DCA 終值</div><div class="value">NT$${fmt(last.buyhold)}</div><div class="subv">投入 NT$${fmt(totalInv)}</div></div>
+  <div class="metric"><div class="label">策略報酬率</div><div class="value">${stratRoi.toFixed(1)}%</div><div class="subv">年化 {{(((1+stratRoi/100)**(1/6)-1)*100).toFixed(1)}}%</div></div>
+  <div class="metric"><div class="label">0050 報酬率</div><div class="value">${bhRoi.toFixed(1)}%</div><div class="subv">年化 {{(((1+bhRoi/100)**(1/6)-1)*100).toFixed(1)}}%</div></div>
+  <div class="metric"><div class="label">策略最大回撤</div><div class="value text-green">${maxDdS.toFixed(1)}%</div><div class="subv">0050: ${maxDdB.toFixed(1)}%</div></div>
+  <div class="metric"><div class="label">0050 最大回撤</div><div class="value text-red">${maxDdB.toFixed(1)}%</div></div>
+`;
+
+// Fix labels
+document.getElementById("ddStratLabel").textContent = `${maxDdS.toFixed(1)}%`;
+document.getElementById("ddBHLabekl").textContent = `${maxDdB.toFixed(1)}%`;
+document.getElementById("finalStratLabel").textContent = `${stratRoi.toFixed(1)}%`;
+document.getElementById("finalBHLabe3").textContent = `${bhRoi.toFixed(1)}%`;
+
+// Chart dimensions
+const W = 860, H = 320, DD_H = 44, PAD = {top:8,bottom:4,left:0,right:8};
+const dates = DATA.map(d => d.date);
+const stratVals = DATA.map(d => d.strategy);
+const bhVals = DATA.map(d => d.buyhold);
+const invVals = DATA.map(d => d.invested);
+const stratDd = DATA.map(d => d.strat_dd);
+const bhDd = DATA.map(d => d.bh_dd);
+
+const allVals = [...stratVals, ...bhVals, ...invVals];
+const yMin = 0;
+const yMax = Math.max(...allVals) * 1.05;
+const ddMin = Math.min(0, ...stratDd, ...bhDd);
+const ddMax = 2;
+
+function xPos(i) { return PAD.left + (i / (DATA.length-1)) * (W - PAD.left - PAD.right); }
+function yPos(v, min=yMin, max=yMax, h=H) { return PAD.top + (1 - (v-min)/(max-min)) * (h - PAD.top - PAD.bottom); }
+function ddPos(v, h=DD_H) { return (1 - (v-ddMin)/(ddMax-ddMin)) * h; }
+
+function makePath(data, min, max, h) {
+  return data.map((v,i) => {
+    const x = xPos(i);
+    const y = yPos(v, min, max, h);
+    return (i===0 ? "M" : "L") + x.toFixed(1) + "," + y.toFixed(1);
+  }).join("");
+}
+
+// Main equity chart
+const svg = document.getElementById("mainChart");
+svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+
+// Grid lines
+for (let p = 0; p <= 4; p++) {
+  const v = yMin + (yMax - yMin) * p / 4;
+  const y = yPos(v);
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  line.setAttribute("x1", PAD.left); line.setAttribute("x2", W - PAD.right);
+  line.setAttribute("y1", y); line.setAttribute("y2", y);
+  line.setAttribute("stroke", "#21262d"); line.setAttribute("stroke-width", "1");
+  svg.appendChild(line);
+}
+
+// Invested line (dashed)
+const invPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+invPath.setAttribute("d", makePath(invVals, yMin, yMax, H));
+invPath.setAttribute("fill", "none");
+invPath.setAttribute("stroke", "#484f58");
+invPath.setAttribute("stroke-width", "1.5");
+invPath.setAttribute("stroke-dasharray", "5,4");
+svg.appendChild(invPath);
+
+// 0050 DCA area
+const bhPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+const bhArea = bhVals.map((v,i) => {
+  const x = xPos(i);
+  const y = yPos(v);
+  const y0 = yPos(0);
+  return (i===0 ? "M" : "L") + x.toFixed(1) + "," + y.toFixed(1);
+}).join("") + ` L${xPos(DATA.length-1).toFixed(1)},${yPos(0).toFixed(1)} L${xPos(0).toFixed(1)},${yPos(0).toFixed(1)} Z`;
+const bhFill = document.createElementNS("http://www.w3.org/2000/svg", "path");
+bhFill.setAttribute("d", bhArea);
+bhFill.setAttribute("fill", "rgba(88,166,255,.08)");
+svg.appendChild(bhFill);
+
+const bhLine = document.createElementNS("http://www.w3.org/2000/svg", "path");
+bhLine.setAttribute("d", makePath(bhVals, yMin, yMax, H));
+bhLine.setAttribute("fill", "none");
+bhLine.setAttribute("stroke", "#58a6ff");
+bhLine.setAttribute("stroke-width", "2");
+svg.appendChild(bhLine);
+
+// Strategy line
+const stPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+stPath.setAttribute("d", makePath(stratVals, yMin, yMax, H));
+stPath.setAttribute("fill", "none");
+stPath.setAttribute("stroke", "#d29922");
+stPath.setAttribute("stroke-width", "2.5");
+svg.appendChild(stPath);
+
+// Y axis labels
+const yLabel = document.getElementById("yLabel");
+yLabel.innerHTML = "";
+for (let p = 0; p <= 4; p++) {
+  const v = yMin + (yMax - yMin) * p / 4;
+  const span = document.createElement("span");
+  span.textContent = "$" + (v/10000).toFixed(0) + "萬";
+  yLabel.appendChild(span);
+}
+
+// X axis labels (year marks)
+const xLabel = document.getElementById("xLabel");
+const yearMarks = [0];
+for (let i = 0; i < DATA.length; i++) {
+  const d = DATA[i].date;
+  if (d.endsWith("01") && i > 0) yearMarks.push(i);
+}
+yearMarks.push(DATA.length-1);
+xLabel.innerHTML = yearMarks.map(i => {
+  const pct = (i / (DATA.length-1)) * 100;
+  return `<span style="width:${pct > 0 ? (i === DATA.length-1 ? 0 : (yearMarks[yearMarks.indexOf(i)+1]-i)/(DATA.length-1)*100) : yearMarks[1]/(DATA.length-1)*100}%;text-align:${i===0?'left':i===DATA.length-1?'right':'center'}">${DATA[i].date}</span>`;
+}).join("");
+
+// Drawdown chart
+const ddSvg = document.getElementById("ddChart");
+ddSvg.setAttribute("viewBox", `0 0 ${W} ${DD_H}`);
+
+// 0050 dd
+const bhDdPath = bhDd.map((v,i) => {
+  const x = xPos(i);
+  const y = ddPos(v);
+  return (i===0?"M":"L") + x.toFixed(1) + "," + y.toFixed(1);
+}).join("");
+const bhDdLine = document.createElementNS("http://www.w3.org/2000/svg", "path");
+bhDdLine.setAttribute("d", bhDdPath);
+bhDdLine.setAttribute("fill", "none");
+bhDdLine.setAttribute("stroke", "#58a6ff");
+bhDdLine.setAttribute("stroke-width", "1.5");
+ddSvg.appendChild(bhDdLine);
+
+// Zero line
+const zeroLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+zeroLine.setAttribute("x1", PAD.left);
+zeroLine.setAttribute("x2", W - PAD.right);
+zeroLine.setAttribute("y1", ddPos(0));
+zeroLine.setAttribute("y2", ddPos(0));
+zeroLine.setAttribute("stroke", "#30363d");
+zeroLine.setAttribute("stroke-width", "1");
+ddSvg.appendChild(zeroLine);
+
+// Strategy dd
+const stDdPath = stratDd.map((v,i) => {
+  const x = xPos(i);
+  const y = ddPos(v);
+  return (i===0?"M":"L") + x.toFixed(1) + "," + y.toFixed(1);
+}).join("");
+const stDdLine = document.createElementNS("http://www.w3.org/2000/svg", "path");
+stDdLine.setAttribute("d", stDdPath);
+stDdLine.setAttribute("fill", "none");
+stDdLine.setAttribute("stroke", "#d29922");
+stDdLine.setAttribute("stroke-width", "2");
+ddSvg.appendChild(stDdLine);
+
+// ── Tooltip (mousemove) ──
+const tooltip = document.getElementById("tooltip");
+const chartArea = document.getElementById("chartArea");
+
+chartArea.addEventListener("mousemove", function(e) {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const pct = mx / rect.width;
+  const idx = Math.round(pct * (DATA.length - 1));
+  if (idx < 0 || idx >= DATA.length) { tooltip.classList.remove("show"); return; }
+
+  const d = DATA[idx];
+  tooltip.innerHTML = `
+    <div class="tt-date">${d.date}</div>
+    <div class="tt-row"><span><span class="tt-dot" style="background:#58a6ff"></span>0050 DCA</span><span>NT$${fmt(d.buyhold)}</span></div>
+    <div class="tt-row"><span><span class="tt-dot" style="background:#d29922"></span>策略配置</span><span>NT$${fmt(d.strategy)}</span></div>
+    <div class="tt-row" style="color:#484f58"><span>累計投入</span><span>NT$${fmt(d.invested)}</span></div>
+    <div class="tt-row" style="font-size:11px;margin-top:2px;padding-top:4px;border-top:1px solid #21262d">
+      <span>回撤</span>
+      <span>策略 <span class="${d.strat_dd < -5 ? 'text-red' : 'text-green'}">${d.strat_dd.toFixed(1)}%</span> · 0050 <span class="${d.bh_dd < -5 ? 'text-red' : 'text-green'}">${d.bh_dd.toFixed(1)}%</span></span>
+    </div>
+  `;
+
+  const tx = Math.min(mx + 12, rect.width - 200);
+  const ty = Math.max(10, e.clientY - rect.top - 80);
+  tooltip.style.left = tx + "px";
+  tooltip.style.top = ty + "px";
+  tooltip.classList.add("show");
+});
+
+chartArea.addEventListener("mouseleave", function() {
+  tooltip.classList.remove("show");
+});
+</script>
+</body>
+</html>
