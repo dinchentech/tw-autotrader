@@ -2,8 +2,8 @@ name: Deploy Dashboard
 
 on:
   schedule:
-    # 每日 13:45 Taipei（05:45 UTC），週一至週五，VM 關機前 15 分鐘
-    - cron: '45 5 * * 1-5'
+    # 每日 08:45 Taipei（00:45 UTC），週一至週五
+    - cron: '45 0 * * 1-5'
   workflow_dispatch:
 
 permissions:
