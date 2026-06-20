@@ -6,8 +6,11 @@ Institutional Momentum Strategy — 法人抬轎動能策略
   2. 依投信+外資買超佔比排序，選前 N 名（預設 2 檔）
   3. 週一開盤買入，每檔配置 (alloc / N)
   4. 每日監控：硬性停損 -7%、跌破 MA10 移動停利
+
+共用核心邏輯來自 core/inst_strategy_core.py，確保回測與實盤一致性。
 """
 import os
+import math
 import json
 import time
 import requests
@@ -18,6 +21,14 @@ from pathlib import Path
 
 from FinMind.data import DataLoader
 from FinMind.schema.data import Dataset
+
+import core.inst_strategy_core as inst_core
+from core.inst_strategy_core import (
+    check_momentum_entry as _core_check_momentum_entry,
+    check_position_exit as _core_check_position_exit,
+    compute_profit_roll as _core_compute_profit_roll,
+    log_capital_roll as _core_log_capital_roll,
+)
 
 
 class InstitutionalMomentumStrategy:
@@ -61,6 +72,8 @@ class InstitutionalMomentumStrategy:
             "positions": {},          # { stock_id: { buy_price, shares, cost, entry_date } }
             "last_screen_date": None, # 上次篩選日期 "YYYY-MM-DD"
             "last_entry_date": None,  # 上次進場日期 "YYYY-MM-DD"
+            "loser_ban": {},          # { stock_id: "YYYY-MM-DD" } 停損禁入清單
+            "last_roll_date": None,   # 上次獲利滾入日期 "YYYY-MM-DD"
         }
         if self.state_file.exists():
             try:
@@ -375,74 +388,84 @@ class InstitutionalMomentumStrategy:
         return pd.DataFrame(rows)
 
     # ================================================================
-    # 核心篩選邏輯
+    # 核心篩選邏輯（使用共用核心，確保回測與實盤一致性）
     # ================================================================
+    def _build_core_dataframe(self, stock_id: str) -> pd.DataFrame:
+        """
+        將個股的價格資料與法人資料合併為 core 所需格式。
+        回傳 DataFrame 含 columns: date, close, volume, ma20, inst_buy, inst_sell
+        """
+        # 1. 價格資料
+        df_price = self._get_price_data(stock_id, days=self.lookback + 10)
+        if df_price.empty or len(df_price) < self.lookback:
+            return pd.DataFrame()
+
+        # 計算 MA20
+        df_price = df_price.copy()
+        df_price["ma20"] = pd.Series(df_price["close"].values).rolling(self.lookback).mean().values
+
+        # 2. 法人資料
+        df_inst = self._get_institutional_data(stock_id, days=15)
+        if df_inst.empty:
+            return pd.DataFrame()
+
+        # 聚合法人資料為每日 inst_buy / inst_sell（投信+外資）
+        mask = df_inst["name"].isin(["投信", "外資"])
+        inst_agg = df_inst[mask].groupby("date").agg(
+            inst_buy=("buy", "sum"),
+            inst_sell=("sell", "sum"),
+        ).reset_index()
+
+        # 3. 合併
+        df = pd.merge(df_price, inst_agg, on="date", how="left")
+        df["inst_buy"] = df["inst_buy"].fillna(0)
+        df["inst_sell"] = df["inst_sell"].fillna(0)
+
+        return df
+
     def get_candidates(self) -> list:
         """
         篩選出符合條件的候選股票，依法人買超佔比排序，回傳前 N 名。
+        兩階段篩選：① fish 低吃過濾 → ② 動能進場檢查。
         回傳格式: [(stock_id, score), ...]
         """
         all_ids = self._get_all_stock_ids()
-        candidates = []
+        check_date = date.today()
+        loser_ban = self.state.get("loser_ban", {})
 
-        # 逐檔篩選（價格 + 法人資料，含 FinMind → TWSE 備援）
+        fish_enabled = os.getenv("INST_MOM_FISH_FILTER", "true").lower() == "true"
+        fish_days = int(os.getenv("INST_MOM_FISH_DAYS", "60"))
+        fish_min = float(os.getenv("INST_MOM_FISH_MIN_SCORE", "4.0"))
+
+        all_data = {}
         for stock_id in all_ids:
+            if inst_core.is_banned(stock_id, check_date, loser_ban):
+                continue
+            df = self._build_core_dataframe(stock_id)
+            if not df.empty:
+                all_data[stock_id] = df
+
+        if fish_enabled and all_data:
+            fish_scores = inst_core.precompute_fish_scores(all_data)
+            fish_qualified = inst_core.screen_fish_qualified(
+                all_data, check_date, fish_scores, fish_days, fish_min)
+        else:
+            fish_qualified = set(all_data.keys())
+
+        candidates = []
+        for stock_id in fish_qualified:
             try:
-                # 1. 價格資料
-                df_price = self._get_price_data(stock_id, days=self.lookback + 10)
-                if df_price.empty or len(df_price) < self.lookback:
+                df = all_data[stock_id]
+                vol_5 = df.tail(5)["volume"].mean() / 1000
+                if vol_5 < self.min_volume:
                     continue
-
-                # 最近 5 日
-                recent_5 = df_price.tail(5)
-                # 流動性：近 5 日平均成交量 > min_volume（張）
-                avg_volume = recent_5["volume"].mean() / 1000  # 股 → 張
-                if avg_volume < self.min_volume:
-                    continue
-
-                close = df_price["close"].values
-                latest_close = close[-1]
-
-                # 創 20 日新高
-                if latest_close < close[-self.lookback:].max():
-                    continue
-
-                # 站穩 MA20
-                ma20 = pd.Series(close).rolling(self.lookback).mean().iloc[-1]
-                if latest_close <= ma20:
-                    continue
-
-                # 2. 法人資料（近 5 日，FinMind → TWSE 備援）
-                df_inst = self._get_institutional_data(stock_id, days=10)
-                if df_inst.empty:
-                    continue
-
-                # 只取近 5 日交易日
-                inst_dates = sorted(df_inst["date"].unique())[-5:]
-                df_inst_recent = df_inst[df_inst["date"].isin(inst_dates)]
-
-                # 投信 + 外資 淨買超總額
-                mask = df_inst_recent["name"].isin(["投信", "外資"])
-                institutional_net_buy = df_inst_recent[mask]["buy"].sum() - df_inst_recent[mask]["sell"].sum()
-
-                # 近 5 日總成交量（張）
-                total_volume_5 = recent_5["volume"].sum() / 1000  # 股 → 張
-
-                if institutional_net_buy <= 0 or total_volume_5 <= 0:
-                    continue
-
-                buy_ratio = institutional_net_buy / total_volume_5
-
-                if buy_ratio < self.buy_ratio:
-                    continue
-
-                score = round(buy_ratio, 4)
-                candidates.append((stock_id, score))
-
+                single = {stock_id: df}
+                ok, score = _core_check_momentum_entry(single, stock_id, check_date)
+                if ok:
+                    candidates.append((stock_id, score))
             except Exception:
                 continue
 
-        # 依分數降序排序，取前 N 名
         candidates.sort(key=lambda x: x[1], reverse=True)
         return candidates[:self.top_n]
 
@@ -452,37 +475,75 @@ class InstitutionalMomentumStrategy:
     def check_exit_signals(self, current_prices: dict) -> dict:
         """
         檢查所有持倉標的，回傳需要賣出的標的與原因。
+        使用共用核心 check_position_exit 確保停損/停利邏輯一致。
         current_prices: { stock_id: current_price }
         回傳: { stock_id: "reason_string" }
         """
         signals = {}
         positions = self.state.get("positions", {})
 
-        for stock_id, pos in positions.items():
+        for stock_id, pos in list(positions.items()):
             price = current_prices.get(stock_id)
-            if price is None:
+            if price is None or price <= 0:
                 continue
 
             buy_price = pos.get("buy_price", 0)
             if buy_price <= 0:
                 continue
 
-            # 硬性停損 -7%
+            core_positions = {
+                stock_id: {
+                    "buy_price": buy_price,
+                    "shares": pos.get("shares", 0),
+                    "buy_date": pos.get("entry_date", ""),
+                    "last_roll_date": self.state.get("last_roll_date"),
+                }
+            }
+            price_info = {"close": price}
+            tmp_log = []
+            proceeds, cost_basis, _ = _core_check_position_exit(
+                stock_id, core_positions, price_info, date.today(), 0, tmp_log
+            )
+            if proceeds > 0 and tmp_log:
+                signals[stock_id] = tmp_log[0].get("reason", "出場訊號")
+
+        return signals
+
+    def check_daily_review(self, current_prices: dict) -> dict:
+        signals = {}
+        positions = self.state.get("positions", {})
+        for stock_id, pos in positions.items():
+            price = current_prices.get(stock_id)
+            if price is None or price <= 0:
+                continue
+            buy_price = pos.get("buy_price", 0)
+            if buy_price <= 0:
+                continue
             loss_pct = (price - buy_price) / buy_price
             if loss_pct <= -self.stop_loss:
-                signals[stock_id] = f"硬性停損 {loss_pct:.1%}"
                 continue
-
-            # 移動停利：跌破 MA10
+            sell_reason = None
             try:
-                df_price = self._get_price_data(stock_id, days=self.trailing_period + 5)
-                if not df_price.empty and len(df_price) >= self.trailing_period:
-                    ma10 = df_price["close"].rolling(self.trailing_period).mean().iloc[-1]
-                    if price < ma10 and loss_pct > 0:
-                        signals[stock_id] = f"跌破 MA10 ({ma10:.0f}) 移動停利 {loss_pct:.1%}"
+                df_price = self._get_price_data(stock_id, days=self.lookback + 5)
+                if df_price.empty or len(df_price) < self.lookback:
+                    continue
+                close = df_price["close"].values
+                ma20 = pd.Series(close).rolling(self.lookback).mean().iloc[-1]
+                if price < ma20:
+                    sell_reason = f"每日檢討：跌破 MA20({ma20:.0f})"
+                else:
+                    df_inst = self._get_institutional_data(stock_id, days=5)
+                    if not df_inst.empty:
+                        inst_dates = sorted(df_inst["date"].unique())[-5:]
+                        df_inst_recent = df_inst[df_inst["date"].isin(inst_dates)]
+                        mask = df_inst_recent["name"].isin(["投信", "外資"])
+                        net_buy = df_inst_recent[mask]["buy"].sum() - df_inst_recent[mask]["sell"].sum()
+                        if net_buy < 0:
+                            sell_reason = f"每日檢討：法人轉賣(淨買{net_buy})"
             except Exception:
                 continue
-
+            if sell_reason:
+                signals[stock_id] = sell_reason
         return signals
 
     # ================================================================
@@ -627,22 +688,63 @@ class InstitutionalMomentumStrategy:
             if not current_prices:
                 return
 
-            exit_signals = self.check_exit_signals(current_prices)
-            for sid, reason in exit_signals.items():
+            profit_roll_months = int(os.getenv("INST_MOM_PROFIT_ROLL_MONTHS",
+                                        os.getenv("PROFIT_ROLL_MONTHS", "0")))
+            profit_roll_pct = float(os.getenv("INST_MOM_PROFIT_ROLL_PCT",
+                                       os.getenv("PROFIT_ROLL_PERCENTAGE", "1.0")))
+            loser_ban_days = int(os.getenv("INST_MOM_LOSER_BAN_DAYS", "0"))
+
+            def _execute_sell(sid, reason):
                 shares = holdings.get(sid, 0)
                 if shares <= 0:
-                    continue
+                    return
+                pos = self.state.get("positions", {}).get(sid)
+                if not pos:
+                    return
 
+                price = current_prices.get(sid, 0)
+                broker.place_order(sid, "sell", shares)
+                self._record_trade("SELL", sid, shares, price, pnl)
+                print(f"🛑 [INST_MOM] 觸發出場: {sid} ({reason}), 賣出 {shares} 股")
+                if sid in self.state["positions"]:
+                    del self.state["positions"][sid]
+
+                buy_price = pos.get("buy_price", 0)
+                pnl_amount = (price - buy_price) * shares if price > 0 and buy_price > 0 else 0
+
+                if loser_ban_days > 0 and pnl_amount < 0:
+                    inst_core.add_loser_ban(sid, now.date(),
+                                            self.state.setdefault("loser_ban", {}),
+                                            loser_ban_days)
+
+                if pnl_amount > 0:
+                    roll_months = profit_roll_months
+                    roll_pct = profit_roll_pct
+                    can_roll, rolled = _core_compute_profit_roll(
+                        pnl_amount, roll_months, roll_pct,
+                        self.state.get("last_roll_date"), now.date())
+                    if can_roll and rolled > 0:
+                        self.capital += rolled
+                        self.state["last_roll_date"] = now.date().isoformat()
+                        print(f"💰 [INST_MOM] 獲利滾入: {sid} +{rolled:.0f} → 資金池 {self.capital:.0f} (M={roll_months}, P={roll_pct:.0%})")
+                        _core_log_capital_roll("INST_MOM_ROLL", sid, rolled, self.capital,
+                                               now.strftime("%Y-%m-%d %H:%M"))
+
+                self._save_state()
+
+                from utils.telegram import send_trade_alert
+                send_trade_alert(sid, "SELL", current_prices.get(sid, 0), shares, "INST_MOM")
+
+            exit_signals = self.check_exit_signals(current_prices)
+            for sid, reason in exit_signals.items():
                 try:
-                    price = current_prices.get(sid, 0)
-                    broker.place_order(sid, "sell", shares)
-                    self._record_trade("SELL", sid, shares, price, pnl)
-                    print(f"🛑 [INST_MOM] 觸發出場: {sid} ({reason}), 賣出 {shares} 股")
-                    if sid in self.state["positions"]:
-                        del self.state["positions"][sid]
-                    self._save_state()
-
-                    from utils.telegram import send_trade_alert
-                    send_trade_alert(sid, "SELL", current_prices.get(sid, 0), shares, "INST_MOM")
+                    _execute_sell(sid, reason)
                 except Exception as e:
                     print(f"❌ [INST_MOM] 出場 {sid} 失敗: {e}")
+
+            review_signals = self.check_daily_review(current_prices)
+            for sid, reason in review_signals.items():
+                try:
+                    _execute_sell(sid, reason)
+                except Exception as e:
+                    print(f"❌ [INST_MOM] 每日檢討出場 {sid} 失敗: {e}")
