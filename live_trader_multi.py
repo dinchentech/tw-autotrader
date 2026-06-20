@@ -54,6 +54,51 @@ STRATEGY_FUNCS = {
     "keep_wait": keep_wait_strategy,
 }
 
+
+def read_capital_file(filepath: str = "capital.txt") -> list:
+    """
+    讀取 capital.txt，回傳 [(date_str, amount), ...]
+    格式: 金額, YYYY/MM/DD  # comment
+    金額可為負數（代表提領）
+    """
+    entries = []
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "," in line:
+                    parts = line.split(",", 1)
+                    amount_str = parts[0].strip()
+                    date_part = parts[1].strip()
+                    if "#" in date_part:
+                        date_part = date_part.split("#")[0].strip()
+                    try:
+                        amount = float(amount_str)
+                        date_str = date_part.replace("/", "-")
+                        entries.append((date_str, amount))
+                    except (ValueError, IndexError):
+                        continue
+    except FileNotFoundError:
+        pass
+    return entries
+
+
+def load_processed_capital(filepath: str = "logs/processed_capital.json") -> list:
+    """已處理的資金紀錄（避免重複處理）"""
+    try:
+        with open(filepath, "r") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+
+def save_processed_capital(processed: list, filepath: str = "logs/processed_capital.json"):
+    Path(filepath).parent.mkdir(parents=True, exist_ok=True)
+    with open(filepath, "w") as f:
+        json.dump(processed, f, indent=2)
+
 # ==========================================
 # 系統級參數
 # ==========================================
@@ -61,6 +106,7 @@ TOTAL_CAPITAL = float(os.getenv("TOTAL_CAPITAL", os.getenv("INITIAL_CAPITAL", 50
 INST_MOM_CAPITAL = float(os.getenv("INST_MOM_CAPITAL", 0))
 USE_REAL_API = os.getenv("USE_REAL_API", "false").lower() == "true"
 BROKER = os.getenv("BROKER", "kgi").lower()
+DCA_AMOUNT = int(os.getenv("DCA_AMOUNT", "0"))
 
 
 def _create_broker():
@@ -156,8 +202,8 @@ def _next_market_open(now: datetime) -> datetime:
     return now.replace(hour=8, minute=45) + timedelta(days=1)
 
 
-APP_VERSION = "1.11"
-BUILD_DATE = "2026-06-18"
+APP_VERSION = "1.3"
+BUILD_DATE = "2026-06-20"
 
 
 def get_stock_capital(symbol: str) -> float:
@@ -355,6 +401,103 @@ def main():
         print("ℹ️ Group 2 法人抬轎動能未啟用（INST_MOM_CAPITAL=0）")
 
     daily_report_sent_date = None
+    last_capital_check_date = None
+    processed_capital = load_processed_capital()
+
+    def check_capital_injections():
+        """檢查 capital.txt 新增資金投入，自動調整並執行 keep_wait 購買"""
+        nonlocal TOTAL_CAPITAL, last_capital_check_date, processed_capital
+
+        today = date.today().isoformat()
+        if last_capital_check_date == today:
+            return
+        last_capital_check_date = today
+
+        entries = read_capital_file()
+        new_entries = [(d, a) for d, a in entries if f"{d}" not in processed_capital]
+
+        if not new_entries:
+            return
+
+        for date_str, amount in new_entries:
+            if amount == 0:
+                continue
+
+            old_capital = TOTAL_CAPITAL
+            TOTAL_CAPITAL += amount
+            processed_capital.append(date_str)
+
+            source = "外部加碼" if amount > 0 else "資金提領"
+            msg = f"💰 *資金變動*\n日期: {date_str}\n{source}: NT${amount:,.0f}\n資本: NT${old_capital:,.0f} → NT${TOTAL_CAPITAL:,.0f}"
+            send_telegram_message(msg)
+            print(f"💰 {date_str} {source} NT${amount:,.0f}，資本更新為 NT${TOTAL_CAPITAL:,.0f}")
+
+            if amount > 0:
+                for symbol, cfg in PORTFOLIO_CONFIG.items():
+                    if cfg.get("strategy") != "keep_wait":
+                        continue
+                    alloc_pct = float(cfg.get("alloc", 20))
+                    share_amount = TOTAL_CAPITAL * alloc_pct / 100.0
+                    initial_buy_pct = float(cfg.get("initial_buy_pct", 0.7))
+                    buy_amount = share_amount * initial_buy_pct
+
+                    current_price = 0
+                    try:
+                        current_price = broker.get_current_price(symbol)
+                    except Exception:
+                        pass
+                    if current_price <= 0:
+                        continue
+
+                    buy_shares = int(buy_amount / current_price)
+                    if buy_shares <= 0:
+                        continue
+
+                    try:
+                        broker.place_order(symbol, "buy", buy_shares)
+                        risk_manager.log_trade(symbol, 1, current_price, buy_shares)
+                        holdings[symbol] = holdings.get(symbol, 0) + buy_shares
+                        save_holdings(holdings)
+                        print(f"📥 {symbol} keep_wait 加碼 {buy_shares} 股 @ {current_price:.0f}")
+                        send_telegram_message(f"📥 *{symbol}* keep_wait 加碼 {buy_shares} 股 @ {current_price:.0f}")
+                    except Exception as e:
+                        print(f"❌ {symbol} keep_wait 加碼失敗: {e}")
+
+        save_processed_capital(processed_capital)
+
+    def execute_keep_wait_on_profit_roll(symbol: str, profit_amount: float):
+        """獲利滾入時執行 keep_wait 購買"""
+        if profit_amount <= 0:
+            return
+
+        cfg = PORTFOLIO_CONFIG.get(symbol, {})
+        if cfg.get("strategy") != "keep_wait":
+            return
+
+        initial_buy_pct = float(cfg.get("initial_buy_pct", 0.7))
+        buy_amount = profit_amount * initial_buy_pct
+
+        current_price = 0
+        try:
+            current_price = broker.get_current_price(symbol)
+        except Exception:
+            pass
+        if current_price <= 0:
+            return
+
+        buy_shares = int(buy_amount / current_price)
+        if buy_shares <= 0:
+            return
+
+        try:
+            broker.place_order(symbol, "buy", buy_shares)
+            risk_manager.log_trade(symbol, 1, current_price, buy_shares)
+            holdings[symbol] = holdings.get(symbol, 0) + buy_shares
+            save_holdings(holdings)
+            print(f"📥 {symbol} 獲利滾入加碼 {buy_shares} 股 @ {current_price:.0f}（NT${profit_amount:,.0f} × {initial_buy_pct:.0%}）")
+            send_telegram_message(f"📥 *{symbol}* 獲利滾入加碼 {buy_shares} 股 @ {current_price:.0f}")
+        except Exception as e:
+            print(f"❌ {symbol} 獲利滾入加碼失敗: {e}")
 
     # ==========================================
     # 主循環
@@ -363,6 +506,8 @@ def main():
         now = datetime.now()
         is_weekday = now.weekday() < 5
         h, m = now.hour, now.minute
+
+        check_capital_injections()
 
         # ------------------------------------------------------------
         # 時段 1：盤中 08:45-13:30 → 正常交易
@@ -603,9 +748,12 @@ def main():
                                 if alloc_data["total_buy_shares"] > 0:
                                     avg_cost = alloc_data["total_buy_cost"] / alloc_data["total_buy_shares"]
                                     cost_basis = avg_cost * position_size
+                                    profit = sell_proceeds - cost_basis
                                     alloc_data["total_buy_cost"] = max(0, alloc_data["total_buy_cost"] - cost_basis)
                                     alloc_data["total_buy_shares"] = max(0, alloc_data["total_buy_shares"] - position_size)
                                     save_stock_allocation(stock_alloc)
+                                    if profit > 0 and strategy_name == "keep_wait":
+                                        execute_keep_wait_on_profit_roll(symbol, profit)
 
                         if action == "BUY":
                             trade_cost = current_price * position_size

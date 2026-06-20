@@ -41,14 +41,18 @@ parser.add_argument("--top", type=int, default=0, help="篩選標的數（預設
 parser.add_argument("--buy-ratio", type=float, default=None, help="法人買超門檻（預設 0.03）")
 parser.add_argument("--stop-loss", type=float, default=None, help="停損幅度（預設 0.07）")
 parser.add_argument("--min-volume", type=int, default=None, help="流動性門檻（張，預設 2000）")
-parser.add_argument("--loser-ban", type=int, default=None, help="停損黑名單天數（預設 30）")
+parser.add_argument("--loser-ban", type=int, default=None, help="停損黑名單天數（預設 0=停用）")
 parser.add_argument("--lookback", type=int, default=None, help="創高/MA 回溯期（預設 20）")
-parser.add_argument("--fish-pre-filter", action="store_true", help="啟用法人低吃過濾（需有低吃分數才進場）")
+parser.add_argument("--no-fish-pre-filter", dest="fish_pre_filter", action="store_false",
+                    help="停用法人低吃過濾（預設啟用）")
+parser.set_defaults(fish_pre_filter=True)
 parser.add_argument("--fish-days", type=int, default=None, help="低吃回溯天數（預設 60）")
 parser.add_argument("--fish-score", type=float, default=None, help="低吃最低分數門檻（預設 4.0）")
 parser.add_argument("--auto-capital", action="store_true", help="啟用自動化加碼（每M個月賺錢時自動增加投入本金）")
 parser.add_argument("--auto-cap-months", type=int, default=3, help="自動化加碼檢討週期（月數，預設 3）")
-parser.add_argument("--auto-cap-ratio", type=float, default=0.5, help="自動化加碼比例（獲利的%，0.5=加碼50%獲利，預設 0.5）")
+parser.add_argument("--auto-cap-ratio", type=float, default=0.5, help="自動化加碼比例（獲利的%%，0.5=加碼50%%獲利，預設 0.5）")
+parser.add_argument("--profit-roll-months", type=float, default=0, help="獲利滾入週期（月，0=每次賣出都滾入，預設 0）")
+parser.add_argument("--profit-roll-percentage", type=float, default=1.0, help="獲利滾入比例（0-1，1.0=100%%滾入，預設 1.0）")
 args = parser.parse_args()
 
 START_DATE = args.start
@@ -69,9 +73,9 @@ BUY_RATIO_THRESHOLD = 0.03
 LOOKBACK = 20
 STOP_LOSS = 0.07
 TRAILING_PERIOD = 10
-LOSER_BAN_DAYS = 30             # 停損出場後禁止再次買入的天數
-BUY_COST = 0.001425             # 手續費 0.1425%
-SELL_COST = 0.004425            # 手續費 0.1425% + 交易稅 0.3%
+LOSER_BAN_DAYS = int(os.getenv("INST_MOM_LOSER_BAN_DAYS", "0"))
+BUY_COST = 0.001425
+SELL_COST = 0.004425
 
 # ─── CLI 參數覆蓋常數 ─────────────────────────────────
 if args.buy_ratio is not None:
@@ -93,6 +97,8 @@ FISH_MIN_SCORE = args.fish_score if args.fish_score is not None else 4.0
 AUTO_CAPITAL = args.auto_capital
 AUTO_CAP_MONTHS = args.auto_cap_months
 AUTO_CAP_RATIO = args.auto_cap_ratio
+PROFIT_ROLL_MONTHS = args.profit_roll_months
+PROFIT_ROLL_PERCENTAGE = args.profit_roll_percentage
 
 
 def finmind_login():
@@ -507,17 +513,18 @@ def screen_candidates(all_data: dict, screening_date: pd.Timestamp) -> list:
 def check_position_exit(
     sid: str, positions: dict, daily_prices: dict, d: date, cash: float,
     trade_log: list, price_cache: dict
-) -> float:
-    """檢查單一持倉是否需要出場。回傳出場收回的 cash（0 代表續抱）。"""
+) -> tuple:
+    """檢查單一持倉是否需要出場。回傳 (出場收回的 cash, cost_basis, last_roll_date)（0 代表續抱）。"""
     pos = positions[sid]
 
     price_info = daily_prices.get(sid, {})
     current_price = price_info.get("close", 0)
     if current_price <= 0:
-        return 0
+        return (0, 0, None)
 
     loss_pct = (current_price - pos["buy_price"]) / pos["buy_price"]
 
+    # 硬性停損 -7%
     if loss_pct <= -STOP_LOSS:
         sell_price = current_price
         reason = f"硬性停損 {loss_pct:.1%}"
@@ -528,14 +535,14 @@ def check_position_exit(
             sell_price = current_price
             reason = f"跌破 MA10({ma10:.0f})移動停利"
         else:
-            return 0  # 續抱
+            return (0, 0, None)  # 續抱
     else:
-        return 0  # 小虧但沒破停損，續抱
+        return (0, 0, None)  # 小虧但沒破停損，續抱
 
-    # 執行賣出
     proceeds = pos["shares"] * sell_price * (1 - SELL_COST)
     cost_basis = pos["shares"] * pos["buy_price"]
     pnl = proceeds - cost_basis
+    last_roll_date = pos.get("last_roll_date")
     trade_log.append({
         "date": d.isoformat(), "action": "SELL",
         "stock_id": sid, "shares": pos["shares"],
@@ -543,49 +550,10 @@ def check_position_exit(
         "reason": reason,
     })
     del positions[sid]
-    return proceeds
+    return (proceeds, cost_basis, last_roll_date)
 
 
-def simulate(all_data: dict, candidates: dict = None,
-             fish_qualified: dict = None, daily: bool = False,
-             auto_capital: bool = False, auto_cap_months: int = 3,
-             auto_cap_ratio: float = 1.0,
-             all_dates: list = None) -> dict:
-    """
-    模擬交易。
-
-    一般模式（candidates）：
-      每週五篩選候選股，次週一開盤進場。
-
-    低吃過濾模式（fish_qualified）：
-      每週五更新觀察池，每日檢查池內動能訊號，有訊號隔日進場。
-
-    自動化加碼（auto_capital=True）：
-      每 M 個月結算，期間有獲利則按 P% 增加本金（本金只增不减）。
-      新本金額度從下個月初起生效。
-    """
-    cash = float(INITIAL_CAPITAL)
-    positions = {}       # { stock_id: { shares, buy_price, buy_date } }
-    trade_log = []
-    equity_curve = []
-    fish_mode = fish_qualified is not None
-
-    # ── 自動化加碼狀態 ──
-    current_capital = float(INITIAL_CAPITAL)  # 當前本金（會隨加碼調整）
-    total_capital_invested = float(INITIAL_CAPITAL)  # 歷史總投入金額（含加碼）
-    capital_schedule = [(all_dates[0] if all_dates else None, float(INITIAL_CAPITAL), "起始")]
-    last_review_date = None   # 上次結算日
-    last_review_capital = float(INITIAL_CAPITAL)  # 上次結算時的本金
-    last_review_equity = float(INITIAL_CAPITAL)   # 上次結算時的權益
-
-    # 收集所有交易日並排序
-    all_dates = set()
-    for df in all_data.values():
-        if not df.empty:
-            all_dates.update(df["date"].dt.date)
-    all_dates = sorted(all_dates)
-
-    # 預先建立每日價格 + 法人查詢（含 ma20, ma10, inst_buy, inst_sell）
+def build_price_cache(all_data, all_dates):
     price_cache = {}
     for d in all_dates:
         price_cache[d] = {}
@@ -604,6 +572,79 @@ def simulate(all_data: dict, candidates: dict = None,
                     "inst_buy": row.get("inst_buy", 0),
                     "inst_sell": row.get("inst_sell", 0),
                 }
+    return price_cache
+
+
+
+def simulate(all_data: dict, candidates: dict = None,
+             fish_qualified: dict = None, daily: bool = False,
+             auto_capital: bool = False, auto_cap_months: int = 3,
+             auto_cap_ratio: float = 1.0, profit_roll_months: float = 0,
+             profit_roll_percentage: float = 1.0,
+             all_dates: list = None,
+             price_cache_prebuilt: dict = None) -> dict:
+    """
+    模擬交易。
+
+    一般模式（candidates）：
+      每週五篩選候選股，次週一開盤進場。
+
+    低吃過濾模式（fish_qualified）：
+      每週五更新觀察池，每日檢查池內動能訊號，有訊號隔日進場。
+
+    自動化加碼（auto_capital=True）：
+      每 M 個月結算，期間有獲利則按 P% 增加本金（本金只增不减）。
+      新本金額度從下個月初起生效。
+
+    獲利滾入（profit_roll_months, profit_roll_percentage）：
+      賣出時若獲利，按 P% 滾入 general_cash 共享資金池。
+      M=0 表示每次賣出都滾入，M>0 表示每 M 個月滾入一次。
+    """
+    cash = float(INITIAL_CAPITAL)
+    general_cash = 0.0  # 共享資金池（滾入獲利）
+    positions = {}       # { stock_id: { shares, buy_price, buy_date, last_roll_date } }
+    trade_log = []
+    equity_curve = []
+    fish_mode = fish_qualified is not None
+
+    # ── 自動化加碼狀態 ──
+    current_capital = float(INITIAL_CAPITAL)  # 當前本金（會隨加碼調整）
+    total_capital_invested = float(INITIAL_CAPITAL)  # 歷史總投入金額（含加碼）
+    capital_schedule = [(all_dates[0] if all_dates else None, float(INITIAL_CAPITAL), "起始")]
+    last_review_date = None   # 上次結算日
+    last_review_capital = float(INITIAL_CAPITAL)  # 上次結算時的本金
+    last_review_equity = float(INITIAL_CAPITAL)   # 上次結算時的權益
+
+    # 收集所有交易日並排序
+    if all_dates is None:
+        all_dates = set()
+        for df in all_data.values():
+            if not df.empty:
+                all_dates.update(df["date"].dt.date)
+        all_dates = sorted(all_dates)
+
+    # 預先建立每日價格 + 法人查詢（含 ma20, ma10, inst_buy, inst_sell）
+    if price_cache_prebuilt is not None:
+        price_cache = price_cache_prebuilt
+    else:
+        price_cache = {}
+        for d in all_dates:
+            price_cache[d] = {}
+        for stock_id, df in all_data.items():
+            if df.empty:
+                continue
+            for _, row in df.iterrows():
+                d = row["date"].date()
+                if d in price_cache:
+                    price_cache[d][stock_id] = {
+                        "close": row["close"],
+                        "open": row["open"],
+                        "ma10": row.get("ma10", None),
+                        "ma20": row.get("ma20", None),
+                        "volume": row["volume"],
+                        "inst_buy": row.get("inst_buy", 0),
+                        "inst_sell": row.get("inst_sell", 0),
+                    }
 
     # 一般模式：篩選日 → 下個交易日對應
     screening_dates = sorted(candidates.keys()) if candidates else []
@@ -644,13 +685,32 @@ def simulate(all_data: dict, candidates: dict = None,
     for day_idx, d in enumerate(all_dates):
         daily_prices = price_cache[d]
 
-        # ── 每日停損/移動停利檢查 ──
+        # ── 每日出場檢查 ──
         for sid in list(positions.keys()):
-            cash += check_position_exit(
+            proceeds, cost_basis, last_roll_date = check_position_exit(
                 sid, positions, daily_prices, d, cash, trade_log, price_cache
             )
+            if proceeds > 0:
+                # 獲利滾入本金
+                profit = proceeds - cost_basis
+                rolled_amount = 0.0
+                if profit > 0 and profit_roll_percentage > 0:
+                    can_roll = (profit_roll_months == 0)  # M=0 → always roll
+                    if not can_roll:
+                        if last_roll_date:
+                            months_since = (d.year - last_roll_date.year) * 12 + (d.month - last_roll_date.month)
+                        else:
+                            months_since = profit_roll_months
+                        can_roll = months_since >= profit_roll_months
+                    if can_roll:
+                        rolled_amount = profit * profit_roll_percentage
+                        trade_log.append({
+                            "date": d.isoformat(), "action": "PROFIT_ROLL",
+                            "stock_id": sid, "amount": round(rolled_amount, 0),
+                            "description": f"獲利滾入: +NT${rolled_amount:.0f} (M={profit_roll_months}, P={profit_roll_percentage*100:.0f}%)"
+                        })
+                cash += proceeds
 
-        # ── 低吃模式：更新觀察池（篩選日） ──
         if fish_mode and fish_screening_idx < len(fish_screening_dates):
             sd = fish_screening_dates[fish_screening_idx]
             if d >= sd:
@@ -694,20 +754,41 @@ def simulate(all_data: dict, candidates: dict = None,
                     if ma20 and not math.isnan(ma20) and current_price < ma20:
                         sell_price = price_info.get("open", current_price)
                         proceeds = positions[sid]["shares"] * sell_price * (1 - SELL_COST)
-                        pnl = proceeds - positions[sid]["shares"] * positions[sid]["buy_price"]
+                        cost_basis = positions[sid]["shares"] * positions[sid]["buy_price"]
+                        pnl = proceeds - cost_basis
+                        last_roll_date = positions[sid].get("last_roll_date")
                         trade_log.append({
                             "date": d.isoformat(), "action": "SELL",
                             "stock_id": sid, "shares": positions[sid]["shares"],
                             "price": round(sell_price, 2), "pnl": round(pnl, 0),
                             "reason": "跌破 MA20 出場",
                         })
+                        # 獲利滾入本金
+                        rolled_amount = 0.0
+                        if pnl > 0 and profit_roll_percentage > 0:
+                            can_roll = (profit_roll_months == 0)
+                            if not can_roll:
+                                if last_roll_date:
+                                    months_since = (d.year - last_roll_date.year) * 12 + (d.month - last_roll_date.month)
+                                else:
+                                    months_since = profit_roll_months
+                                can_roll = months_since >= profit_roll_months
+                            if can_roll:
+                                rolled_amount = pnl * profit_roll_percentage
+                                trade_log.append({
+                                    "date": d.isoformat(), "action": "PROFIT_ROLL",
+                                    "stock_id": sid, "amount": round(rolled_amount, 0),
+                                    "description": f"獲利滾入: +NT${rolled_amount:.0f} (M={profit_roll_months}, P={profit_roll_percentage*100:.0f}%)"
+                                })
                         cash += proceeds
                         if pnl < 0:
                             add_loser_ban(sid, d)
                         del positions[sid]
-                        continue
 
-                # 買入新候選
+        # ── 一般模式：買入新候選 ──
+        if not fish_mode and pending_entry is not None:
+            screening_date, cands = pending_entry
+            if d == next_day_map.get(screening_date):
                 for stock_id, score in cands:
                     if stock_id in positions:
                         continue
@@ -719,7 +800,7 @@ def simulate(all_data: dict, candidates: dict = None,
                     buy_price = price_info.get("open", price_info.get("close", 0))
                     if buy_price <= 0:
                         continue
-                    per_stock = current_capital / TOP_N
+                    per_stock = INITIAL_CAPITAL / TOP_N
                     shares = int(per_stock / buy_price / 1000) * 1000
                     if shares <= 0:
                         continue
@@ -732,6 +813,7 @@ def simulate(all_data: dict, candidates: dict = None,
                     cash -= cost
                     positions[stock_id] = {
                         "shares": shares, "buy_price": buy_price, "buy_date": d,
+                        "last_roll_date": d,
                     }
                     trade_log.append({
                         "date": d.isoformat(), "action": "BUY",
@@ -753,7 +835,7 @@ def simulate(all_data: dict, candidates: dict = None,
                 buy_price = price_info.get("open", price_info.get("close", 0))
                 if buy_price <= 0:
                     continue
-                per_stock = current_capital / TOP_N
+                per_stock = INITIAL_CAPITAL / TOP_N
                 shares = int(per_stock / buy_price / 1000) * 1000
                 if shares <= 0:
                     continue
@@ -766,6 +848,7 @@ def simulate(all_data: dict, candidates: dict = None,
                 cash -= cost
                 positions[stock_id] = {
                     "shares": shares, "buy_price": buy_price, "buy_date": d,
+                    "last_roll_date": d,
                 }
                 trade_log.append({
                     "date": d.isoformat(), "action": "BUY",
@@ -774,54 +857,6 @@ def simulate(all_data: dict, candidates: dict = None,
                     "reason": f"低吃池動能入場 score={score}",
                 })
             del marked_for_entry[d]
-
-        # ── 每日停損/停利檢查 ──
-        for sid in list(positions.keys()):
-            pos = positions[sid]
-            price_info = daily_prices.get(sid, {})
-            current_price = price_info.get("close", 0)
-            if current_price <= 0:
-                continue
-
-            loss_pct = (current_price - pos["buy_price"]) / pos["buy_price"]
-            if loss_pct <= -STOP_LOSS:
-                proceeds = pos["shares"] * current_price * (1 - SELL_COST)
-                cost_basis = pos["shares"] * pos["buy_price"]
-                cash += proceeds
-                pnl = proceeds - cost_basis
-                trade_log.append({
-                    "date": d.isoformat(),
-                    "action": "SELL",
-                    "stock_id": sid,
-                    "shares": pos["shares"],
-                    "price": round(current_price, 2),
-                    "pnl": round(pnl, 0),
-                    "reason": f"硬性停損 {loss_pct:.1%}",
-                })
-                if pnl < 0:
-                    add_loser_ban(sid, d)
-                del positions[sid]
-                continue
-            
-            ma10 = price_info.get("ma10")
-            if ma10 is not None and not math.isnan(ma10) and loss_pct > 0:
-                if current_price < ma10:
-                    proceeds = pos["shares"] * current_price * (1 - SELL_COST)
-                    cost_basis = pos["shares"] * pos["buy_price"]
-                    cash += proceeds
-                    pnl = proceeds - cost_basis
-                    trade_log.append({
-                        "date": d.isoformat(),
-                        "action": "SELL",
-                        "stock_id": sid,
-                        "shares": pos["shares"],
-                        "price": round(current_price, 2),
-                        "pnl": round(pnl, 0),
-                        "reason": f"跌破 MA10({ma10:.0f})移動停利",
-                    })
-                    if pnl < 0:
-                        add_loser_ban(sid, d)
-                    del positions[sid]
 
         # ── 自動化加碼結算（月結） ──
         if auto_capital:
@@ -855,10 +890,11 @@ def simulate(all_data: dict, candidates: dict = None,
             p = price_info.get("close", pos["buy_price"])
             pos_value += pos["shares"] * p
 
-        total_equity = cash + pos_value
+        total_equity = cash + general_cash + pos_value
         equity_curve.append({
             "date": d.isoformat(),
             "cash": round(cash, 0),
+            "general_cash": round(general_cash, 0),
             "position_value": round(pos_value, 0),
             "total_equity": round(total_equity, 0),
             "capital": round(current_capital, 0),
@@ -872,8 +908,8 @@ def simulate(all_data: dict, candidates: dict = None,
         sell_price = price_info.get("close", pos["buy_price"])
         proceeds = pos["shares"] * sell_price * (1 - SELL_COST)
         cost_basis = pos["shares"] * pos["buy_price"]
-        cash += proceeds
         pnl = proceeds - cost_basis
+        last_roll_date = pos.get("last_roll_date")
         trade_log.append({
             "date": last_d.isoformat(),
             "action": "SELL",
@@ -883,18 +919,40 @@ def simulate(all_data: dict, candidates: dict = None,
             "pnl": round(pnl, 0),
             "reason": "期末平倉",
         })
+        # 獲利滾入本金
+        rolled_amount = 0.0
+        if pnl > 0 and profit_roll_percentage > 0:
+            can_roll = (profit_roll_months == 0)
+            if not can_roll:
+                if last_roll_date:
+                    months_since = (last_d.year - last_roll_date.year) * 12 + (last_d.month - last_roll_date.month)
+                else:
+                    months_since = profit_roll_months
+                can_roll = months_since >= profit_roll_months
+            if can_roll:
+                rolled_amount = pnl * profit_roll_percentage
+                trade_log.append({
+                    "date": last_d.isoformat(), "action": "PROFIT_ROLL",
+                    "stock_id": sid, "amount": round(rolled_amount, 0),
+                    "description": f"獲利滾入: +NT${rolled_amount:.0f} (M={profit_roll_months}, P={profit_roll_percentage*100:.0f}%)"
+                })
+        cash += proceeds
         if equity_curve:
             equity_curve[-1]["cash"] = round(cash, 0)
+            equity_curve[-1]["general_cash"] = round(general_cash, 0)
             equity_curve[-1]["position_value"] = 0
-            equity_curve[-1]["total_equity"] = round(cash, 0)
+            equity_curve[-1]["total_equity"] = round(cash + general_cash, 0)
 
     return {
         "final_cash": cash,
-        "total_return": (cash - INITIAL_CAPITAL) / INITIAL_CAPITAL,
+        "general_cash": general_cash,
+        "total_return": (cash + general_cash - INITIAL_CAPITAL) / INITIAL_CAPITAL,
         "trade_log": trade_log,
         "equity_curve": equity_curve,
         "capital_schedule": capital_schedule,
         "total_capital_invested": total_capital_invested,
+        "profit_roll_months": profit_roll_months,
+        "profit_roll_percentage": profit_roll_percentage,
     }
 
 
@@ -962,7 +1020,7 @@ def compute_metrics(result: dict) -> dict:
         "max_drawdown": round(max_drawdown, 0),
         "max_drawdown_pct": round(max_drawdown_pct, 4),
         "total_return": round(result["total_return"], 4),
-        "final_equity": round(result["final_cash"], 0),
+        "final_equity": round(result["final_cash"] + result.get("general_cash", 0), 0),
     }
 
 
@@ -1020,6 +1078,8 @@ def generate_report(result: dict, metrics: dict, monthly: list):
         lines.append(f"| **法人低吃過濾** | 篩選日前 {FISH_DAYS} 天內低吃分數 ≥ {FISH_MIN_SCORE} |")
     if AUTO_CAPITAL:
         lines.append(f"| **自動化加碼** | 每 {AUTO_CAP_MONTHS} 個月結算，獲利時加碼 {AUTO_CAP_RATIO:.0%}（本金只增不減）|")
+    if PROFIT_ROLL_MONTHS > 0 or PROFIT_ROLL_PERCENTAGE < 1.0:
+        lines.append(f"| **獲利滾入** | 每 {PROFIT_ROLL_MONTHS} 個月滾入 {PROFIT_ROLL_PERCENTAGE:.0%} 獲利至共享資金池 |")
     capital_schedule = result.get("capital_schedule", [])
     if AUTO_CAPITAL and len(capital_schedule) > 1:
         lines.append("")
@@ -1037,6 +1097,13 @@ def generate_report(result: dict, metrics: dict, monthly: list):
     lines.append("|------|------|")
     lines.append(f"| **最終權益** | NT${metrics['final_equity']:,.0f} |")
     lines.append(f"| **總報酬率** | {metrics['total_return']:+.2%} |")
+    general_cash = result.get("general_cash", 0)
+    if general_cash > 0:
+        lines.append(f"| **滾入資金池** | NT${general_cash:,.0f} |")
+    profit_roll_transactions = [t for t in result["trade_log"] if t.get("action") == "PROFIT_ROLL"]
+    total_profit_roll = sum(t.get("amount", 0) for t in profit_roll_transactions)
+    if total_profit_roll > 0:
+        lines.append(f"| **獲利滾入總額** | NT${total_profit_roll:,.0f} (M={PROFIT_ROLL_MONTHS}, P={PROFIT_ROLL_PERCENTAGE:.0%}) |")
     lines.append(f"| **總交易次數** | {metrics['total_trades']}（買 {metrics['buy_trades']} / 賣 {metrics['sell_trades']}） |")
     lines.append(f"| **勝率** | {metrics['win_rate']:.2%} |")
     lines.append(f"| **平均獲利** | NT${metrics['avg_win']:,.0f} |")
@@ -1059,11 +1126,17 @@ def generate_report(result: dict, metrics: dict, monthly: list):
     lines.append("| 日期 | 動作 | 股票 | 股數 | 價格 | 損益 | 原因 |")
     lines.append("|------|------|------|------|------|------|------|")
     for t in result["trade_log"]:
-        pnl_str = f"NT${t['pnl']:+,.0f}" if t["action"] == "SELL" else "-"
-        lines.append(
-            f"| {t['date']} | {t['action']} | {t['stock_id']} | "
-            f"{t['shares']:,} | ${t['price']:.2f} | {pnl_str} | {t['reason']} |"
-        )
+        if t["action"] == "PROFIT_ROLL":
+            lines.append(
+                f"| {t['date']} | {t['action']} | {t['stock_id']} | "
+                f"- | - | +NT${t['amount']:,.0f} | {t['description']} |"
+            )
+        else:
+            pnl_str = f"NT${t['pnl']:+,.0f}" if t["action"] == "SELL" else "-"
+            lines.append(
+                f"| {t['date']} | {t['action']} | {t['stock_id']} | "
+                f"{t['shares']:,} | ${t['price']:.2f} | {pnl_str} | {t['reason']} |"
+            )
     lines.append("")
     lines.append("---")
     lines.append(f"*報告產生時間: {datetime.now().strftime('%Y-%m-%d %H:%M')}*")
@@ -1185,6 +1258,8 @@ def main():
                       fish_qualified=fish_qualified, daily=DAILY_SCREENING,
                       auto_capital=AUTO_CAPITAL, auto_cap_months=AUTO_CAP_MONTHS,
                       auto_cap_ratio=AUTO_CAP_RATIO,
+                      profit_roll_months=PROFIT_ROLL_MONTHS,
+                      profit_roll_percentage=PROFIT_ROLL_PERCENTAGE,
                       all_dates=all_dates)
     metrics = compute_metrics(result)
     monthly = generate_monthly_breakdown(result["equity_curve"], INITIAL_CAPITAL)
