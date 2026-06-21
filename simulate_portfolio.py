@@ -55,6 +55,36 @@ def tax_rate(symbol: str) -> float:
     return ETF_TAX_RATE if symbol in ETF_SYMBOLS else STOCK_TAX_RATE
 
 
+def read_capital_file(filepath: str = "capital.txt") -> list:
+    """
+    讀取 capital.txt，回傳 [(date_str, amount), ...]
+    格式: 金額, YYYY/MM/DD  # comment
+    金額可為負數（代表提領）
+    """
+    entries = []
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "," in line:
+                    parts = line.split(",", 1)
+                    amount_str = parts[0].strip()
+                    date_part = parts[1].strip()
+                    if "#" in date_part:
+                        date_part = date_part.split("#")[0].strip()
+                    try:
+                        amount = float(amount_str)
+                        date_str = date_part.replace("/", "-")
+                        entries.append((date_str, amount))
+                    except (ValueError, IndexError):
+                        continue
+    except FileNotFoundError:
+        pass
+    return entries
+
+
 # ── data loading with cache ─────────────────────────────────
 _cache = {}
 def get_data(symbol: str, start: str = "2023-01-01") -> pd.DataFrame:
@@ -93,6 +123,8 @@ class Position:
         self.strategy = strategy
         self.shares = 0.0
         self.cost_basis = 0.0  # total cost paid (NT$)
+        self.last_roll_year = None  # 上次滾入年份
+        self.last_roll_month = None  # 上次滾入月份
         self.trades: list[dict] = []  # transaction log
 
     def value(self, price: float) -> float:
@@ -114,6 +146,9 @@ class Position:
 
         self.shares += shares_bought
         self.cost_basis += total_cost
+        # 初始化滾入追蹤
+        self.last_roll_year = date.year
+        self.last_roll_month = date.month
         self.trades.append({
             "date": date, "type": "buy", "price": price,
             "shares": round(shares_bought, 4), "amount": round(cost, 2),
@@ -154,23 +189,24 @@ def first_trading_days_of_month(dates: pd.DatetimeIndex) -> set:
     return result
 
 
-def simulate_dca(config_list, start_date="2024-01-01", end_date="2025-12-31",
-                 monthly_total=20000) -> dict:
+def simulate_dca(config_list, start_date="2022-01-01", end_date="2025-12-31",
+                 monthly_total=20000, profit_roll_months=0.0, profit_roll_percentage=1.0) -> dict:
     """
-    定期定額模擬
+    定期定額模擬 - 支援獲利滾入本金功能
 
     config_list: [(symbol, strategy, monthly_allocation), ...]
+    profit_roll_months: M 個月 - 每 M 個月滾入一次已實現獲利 (預設 0=立即滾入)
+    profit_roll_percentage: P % - 滾入比例 (0-1 間，預設 1.0 = 100%)
     """
     # 收集所有標的的 signal data
     symbols = list(set(c[0] for c in config_list))
     signal_data = {}
     for sym in symbols:
         strategy_name = next(c[1] for c in config_list if c[0] == sym)
-        df = run_strategy(sym, strategy_name, start="2023-01-01")
+        df = run_strategy(sym, strategy_name, start=start_date)
         if df.empty:
             print(f"  ⚠️ {sym} 資料為空，跳過")
             continue
-        df = df[df.index >= start_date]
         if end_date:
             df = df[df.index <= end_date]
         signal_data[sym] = df
@@ -190,6 +226,7 @@ def simulate_dca(config_list, start_date="2024-01-01", end_date="2025-12-31",
 
     total_injected = 0.0
     transaction_log: list[dict] = []
+    general_cash = 0.0  # 共享資金池（滾入獲利）
 
     # 逐日模擬
     for current_date in sorted(all_dates):
@@ -223,8 +260,26 @@ def simulate_dca(config_list, start_date="2024-01-01", end_date="2025-12-31",
                         transaction_log.append(pos.trades[-1].copy())
             elif sig == -1:  # 賣出
                 if pos.shares > 0:
+                    # 先保存 cost_basis（sell() 會將其歸零）
+                    cost_before_sell = pos.cost_basis
                     proceeds = pos.sell(current_date, price)
-                    cash_buckets[sym] += proceeds
+                    # 獲利滾入本金 - 支援每 M 個月滾入 P% 的已實現獲利
+                    profit = proceeds - cost_before_sell
+                    rolled_amount = 0.0
+                    if profit > 0 and profit_roll_months >= 0:
+                        months_since_last_roll = (current_date.year - pos.last_roll_year) * 12 + (current_date.month - pos.last_roll_month)
+                        
+                        if months_since_last_roll >= profit_roll_months:
+                            rolled_amount = profit * profit_roll_percentage
+                            pos.last_roll_year = current_date.year
+                            pos.last_roll_month = current_date.month
+                            transaction_log.append({
+                                "date": current_date, "type": "profit_roll", "price": price,
+                                "shares": 0, "amount": rolled_amount, "commission": 0, "tax": 0,
+                                "description": f"獲利滾入: +NT${rolled_amount:.2f} (每{profit_roll_months}個月滾入一次, P={profit_roll_percentage*100:.0f}%)"
+                            })
+                    cash_buckets[sym] += proceeds - rolled_amount
+                    general_cash += rolled_amount
                     if proceeds > 0:
                         transaction_log.append(pos.trades[-1].copy())
 
@@ -232,7 +287,7 @@ def simulate_dca(config_list, start_date="2024-01-01", end_date="2025-12-31",
         month_end_dates = _month_ends(all_dates, start_date, end_date)
         for med in month_end_dates:
             if current_date == med:
-                total_val = sum(cash_buckets.values())
+                total_val = sum(cash_buckets.values()) + general_cash
                 for sym, _, _ in config_list:
                     if sym in signal_data and sym in positions:
                         df = signal_data[sym]
@@ -249,44 +304,59 @@ def simulate_dca(config_list, start_date="2024-01-01", end_date="2025-12-31",
         "config": config_list,
         "positions": positions,
         "cash_buckets": cash_buckets,
+        "general_cash": general_cash,
         "total_injected": total_injected,
         "transaction_log": transaction_log,
         "monthly_records": monthly_records,
         "signal_data": signal_data,
         "monthly_total": monthly_total,
+        "profit_roll_months": profit_roll_months,
+        "profit_roll_percentage": profit_roll_percentage,
     }
 
 
 def simulate_lumpsum(config_list, start_date="2024-01-01", end_date="2025-12-31",
-                     initial_capital=500000) -> dict:
+                     initial_capital=500000, profit_roll_months=3.0, profit_roll_percentage=1.0) -> dict:
     """
-    一筆資金模擬
+    一筆資金模擬 - 支援獲利滾入本金功能
 
     config_list: [(symbol, strategy, allocation_amount), ...]
+    profit_roll_months: M 個月 - 每 M 個月滾入一次已實現獲利 (預設 3，0=不滾入)
+    profit_roll_percentage: P % - 滾入比例 (0-1 間，預設 1.0 = 100%)
     """
     symbols = list(set(c[0] for c in config_list))
     signal_data = {}
     for sym in symbols:
         strategy_name = next(c[1] for c in config_list if c[0] == sym)
-        df = run_strategy(sym, strategy_name, start="2023-01-01")
+        df = run_strategy(sym, strategy_name, start=start_date)
         if df.empty:
             print(f"  ⚠️ {sym} 資料為空，跳過")
             continue
-        df = df[df.index >= start_date]
         if end_date:
             df = df[df.index <= end_date]
         signal_data[sym] = df
 
     positions = {c[0]: Position(c[0], c[1]) for c in config_list}
-    cash_buckets = {c[0]: float(c[2]) for c in config_list}  # 初始配置
+    cash_buckets = {c[0]: float(c[2]) for c in config_list}
     total_initial = sum(c[2] for c in config_list)
 
-    # 多餘現金進 general pool
     general_cash = float(initial_capital) - total_initial
+
+    capital_injection_log = [
+        {"date": start_date, "amount": float(initial_capital), "source": "initial",
+         "running_total": float(initial_capital), "description": "初始資金"}
+    ]
+
+    capital_entries = read_capital_file()
+    pending_injections = {}
+    for date_str, amount in capital_entries:
+        pending_injections[date_str] = amount
 
     # keep_wait 追蹤狀態
     KEEP_WAIT_PARAMS = {
-        "2412": {"initial_shares": 12, "add_drop_pct": 5.0, "add_shares": 6,
+        "2412": {"initial_buy_pct": 0.7, "initial_shares": 12, "add_drop_pct": 5.0, "add_shares": 6,
+                 "max_additions": 2, "tp_pct": 15.0, "tp_sell_ratio": 50.0, "cooldown_days": 30},
+        "2382": {"initial_buy_pct": 0.7, "initial_shares": 12, "add_drop_pct": 5.0, "add_shares": 6,
                  "max_additions": 2, "tp_pct": 15.0, "tp_sell_ratio": 50.0, "cooldown_days": 30},
     }
     kw_state = {}
@@ -302,9 +372,46 @@ def simulate_lumpsum(config_list, start_date="2024-01-01", end_date="2025-12-31"
     )))
     transaction_log: list[dict] = []
     monthly_records = []
-    first_trade_dates = {}  # 記錄每個標的何時第一次買入
 
     for current_date in sorted(all_dates):
+        date_str = current_date.strftime("%Y-%m-%d")
+        if date_str in pending_injections:
+            extra = pending_injections.pop(date_str)
+            general_cash += extra
+            running_total = sum(inj["amount"] for inj in capital_injection_log)
+            capital_injection_log.append({
+                "date": current_date, "amount": extra, "source": "external",
+                "running_total": running_total + extra,
+                "description": "使用者外部加碼"
+            })
+            total_alloc = sum(c[2] for c in config_list)
+            if total_alloc > 0:
+                for sym, strat, alloc in config_list:
+                    if strat == "keep_wait":
+                        ratio = alloc / total_alloc
+                        share = extra * ratio
+                        cash_buckets[sym] += share
+                        st = kw_state.get(sym)
+                        if st:
+                            df = signal_data.get(sym)
+                            if df is not None and current_date in df.index:
+                                px = float(df.loc[current_date, "close"])
+                                kw_p = KEEP_WAIT_PARAMS.get(sym, {})
+                                initial_buy_pct = kw_p.get("initial_buy_pct", 0.7)
+                                buy_amount = cash_buckets[sym] * initial_buy_pct
+                                if buy_amount >= px * (1 + COMMISSION_RATE):
+                                    pos = positions[sym]
+                                    spent = pos.buy(current_date, px, buy_amount)
+                                    if spent > 0:
+                                        cash_buckets[sym] -= spent
+                                        shares_bought = spent / px
+                                        st["total_cost"] += spent
+                                        st["total_shares"] += shares_bought
+                                        st["avg_cost"] = px
+                                        st["buy_count"] += 1
+                                        transaction_log.append(pos.trades[-1].copy())
+                general_cash = 0
+
         for sym, strategy_name, alloc in config_list:
             if sym not in signal_data:
                 continue
@@ -325,13 +432,16 @@ def simulate_lumpsum(config_list, start_date="2024-01-01", end_date="2025-12-31"
                     continue
 
                 if st["buy_count"] == 0:
-                    kw_init = KEEP_WAIT_PARAMS.get(sym, {}).get("initial_shares", 12)
-                    if cash_buckets[sym] >= kw_init * price * (1 + COMMISSION_RATE):
-                        spent = pos.buy(current_date, price, kw_init * price)
+                    kw_p = KEEP_WAIT_PARAMS.get(sym, {})
+                    initial_buy_pct = kw_p.get("initial_buy_pct", 0.7)
+                    buy_amount = cash_buckets[sym] * initial_buy_pct
+                    if buy_amount >= price * (1 + COMMISSION_RATE):
+                        spent = pos.buy(current_date, price, buy_amount)
                         if spent > 0:
                             cash_buckets[sym] -= spent
+                            shares_bought = spent / price
                             st["total_cost"] += spent
-                            st["total_shares"] += kw_init
+                            st["total_shares"] += shares_bought
                             st["avg_cost"] = price
                             st["buy_count"] = 1
                             transaction_log.append(pos.trades[-1].copy())
@@ -372,7 +482,7 @@ def simulate_lumpsum(config_list, start_date="2024-01-01", end_date="2025-12-31"
                                 transaction_log.append(pos.trades[-1].copy())
                 continue
 
-            # ── 訊號策略 ──
+                    # ── 訊號策略 ──
             sig = row.get("signal", 0)
             if pd.isna(sig):
                 continue
@@ -387,15 +497,85 @@ def simulate_lumpsum(config_list, start_date="2024-01-01", end_date="2025-12-31"
                         transaction_log.append(pos.trades[-1].copy())
             elif sig == -1:  # 賣出
                 if pos.shares > 0:
+                    cost_before_sell = pos.cost_basis
                     proceeds = pos.sell(current_date, price)
-                    # 獲利回到該標的 cash bucket 供未來再買
-                    cash_buckets[sym] += proceeds
+                    profit = proceeds - cost_before_sell
+                    rolled_amount = 0.0
+                    if profit > 0:
+                        months_since_last_roll = (current_date.year - pos.last_roll_year) * 12 + (current_date.month - pos.last_roll_month)
+                        
+                        if months_since_last_roll >= profit_roll_months:
+                            rolled_amount = profit * profit_roll_percentage
+                            pos.last_roll_year = current_date.year
+                            pos.last_roll_month = current_date.month
+                            transaction_log.append({
+                                "date": current_date, "type": "profit_roll", "price": price,
+                                "shares": 0, "amount": rolled_amount, "commission": 0, "tax": 0,
+                                "description": f"獲利滾入: +NT${rolled_amount:.2f} (每{profit_roll_months}個月滾入一次, P={profit_roll_percentage*100:.0f}%)"
+                            })
+                            running_total = sum(inj["amount"] for inj in capital_injection_log)
+                            capital_injection_log.append({
+                                "date": current_date, "amount": rolled_amount, "source": "profit_roll",
+                                "running_total": running_total + rolled_amount,
+                                "description": f"獲利滾入: {sym} 賣出獲利"
+                            })
+                        else:
+                            transaction_log.append({
+                                "date": current_date, "type": "profit_hold", "price": price,
+                                "shares": 0, "amount": 0, "commission": 0, "tax": 0,
+                                "description": f"獲利等待滾入: NT${profit:.2f} (需再{months_since_last_roll}/{profit_roll_months}個月)"
+                            })
+                    cash_buckets[sym] += proceeds - rolled_amount
+                    general_cash += rolled_amount
                     if proceeds > 0:
                         transaction_log.append(pos.trades[-1].copy())
 
         month_end_dates = _month_ends(all_dates, start_date, end_date)
         for med in month_end_dates:
             if current_date == med:
+                date_str = current_date.strftime("%Y-%m-%d")
+                
+                if date_str in pending_injections:
+                    extra = pending_injections.pop(date_str)
+                    general_cash += extra
+                    running_total = sum(inj["amount"] for inj in capital_injection_log)
+                    capital_injection_log.append({
+                        "date": current_date, "amount": extra, "source": "external",
+                        "running_total": running_total + extra,
+                        "description": "使用者外部加碼"
+                    })
+
+                if general_cash > 0:
+                    total_alloc = sum(c[2] for c in config_list)
+                    if total_alloc > 0:
+                        reallocated = 0
+                        for sym, strat, alloc in config_list:
+                            ratio = alloc / total_alloc
+                            share = general_cash * ratio
+                            cash_buckets[sym] += share
+                            reallocated += share
+                            if strat == "keep_wait" and sym in positions:
+                                st = kw_state.get(sym)
+                                if st and cash_buckets[sym] > 0:
+                                    kw_p = KEEP_WAIT_PARAMS.get(sym, {})
+                                    initial_buy_pct = kw_p.get("initial_buy_pct", 0.7)
+                                    df = signal_data.get(sym)
+                                    if df is not None and current_date in df.index:
+                                        px = float(df.loc[current_date, "close"])
+                                        buy_amount = cash_buckets[sym] * initial_buy_pct
+                                        if buy_amount >= px * (1 + COMMISSION_RATE):
+                                            pos = positions[sym]
+                                            spent = pos.buy(current_date, px, buy_amount)
+                                            if spent > 0:
+                                                cash_buckets[sym] -= spent
+                                                shares_bought = spent / px
+                                                st["total_cost"] += spent
+                                                st["total_shares"] += shares_bought
+                                                st["avg_cost"] = px
+                                                st["buy_count"] += 1
+                                                transaction_log.append(pos.trades[-1].copy())
+                        general_cash -= reallocated
+
                 total_val = sum(cash_buckets.values()) + general_cash
                 for sym, _, _ in config_list:
                     if sym in signal_data and sym in positions:
@@ -419,6 +599,9 @@ def simulate_lumpsum(config_list, start_date="2024-01-01", end_date="2025-12-31"
         "transaction_log": transaction_log,
         "monthly_records": monthly_records,
         "signal_data": signal_data,
+        "profit_roll_months": profit_roll_months,
+        "profit_roll_percentage": profit_roll_percentage,
+        "capital_injection_log": capital_injection_log,
     }
 
 
@@ -461,14 +644,17 @@ def generate_dca_report(result: dict) -> str:
     config = result["config"]
     positions = result["positions"]
     cash_buckets = result["cash_buckets"]
+    general_cash = result.get("general_cash", 0)
     total_injected = result["total_injected"]
     tx_log = result["transaction_log"]
     monthly = result["monthly_records"]
     monthly_total = result["monthly_total"]
+    profit_roll_months = result.get("profit_roll_months", 0.0)
+    profit_roll_percentage = result.get("profit_roll_percentage", 1.0)
 
     # 各標的績效
     lines = []
-    lines.append("# 每月2萬元策略 — 2024 & 2025 回溯模擬")
+    lines.append("# 每月2萬元策略 — 2022 & 2025 回溯模擬")
     lines.append("")
     lines.append(f"> 📅 模擬日期：{datetime.now().strftime('%Y-%m-%d')}")
     lines.append("> ⚠️ **過去績效不代表未來獲利，本模擬僅供參考。**")
@@ -496,6 +682,10 @@ def generate_dca_report(result: dict) -> str:
     # 計算總手續費和稅
     total_commission = sum(t.get("commission", 0) for t in tx_log)
     total_tax = sum(t.get("tax", 0) for t in tx_log)
+    
+    # 計算獲利滾入總額
+    profit_roll_transactions = [t for t in tx_log if t.get("type") == "profit_roll"]
+    total_profit_roll = sum(t.get("amount", 0) for t in profit_roll_transactions)
 
     lines.append("## 📊 總績效摘要")
     lines.append("")
@@ -508,6 +698,8 @@ def generate_dca_report(result: dict) -> str:
     lines.append(f"| **年化報酬率 (CAGR)** | **{fmt_pct(cagr)}** |")
     lines.append(f"| 總交易手續費 | {fmt_ntd(total_commission)} |")
     lines.append(f"| 總交易稅 | {fmt_ntd(total_tax)} |")
+    if total_profit_roll > 0:
+        lines.append(f"| **獲利滾入總額** | **{fmt_ntd(total_profit_roll)} (M={profit_roll_months}, P={profit_roll_percentage*100:.0f}%)** |")
     lines.append("")
     lines.append("> 💡 **價格說明**：使用 Yahoo Finance `auto_adjust=True`，歷史價格已回調除權息，")
     lines.append("> 報酬率計算正確。")
@@ -537,11 +729,14 @@ def generate_dca_report(result: dict) -> str:
         ret = pnl / (total_injected * alloc / sum(c[2] for c in config)) if (total_injected * alloc / sum(c[2] for c in config)) > 0 else 0
         buys = sum(1 for t in tx_log if t.get("symbol", sym) == sym and t.get("type") == "buy")
         sells = sum(1 for t in tx_log if t.get("symbol", sym) == sym and t.get("type") == "sell")
-        # 從 positions 拿交易次數
         if pos:
             buys = sum(1 for t in pos.trades if t["type"] == "buy")
             sells = sum(1 for t in pos.trades if t["type"] == "sell")
         lines.append(f"| {sym} | {strat} | {fmt_ntd(total_injected * alloc / sum(c[2] for c in config))} | {fmt_ntd(total_val)} | {fmt_ntd(pnl)} | {fmt_pct(ret)} | {buys}/{sells} |")
+
+    general_cash_val = result.get("general_cash", 0)
+    if general_cash_val > 0:
+        lines.append(f"| 滾入資金池 | — | — | {fmt_ntd(general_cash_val)} | {fmt_ntd(general_cash_val)} | — | — |")
     lines.append("")
     lines.append("---")
     lines.append("")
@@ -679,6 +874,8 @@ def generate_lumpsum_report(result: dict) -> str:
     initial_capital = result["initial_capital"]
     tx_log = result["transaction_log"]
     monthly = result["monthly_records"]
+    profit_roll_months = result.get("profit_roll_months", 3.0)
+    profit_roll_percentage = result.get("profit_roll_percentage", 1.0)
 
     lines = []
     lines.append("# 50萬一筆資金 — 2024 & 2025 回溯模擬")
@@ -717,6 +914,10 @@ def generate_lumpsum_report(result: dict) -> str:
     cagr = (final_value / initial_capital) ** (1 / years) - 1 if years > 0 else 0
     total_commission = sum(t.get("commission", 0) for t in tx_log)
     total_tax = sum(t.get("tax", 0) for t in tx_log)
+    
+    # 計算獲利滾入總額
+    profit_roll_transactions = [t for t in tx_log if t.get("type") == "profit_roll"]
+    total_profit_roll = sum(t.get("amount", 0) for t in profit_roll_transactions)
 
     lines.append("## 📊 總績效")
     lines.append("")
@@ -729,9 +930,24 @@ def generate_lumpsum_report(result: dict) -> str:
     lines.append(f"| 模擬期間 | 2024-01-02 ~ 2025-12-31 ({days} 天) |")
     lines.append(f"| 總手續費 | {fmt_ntd(total_commission)} |")
     lines.append(f"| 總交易稅 | {fmt_ntd(total_tax)} |")
+    lines.append(f"| **獲利滾入總額** | **{fmt_ntd(total_profit_roll)} (M={profit_roll_months}, P={profit_roll_percentage*100:.0f}%)** |")
     lines.append("")
     lines.append("> ✅ **VWAP 已修正**：改用真實成交量加權計算 VWAP（`Σ(close×volume)/Σ(volume)`），非之前收盤價近似。")
     lines.append("")
+
+    capital_injection_log = result.get("capital_injection_log", [])
+    if capital_injection_log:
+        lines.append("## 💰 資金投入紀錄")
+        lines.append("")
+        lines.append("| 日期 | 金額 | 來源 | 累計本金 | 說明 |")
+        lines.append("|------|------|------|---------|------|")
+        for inj in capital_injection_log:
+            date_str = inj["date"] if isinstance(inj["date"], str) else inj["date"].strftime("%Y-%m-%d")
+            source_label = {"initial": "初始資金", "profit_roll": "獲利滾入", "external": "外部加碼"}.get(inj["source"], inj["source"])
+            lines.append(f"| {date_str} | {fmt_ntd(inj['amount'])} | {source_label} | {fmt_ntd(inj['running_total'])} | {inj.get('description', '')} |")
+        total_injected = sum(inj["amount"] for inj in capital_injection_log if inj["source"] in ("initial", "external"))
+        lines.append(f"| **合計** | **{fmt_ntd(total_injected)}** | **初始+外部** | — | — |")
+        lines.append("")
 
     # 各標的績效
     lines.append("## 🏆 各標的績效")
@@ -772,6 +988,9 @@ def generate_lumpsum_report(result: dict) -> str:
         spnl = data["val"] - data["alloc"]
         sret = spnl / data["alloc"] if data["alloc"] > 0 else 0
         lines.append(f"| {strat} | {fmt_ntd(data['alloc'])} | {fmt_ntd(data['val'])} | {fmt_ntd(spnl)} | {fmt_pct(sret)} |")
+
+    if general_cash > 0:
+        lines.append(f"| **滾入資金池** | **—** | **{fmt_ntd(general_cash)}** | **{fmt_ntd(general_cash)}** | **—** |")
     lines.append("")
     lines.append("---")
     lines.append("")
@@ -843,6 +1062,8 @@ def generate_lumpsum_report(result: dict) -> str:
     lines.append(f"| 總損益 | {fmt_ntd(total_pnl)} | {fmt_ntd(bh_final - initial_capital)} | {fmt_ntd(total_pnl - (bh_final - initial_capital))} |")
     lines.append(f"| 報酬率 | {fmt_pct(total_return)} | {fmt_pct((bh_final - initial_capital) / initial_capital)} | {fmt_pct(total_return - (bh_final - initial_capital) / initial_capital)} |")
     lines.append("")
+    lines.append(f"> 💡 **獲利滾入說明**：每 {profit_roll_months} 個月滾入一次已實現獲利（P={profit_roll_percentage*100:.0f}%），總滾入金額 {fmt_ntd(total_profit_roll)}。")
+    lines.append("")
 
     # 交易記錄
     lines.append("## 📝 交易記錄")
@@ -869,6 +1090,20 @@ def generate_lumpsum_report(result: dict) -> str:
                 fee_parts.append(f"(+稅{t['tax']:.0f})")
             fee_str = " ".join(fee_parts) if fee_parts else "—"
             lines.append(f"| {date_str} | {typ} | {price} | {amt} | {fee_str} |")
+        lines.append("")
+    
+    # 獲利滾入記錄
+    if profit_roll_transactions:
+        lines.append("## 🎯 獲利滾入記錄")
+        lines.append("")
+        lines.append(f"| 日期 | 類型 | 金額 | 說明 |")
+        lines.append("|------|------|------|------|")
+        for t in profit_roll_transactions:
+            date_str = t["date"].strftime("%Y-%m-%d")
+            typ = "🔄 滾入"
+            amt = f"NT${t['amount']:>8,.0f}"
+            desc = t.get("description", "")
+            lines.append(f"| {date_str} | {typ} | {amt} | {desc} |")
         lines.append("")
 
     lines.append("---")
@@ -998,20 +1233,38 @@ def attach_symbol_to_txlog(tx_log, positions):
 
 def main():
     parser = argparse.ArgumentParser(description="投資組合模擬報告產生器")
-    parser.add_argument("--mode", choices=["dca", "lumpsum", "all"], default="all",
-                        help="模擬模式")
+    parser.add_argument("--mode", choices=["dca", "lumpsum", "all"], default=None,
+                        help="模擬模式（未指定時從 DCA_AMOUNT 環境變數判斷）")
     parser.add_argument("--output-dir", default=".",
                         help="輸出目錄")
+    parser.add_argument("--start-date", type=str, default="2022-01-01",
+                        help="模擬開始日期 (YYYY-MM-DD)，預設 2022-01-01")
+    parser.add_argument("--end-date", type=str, default="2025-12-31",
+                        help="模擬結束日期 (YYYY-MM-DD)，預設 2025-12-31")
+    parser.add_argument("--profit-roll-months", type=float, default=3.0,
+                        help="每 M 個月滾入一次已實現獲利 (預設 3，0=不滾入)")
+    parser.add_argument("--profit-roll-percentage", type=float, default=1.0,
+                        help="滾入比例 P（0-1 間，預設 1.0 = 100pct）")
     args = parser.parse_args()
 
     output_dir = args.output_dir
+
+    # ── 從 DCA_AMOUNT 環境變數判斷模式 ──
+    if args.mode is None:
+        dca_amount = int(os.getenv("DCA_AMOUNT", "0"))
+        if dca_amount > 0:
+            args.mode = "dca"
+            print(f"📋 DCA_AMOUNT={dca_amount}，自動選擇 DCA 模式")
+        else:
+            args.mode = "lumpsum"
+            print(f"📋 DCA_AMOUNT=0，自動選擇 Lumpsum 模式")
 
     # 從 PC_ 環境變數讀取投資組合設定
     pc_config = load_portfolio_config()
     if pc_config:
         total_alloc = sum(float(cfg.get("alloc", 20)) for cfg in pc_config.values())
-        monthly_total = 20000
-        lumpsum_total = 500000
+        monthly_total = int(os.getenv("DCA_AMOUNT", "20000"))
+        lumpsum_total = int(os.getenv("TOTAL_CAPITAL", "500000"))
 
         dca_config = []
         lumpsum_config = []
@@ -1047,28 +1300,31 @@ def main():
             ("2454",  "ma_cross",  75000),
             ("2881",  "vwap",      50000),
             ("2886",  "vwap",      50000),
-            ("2412",  "keep_wait", 50000),
+            ("2382",  "keep_wait", 50000),
         ]
 
     total_ls = sum(c[2] for c in lumpsum_config)
     assert total_ls == 500000, f"Lumpsum config totals {total_ls}, expected 500000"
 
     if args.mode in ("all", "dca"):
-        print("📊 模擬：每月定期定額 NT$20,000...")
-        dca_result = simulate_dca(dca_config, start_date="2024-01-01", end_date="2025-12-31",
-                                  monthly_total=20000)
+        print(f"📊 模擬：每月定期定額 NT$20,000... (M={args.profit_roll_months}, P={args.profit_roll_percentage*100:.0f}%) ({args.start_date} ~ {args.end_date})")
+        dca_result = simulate_dca(dca_config, start_date=args.start_date, end_date=args.end_date,
+                                  monthly_total=20000, profit_roll_months=args.profit_roll_months,
+                                  profit_roll_percentage=args.profit_roll_percentage)
         dca_report = generate_dca_report(dca_result)
-        dca_path = os.path.join(output_dir, "回溯_2024_2025.MD")
+        dca_path = os.path.join(output_dir, f"回溯_{args.start_date[:4]}_{args.end_date[:4]}.MD")
         with open(dca_path, "w", encoding="utf-8") as f:
             f.write(dca_report)
         print(f"  ✅ 已寫入 {dca_path}")
 
     if args.mode in ("all", "lumpsum"):
-        print("📊 模擬：一筆資金 NT$500,000...")
-        ls_result = simulate_lumpsum(lumpsum_config, start_date="2024-01-01", end_date="2025-12-31",
-                                     initial_capital=500000)
+        print(f"📊 模擬：一筆資金 NT$500,000... (M={args.profit_roll_months}, P={args.profit_roll_percentage*100:.0f}%) ({args.start_date} ~ {args.end_date})")
+        ls_result = simulate_lumpsum(lumpsum_config, start_date=args.start_date, end_date=args.end_date,
+                                     initial_capital=500000, 
+                                     profit_roll_months=args.profit_roll_months,
+                                     profit_roll_percentage=args.profit_roll_percentage)
         ls_report = generate_lumpsum_report(ls_result)
-        ls_path = os.path.join(output_dir, "回溯_50万_2024_2025.MD")
+        ls_path = os.path.join(output_dir, f"回溯_50万_{args.start_date[:4]}_{args.end_date[:4]}.MD")
         with open(ls_path, "w", encoding="utf-8") as f:
             f.write(ls_report)
         print(f"  ✅ 已寫入 {ls_path}")

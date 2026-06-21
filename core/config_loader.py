@@ -18,7 +18,7 @@ STRATEGY_PARAM_KEYS = {
 
 # keep_wait DCA 參數名稱（用於 backtest_2024_2025.py 等）
 KEEP_WAIT_PARAM_KEYS = [
-    "initial_shares", "add_drop_pct", "add_shares", "max_additions",
+    "initial_buy_pct", "initial_shares", "add_drop_pct", "add_shares", "max_additions",
     "tp_trigger_pct", "tp_sell_ratio", "cooldown_days",
 ]
 

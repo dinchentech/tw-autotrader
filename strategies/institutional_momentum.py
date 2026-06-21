@@ -5,7 +5,7 @@ Institutional Momentum Strategy — 法人抬轎動能策略
   1. 週五盤後篩選（流動性 > 2,000 張、法人買超 > 3%、創 20 日新高 + 站穩 MA20）
   2. 依投信+外資買超佔比排序，選前 N 名（預設 2 檔）
   3. 週一開盤買入，每檔配置 (alloc / N)
-  4. 每日監控：硬性停損 -7%、跌破 MA10 移動停利
+   4. 每日監控：硬性停損 -10%、跌破 MA10 移動停利
 
 共用核心邏輯來自 core/inst_strategy_core.py，確保回測與實盤一致性。
 """
@@ -49,7 +49,7 @@ class InstitutionalMomentumStrategy:
         self.min_volume = int(os.getenv("INST_MOM_MIN_VOLUME", "2000"))         # 張
         self.buy_ratio = float(os.getenv("INST_MOM_BUY_RATIO", "0.03"))         # 3%
         self.lookback = int(os.getenv("INST_MOM_LOOKBACK", "20"))               # 天
-        self.stop_loss = float(os.getenv("INST_MOM_STOP_LOSS", "0.07"))         # -7%
+        self.stop_loss = float(os.getenv("INST_MOM_STOP_LOSS", "0.10"))         # -10%
         self.trailing_period = int(os.getenv("INST_MOM_TRAILING_PERIOD", "10")) # MA10
         self.exclude_etf = os.getenv("INST_MOM_EXCLUDE_ETF", "true").lower() == "true"  # 預設排除 ETF
 
@@ -510,41 +510,8 @@ class InstitutionalMomentumStrategy:
         return signals
 
     def check_daily_review(self, current_prices: dict) -> dict:
-        signals = {}
-        positions = self.state.get("positions", {})
-        for stock_id, pos in positions.items():
-            price = current_prices.get(stock_id)
-            if price is None or price <= 0:
-                continue
-            buy_price = pos.get("buy_price", 0)
-            if buy_price <= 0:
-                continue
-            loss_pct = (price - buy_price) / buy_price
-            if loss_pct <= -self.stop_loss:
-                continue
-            sell_reason = None
-            try:
-                df_price = self._get_price_data(stock_id, days=self.lookback + 5)
-                if df_price.empty or len(df_price) < self.lookback:
-                    continue
-                close = df_price["close"].values
-                ma20 = pd.Series(close).rolling(self.lookback).mean().iloc[-1]
-                if price < ma20:
-                    sell_reason = f"每日檢討：跌破 MA20({ma20:.0f})"
-                else:
-                    df_inst = self._get_institutional_data(stock_id, days=5)
-                    if not df_inst.empty:
-                        inst_dates = sorted(df_inst["date"].unique())[-5:]
-                        df_inst_recent = df_inst[df_inst["date"].isin(inst_dates)]
-                        mask = df_inst_recent["name"].isin(["投信", "外資"])
-                        net_buy = df_inst_recent[mask]["buy"].sum() - df_inst_recent[mask]["sell"].sum()
-                        if net_buy < 0:
-                            sell_reason = f"每日檢討：法人轉賣(淨買{net_buy})"
-            except Exception:
-                continue
-            if sell_reason:
-                signals[stock_id] = sell_reason
-        return signals
+        """每日檢討（本策略停損/停利統一由 check_exit_signals 處理）"""
+        return {}
 
     # ================================================================
     # 主流程 — 由 live_trader_multi.py 每分鐘呼叫
@@ -741,10 +708,3 @@ class InstitutionalMomentumStrategy:
                     _execute_sell(sid, reason)
                 except Exception as e:
                     print(f"❌ [INST_MOM] 出場 {sid} 失敗: {e}")
-
-            review_signals = self.check_daily_review(current_prices)
-            for sid, reason in review_signals.items():
-                try:
-                    _execute_sell(sid, reason)
-                except Exception as e:
-                    print(f"❌ [INST_MOM] 每日檢討出場 {sid} 失敗: {e}")
