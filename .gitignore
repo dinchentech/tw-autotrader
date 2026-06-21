@@ -196,3 +196,7 @@ esun_sdk/*.whl
 esun_sdk/config.simulation.ini
 esun_sdk/config.simulation.ini.example
 node_modules/
+# 一致化備份（原始檔已 copy 至 plans/）
+core/inst_strategy_core.py
+backtest_inst_momentum.py
+strategies/institutional_momentum.py
