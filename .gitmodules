@@ -1,0 +1,3 @@
+[submodule "plans"]
+	path = plans
+	url = git@github.com:dinchentech/plans.git
