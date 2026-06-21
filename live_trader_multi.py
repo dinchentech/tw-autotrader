@@ -406,7 +406,8 @@ def main():
 
     def check_capital_injections():
         """檢查 capital.txt 新增資金投入，自動調整並執行 keep_wait 購買"""
-        nonlocal TOTAL_CAPITAL, last_capital_check_date, processed_capital
+        global TOTAL_CAPITAL
+        nonlocal last_capital_check_date, processed_capital
 
         today = date.today().isoformat()
         if last_capital_check_date == today:
