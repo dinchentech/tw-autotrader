@@ -79,7 +79,8 @@ jobs:
           for f in bollinger-animation.html vwap-animation.html ma_cross-animation.html \
                    breakout-animation.html "keep_wait策略說明.html" "法人動能策略說明.html"; do
             if [ -f "$f" ]; then
-              cp "$f" .
+              #
+              cp -f "$f" . # 加上 -f 強制覆蓋目標
               echo "✅ 已複製 $f"
             else
               echo "⚠️  $f 不存在（可能是新檔案尚未 push）"
