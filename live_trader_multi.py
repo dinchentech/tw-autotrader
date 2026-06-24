@@ -391,6 +391,18 @@ def main():
     for symbol, cfg in PORTFOLIO_CONFIG.items():
         df_init = broker.get_minute_bars(symbol, minutes=60) if USE_REAL_API else broker.get_historical_data(symbol, days=30)
         if df_init.empty:
+            print(f"⚠️  {symbol} 盤中資料為空，改載入日 K 資料...")
+            df_init = broker.get_historical_data(symbol, days=60)
+            if not df_init.empty:
+                px = broker.get_current_price(symbol)
+                if px > 0:
+                    new_row = pd.DataFrame({
+                        'open': [px * 0.999], 'high': [px * 1.001],
+                        'low': [px * 0.998], 'close': [px], 'volume': [5000]
+                    }, index=[pd.Timestamp.now()])
+                    df_init = pd.concat([df_init, new_row])
+        if df_init.empty:
+            print(f"❌ {symbol} 無法取得任何價格資料，跳過")
             continue
         portfolio_history[symbol] = df_init
         print(f"✅ {symbol} 初始化成功 -> [{cfg['strategy'].upper()}]")
@@ -525,6 +537,15 @@ def main():
                         new_data = broker.get_minute_bars(symbol, minutes=1)
                         if not new_data.empty:
                             accumulated_data = pd.concat([accumulated_data, new_data])
+                        else:
+                            # Esun 模擬環境可能無盤中 K 線，fallback 到 mock 報價
+                            current_price = broker.get_current_price(symbol)
+                            if current_price > 0:
+                                new_row = pd.DataFrame({
+                                    'open': [current_price * 0.999], 'high': [current_price * 1.001],
+                                    'low': [current_price * 0.998], 'close': [current_price], 'volume': [5000]
+                                }, index=[pd.Timestamp.now()])
+                                accumulated_data = pd.concat([accumulated_data, new_row])
                     else:
                         current_price = broker.get_current_price(symbol)
                         new_row = pd.DataFrame({
