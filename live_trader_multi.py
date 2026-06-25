@@ -586,6 +586,15 @@ def main():
                             }
                         trk = pyramid_tracker[symbol]
 
+                        # 保存下單前 tracker 狀態（下單失敗時回滾用）
+                        kw_pre_state = {
+                            "buy_count": trk["buy_count"],
+                            "last_buy_price": trk["last_buy_price"],
+                            "total_cost": trk["total_cost"],
+                            "total_shares": trk["total_shares"],
+                            "sold_date": trk["sold_date"],
+                        }
+
                         # 冷卻中
                         if trk.get("sold_date") and trk["buy_count"] == -1:
                             days_since_sold = (datetime.now() - trk["sold_date"]).days
@@ -748,6 +757,13 @@ def main():
                         if USE_REAL_API:
                             order_result = broker.place_order(symbol, action.lower(), position_size)
                             if "error" in order_result:
+                                # 下單失敗，回滾 pyramid_tracker 狀態（避免 keep_wait 卡在不一致狀態）
+                                if strategy_name == "keep_wait":
+                                    trk["buy_count"] = kw_pre_state["buy_count"]
+                                    trk["last_buy_price"] = kw_pre_state["last_buy_price"]
+                                    trk["total_cost"] = kw_pre_state["total_cost"]
+                                    trk["total_shares"] = kw_pre_state["total_shares"]
+                                    trk["sold_date"] = kw_pre_state["sold_date"]
                                 continue
                         else:
                             broker.place_order(symbol, action, position_size)
