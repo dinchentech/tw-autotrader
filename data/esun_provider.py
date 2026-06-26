@@ -265,16 +265,17 @@ class EsunProvider:
             else:
                 ap_code = APCode.Common
                 order_type = "整股"
-                # 整股四捨五入：餘數 ≥500 進位，<500 捨去
-                remainder = quantity % 1000
-                if remainder >= 500:
-                    quantity = ((quantity // 1000) + 1) * 1000
-                    print(f"↻  {symbol} {quantity} 股餘數 {remainder} ≥500，進位至 {quantity//1000} 張")
-                elif remainder > 0:
-                    quantity = (quantity // 1000) * 1000
-                    if quantity == 0:
+                # 整股四捨五入至整張，ESun Common APCode 以「張」為單位
+                if quantity % 1000 >= 500:
+                    quantity = (quantity // 1000) + 1
+                    print(f"↻  {symbol} {quantity * 1000} 股餘數 ≥500，進位至 {quantity} 張")
+                else:
+                    lots = quantity // 1000
+                    if lots == 0:
                         return {"error": "quantity too small for board lot order"}
-                    print(f"↻  {symbol} 原本 {quantity} 股餘數 {remainder} <500，捨去為 {quantity//1000} 張")
+                    if quantity % 1000 > 0:
+                        print(f"↻  {symbol} {quantity} 股餘數 <500，捨去為 {lots} 張")
+                    quantity = lots
 
             order = OrderObject(
                 buy_sell=buy_sell,
@@ -288,7 +289,8 @@ class EsunProvider:
                 user_def="tw-autotrader",
             )
             result = self._trade_sdk.place_order(order)
-            print(f"✅ E.Sun 下單成功: {order_type} {action} {symbol} {quantity} 股 @ {price:.2f}")
+            display_qty = quantity * 1000 if ap_code == APCode.Common else quantity
+            print(f"✅ E.Sun 下單成功: {order_type} {action} {symbol} {display_qty} 股 @ {price:.2f}")
             return result
         except Exception as e:
             print(f"❌ E.Sun 下單失敗: {e}")
