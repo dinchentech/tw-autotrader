@@ -246,7 +246,7 @@ class EsunProvider:
     # ── order execution interface ────────────────────────────────
 
     def place_order(self, symbol: str, action: str, quantity: int):
-        """下單（盤中零股，限價）"""
+        """下單（限價），依股數自動選擇盤中零股或整股"""
         if self._trade_sdk is None:
             print("❌ E.Sun trade SDK not available – login failed earlier")
             return {"error": "trade SDK not available"}
@@ -258,19 +258,37 @@ class EsunProvider:
             if price <= 0:
                 return {"error": "cannot get current price"}
 
+            # 999 股以下走盤中零股，以上走整股
+            if quantity <= 999:
+                ap_code = APCode.IntradayOdd
+                order_type = "盤中零股"
+            else:
+                ap_code = APCode.Common
+                order_type = "整股"
+                # 整股四捨五入：餘數 ≥500 進位，<500 捨去
+                remainder = quantity % 1000
+                if remainder >= 500:
+                    quantity = ((quantity // 1000) + 1) * 1000
+                    print(f"↻  {symbol} {quantity} 股餘數 {remainder} ≥500，進位至 {quantity//1000} 張")
+                elif remainder > 0:
+                    quantity = (quantity // 1000) * 1000
+                    if quantity == 0:
+                        return {"error": "quantity too small for board lot order"}
+                    print(f"↻  {symbol} 原本 {quantity} 股餘數 {remainder} <500，捨去為 {quantity//1000} 張")
+
             order = OrderObject(
                 buy_sell=buy_sell,
                 price=price,
                 stock_no=symbol,
                 quantity=quantity,
-                ap_code=APCode.Odd,        # 盤中零股
+                ap_code=ap_code,
                 bs_flag=BSFlag.ROD,
                 price_flag=PriceFlag.Limit,
                 trade=Trade.Cash,
                 user_def="tw-autotrader",
             )
             result = self._trade_sdk.place_order(order)
-            print(f"✅ E.Sun 下單成功: {action} {symbol} {quantity} 股 @ {price:.2f}")
+            print(f"✅ E.Sun 下單成功: {order_type} {action} {symbol} {quantity} 股 @ {price:.2f}")
             return result
         except Exception as e:
             print(f"❌ E.Sun 下單失敗: {e}")
