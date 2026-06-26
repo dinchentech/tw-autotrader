@@ -542,6 +542,12 @@ def main():
                     accumulated_data = portfolio_history[symbol]
                     strategy_name = cfg["strategy"]
 
+                    # ---- 單日交易次數限制（提前攔截，免於浪費運算） ----
+                    if MAX_DAILY_TRADES_PER_SYMBOL > 0:
+                        sym_trades_today = daily_symbol_trades.get(symbol, 0)
+                        if sym_trades_today >= MAX_DAILY_TRADES_PER_SYMBOL:
+                            continue
+
                     if USE_REAL_API:
                         new_data = broker.get_minute_bars(symbol, minutes=1)
                         if not new_data.empty:
@@ -746,13 +752,6 @@ def main():
                             if not check_monthly_budget(symbol, trade_cost, budget_spent):
                                 continue
                             if not check_stock_cap(symbol, trade_cost, stock_alloc):
-                                continue
-
-                        # ---- 單日交易次數限制 ----
-                        if MAX_DAILY_TRADES_PER_SYMBOL > 0:
-                            sym_trades_today = daily_symbol_trades.get(symbol, 0)
-                            if sym_trades_today >= MAX_DAILY_TRADES_PER_SYMBOL:
-                                print(f"🛑 {symbol} 今日已交易 {sym_trades_today} 次，上限 {MAX_DAILY_TRADES_PER_SYMBOL}")
                                 continue
 
                         # ---- 大盤年線過濾 ----

@@ -1,0 +1,1 @@
+/home/frank/ponytail/.opencode/command/ponytail-audit.md
