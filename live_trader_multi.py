@@ -107,6 +107,7 @@ INST_MOM_CAPITAL = float(os.getenv("INST_MOM_CAPITAL", 0))
 USE_REAL_API = os.getenv("USE_REAL_API", "false").lower() == "true"
 BROKER = os.getenv("BROKER", "kgi").lower()
 DCA_AMOUNT = int(os.getenv("DCA_AMOUNT", "0"))
+MAX_DAILY_TRADES_PER_SYMBOL = int(os.getenv("MAX_DAILY_TRADES_PER_SYMBOL", "1"))
 
 
 def _create_broker():
@@ -415,6 +416,8 @@ def main():
     daily_report_sent_date = None
     last_capital_check_date = None
     processed_capital = load_processed_capital()
+    daily_symbol_trades = {}
+    daily_symbol_trades_date = None
 
     def check_capital_injections():
         """檢查 capital.txt 新增資金投入，自動調整並執行 keep_wait 購買"""
@@ -521,6 +524,12 @@ def main():
         h, m = now.hour, now.minute
 
         check_capital_injections()
+
+        # 重置單日交易次數（換日歸零）
+        today_str = now.strftime("%Y-%m-%d")
+        if daily_symbol_trades_date != today_str:
+            daily_symbol_trades = {}
+            daily_symbol_trades_date = today_str
 
         # ------------------------------------------------------------
         # 時段 1：盤中 08:45-13:30 → 正常交易
@@ -739,6 +748,13 @@ def main():
                             if not check_stock_cap(symbol, trade_cost, stock_alloc):
                                 continue
 
+                        # ---- 單日交易次數限制 ----
+                        if MAX_DAILY_TRADES_PER_SYMBOL > 0:
+                            sym_trades_today = daily_symbol_trades.get(symbol, 0)
+                            if sym_trades_today >= MAX_DAILY_TRADES_PER_SYMBOL:
+                                print(f"🛑 {symbol} 今日已交易 {sym_trades_today} 次，上限 {MAX_DAILY_TRADES_PER_SYMBOL}")
+                                continue
+
                         # ---- 大盤年線過濾 ----
                         if action == "BUY" and os.getenv("MARKET_TREND_FILTER", "true").lower() == "true":
                             if not market_filter.is_above_ma200():
@@ -775,6 +791,9 @@ def main():
                         else:
                             holdings[symbol] = max(0, holdings.get(symbol, 0) - position_size)
                         save_holdings(holdings)
+
+                        if MAX_DAILY_TRADES_PER_SYMBOL > 0:
+                            daily_symbol_trades[symbol] = daily_symbol_trades.get(symbol, 0) + 1
 
                         if action == "SELL":
                             sell_proceeds = current_price * position_size
