@@ -203,7 +203,7 @@ def _next_market_open(now: datetime) -> datetime:
     return now.replace(hour=8, minute=45) + timedelta(days=1)
 
 
-APP_VERSION = "1.31"
+APP_VERSION = "1.32"
 BUILD_DATE = "2026-06-24"
 
 
