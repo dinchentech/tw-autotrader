@@ -108,7 +108,7 @@ USE_REAL_API = os.getenv("USE_REAL_API", "false").lower() == "true"
 BROKER = os.getenv("BROKER", "kgi").lower()
 DCA_AMOUNT = int(os.getenv("DCA_AMOUNT", "0"))
 MAX_DAILY_TRADES_PER_SYMBOL = int(os.getenv("MAX_DAILY_TRADES_PER_SYMBOL", "1"))
-PROFIT_MARGIN = float(os.getenv("PROFIT_MARGIN", "500"))
+PROFIT_MARGIN = float(os.getenv("PROFIT_MARGIN", "100"))
 
 
 def _create_broker():
