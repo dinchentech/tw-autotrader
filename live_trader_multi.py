@@ -108,6 +108,7 @@ USE_REAL_API = os.getenv("USE_REAL_API", "false").lower() == "true"
 BROKER = os.getenv("BROKER", "kgi").lower()
 DCA_AMOUNT = int(os.getenv("DCA_AMOUNT", "0"))
 MAX_DAILY_TRADES_PER_SYMBOL = int(os.getenv("MAX_DAILY_TRADES_PER_SYMBOL", "1"))
+PROFIT_MARGIN = float(os.getenv("PROFIT_MARGIN", "500"))
 
 
 def _create_broker():
@@ -203,7 +204,7 @@ def _next_market_open(now: datetime) -> datetime:
     return now.replace(hour=8, minute=45) + timedelta(days=1)
 
 
-APP_VERSION = "1.33"
+APP_VERSION = "1.34"
 BUILD_DATE = "2026-06-24"
 
 
@@ -794,6 +795,24 @@ def main():
                             if owned < position_size:
                                 if owned > 0:
                                     print(f"⚠️  {symbol} 持有 {owned} 股，不足賣出 {position_size} 股，跳過")
+                                continue
+
+                        # ---- 最小利潤/損失門檻 ----
+                        if PROFIT_MARGIN > 0 and action == "SELL":
+                            alloc_data = stock_alloc.get(symbol, {})
+                            sell_shares = alloc_data.get("total_buy_shares", 0)
+                            sell_cost = alloc_data.get("total_buy_cost", 0.0)
+                            if sell_shares > 0:
+                                avg_cost = sell_cost / sell_shares
+                            elif strategy_name == "keep_wait" and symbol in pyramid_tracker:
+                                trk = pyramid_tracker[symbol]
+                                avg_cost = (trk["total_cost"] / trk["total_shares"]
+                                            if trk["total_shares"] > 0 else current_price)
+                            else:
+                                avg_cost = current_price
+                            expected_profit = (current_price - avg_cost) * position_size
+                            if abs(expected_profit) < PROFIT_MARGIN:
+                                print(f"⏸️  {symbol} 預估損益 {expected_profit:+.0f} 低於門檻 {PROFIT_MARGIN:.0f}，跳過")
                                 continue
 
                         # ---- 下單 ----
