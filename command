@@ -1,1 +1,0 @@
-/home/frank/.config/opencode/command/

@@ -200,3 +200,8 @@ node_modules/
 core/inst_strategy_core.py
 backtest_inst_momentum.py
 strategies/institutional_momentum.py
+
+# IDEs & accidental junk
+.idea/
+command
+package.json

@@ -74,15 +74,16 @@ jobs:
 
       - name: Prepare artifact
         run: |
-          cp dashboard.html index.html
-          # 動畫 HTML 已在 checkout 後位於工作目錄中
-          ls -la
+          mkdir -p _site
+          cp dashboard.html _site/index.html
+          for f in *.html; do [ "$f" = "dashboard.html" ] || cp "$f" _site/; done 2>/dev/null || true
+          echo "✅ _site 內容:" && ls -la _site/
 
       - name: Upload artifact
         if: steps.check-gitpage.outputs.gitpage == 'on'
         uses: actions/upload-pages-artifact@v3
         with:
-          path: '.'
+          path: '_site'
 
       - name: Deploy to GitHub Pages
         if: steps.check-gitpage.outputs.gitpage == 'on'
