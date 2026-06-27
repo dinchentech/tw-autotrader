@@ -205,3 +205,4 @@ strategies/institutional_momentum.py
 .idea/
 command
 package.json
+vm_logs/
