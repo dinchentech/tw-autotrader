@@ -203,7 +203,7 @@ def _next_market_open(now: datetime) -> datetime:
     return now.replace(hour=8, minute=45) + timedelta(days=1)
 
 
-APP_VERSION = "1.32"
+APP_VERSION = "1.33"
 BUILD_DATE = "2026-06-24"
 
 
@@ -360,6 +360,27 @@ def main():
     holdings = load_holdings()
 
     # ==========================================
+    # 單日交易次數追蹤（持久化，避免 container 重啟歸零）
+    # ==========================================
+    daily_trades_file = Path("logs/daily_trades.json")
+
+    def load_daily_trades() -> dict:
+        if daily_trades_file.exists():
+            try:
+                data = json.loads(daily_trades_file.read_text())
+                # 回傳 {symbol: count} 與日期以供驗證
+                return data.get("trades", {}), data.get("date")
+            except Exception:
+                pass
+        return {}, None
+
+    def save_daily_trades(trades: dict, date_str: str):
+        daily_trades_file.write_text(json.dumps({
+            "date": date_str,
+            "trades": trades,
+        }, indent=2))
+
+    # ==========================================
     # 大盤年線過濾器
     # ==========================================
     from core.market_filter import MarketTrendFilter
@@ -416,8 +437,14 @@ def main():
     daily_report_sent_date = None
     last_capital_check_date = None
     processed_capital = load_processed_capital()
-    daily_symbol_trades = {}
-    daily_symbol_trades_date = None
+    daily_symbol_trades, daily_symbol_trades_date = load_daily_trades()
+    if daily_symbol_trades_date is None:
+        daily_symbol_trades = {}
+    # 如果檔案記錄的日期不是今天，換日歸零
+    today_str_init = datetime.now().strftime("%Y-%m-%d")
+    if daily_symbol_trades_date != today_str_init:
+        daily_symbol_trades = {}
+        daily_symbol_trades_date = today_str_init
 
     def check_capital_injections():
         """檢查 capital.txt 新增資金投入，自動調整並執行 keep_wait 購買"""
@@ -530,6 +557,7 @@ def main():
         if daily_symbol_trades_date != today_str:
             daily_symbol_trades = {}
             daily_symbol_trades_date = today_str
+            save_daily_trades(daily_symbol_trades, today_str)
 
         # ------------------------------------------------------------
         # 時段 1：盤中 08:45-13:30 → 正常交易
@@ -793,6 +821,7 @@ def main():
 
                         if MAX_DAILY_TRADES_PER_SYMBOL > 0:
                             daily_symbol_trades[symbol] = daily_symbol_trades.get(symbol, 0) + 1
+                            save_daily_trades(daily_symbol_trades, daily_symbol_trades_date)
 
                         if action == "SELL":
                             sell_proceeds = current_price * position_size
