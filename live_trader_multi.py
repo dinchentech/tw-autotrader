@@ -364,6 +364,24 @@ def main():
     # 單日交易次數追蹤（持久化，避免 container 重啟歸零）
     # ==========================================
     daily_trades_file = Path("logs/daily_trades.json")
+    
+    # ==========================================
+    # 交易冷卻時間追蹤（持久化）
+    # ==========================================
+    cooldown_file = Path("logs/last_trade_times.json")
+
+    def load_last_trade_times() -> dict:
+        if cooldown_file.exists():
+            try:
+                return json.loads(cooldown_file.read_text())
+            except Exception:
+                pass
+        return {}
+
+    def save_last_trade_times(times: dict):
+        cooldown_file.write_text(json.dumps(times, indent=2))
+
+    last_trade_times = load_last_trade_times()
 
     def load_daily_trades() -> dict:
         if daily_trades_file.exists():
@@ -571,11 +589,19 @@ def main():
                     accumulated_data = portfolio_history[symbol]
                     strategy_name = cfg["strategy"]
 
-                    # ---- 單日交易次數限制（提前攔截，免於浪費運算） ----
-                    if MAX_DAILY_TRADES_PER_SYMBOL > 0:
-                        sym_trades_today = daily_symbol_trades.get(symbol, 0)
-                        if sym_trades_today >= MAX_DAILY_TRADES_PER_SYMBOL:
-                            continue
+                        # ---- 單日交易次數限制（提前攔截，免於浪費運算） ----
+                        if MAX_DAILY_TRADES_PER_SYMBOL > 0:
+                            sym_trades_today = daily_symbol_trades.get(symbol, 0)
+                            if sym_trades_today >= MAX_DAILY_TRADES_PER_SYMBOL:
+                                continue
+
+                        # ---- 30 分鐘強制冷卻檢查 ----
+                        last_sell = last_trade_times.get(symbol)
+                        if last_sell:
+                            last_sell_dt = datetime.fromisoformat(last_sell)
+                            if (now - last_sell_dt).total_seconds() < 1800:
+                                continue
+
 
                     if USE_REAL_API:
                         new_data = broker.get_minute_bars(symbol, minutes=1)
@@ -843,6 +869,9 @@ def main():
                             save_daily_trades(daily_symbol_trades, daily_symbol_trades_date)
 
                         if action == "SELL":
+                            last_trade_times[symbol] = now.isoformat()
+                            save_last_trade_times(last_trade_times)
+
                             sell_proceeds = current_price * position_size
                             total_sell_all += sell_proceeds
                             if symbol in pyramid_tracker and strategy_name != "keep_wait":
