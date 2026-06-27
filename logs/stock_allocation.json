@@ -1,0 +1,39 @@
+{
+  "006208": {
+    "total_buy_cost": 44656.7,
+    "total_buy_shares": 185,
+    "_cap_warned": true
+  },
+  "0050": {
+    "total_buy_cost": 132936.25,
+    "total_buy_shares": 1288,
+    "_cap_warned": true
+  },
+  "2886": {
+    "total_buy_cost": 10106.3,
+    "total_buy_shares": 219
+  },
+  "2330": {
+    "total_buy_cost": 0,
+    "total_buy_shares": 0
+  },
+  "00878": {
+    "total_buy_cost": 44845.54670596905,
+    "total_buy_shares": 1359,
+    "_cap_warned": true
+  },
+  "2454": {
+    "total_buy_cost": 24810.0,
+    "total_buy_shares": 6,
+    "_cap_warned": true
+  },
+  "2382": {
+    "total_buy_cost": 9706.5,
+    "total_buy_shares": 27
+  },
+  "2881": {
+    "total_buy_cost": 49962.0,
+    "total_buy_shares": 369,
+    "_cap_warned": true
+  }
+}
