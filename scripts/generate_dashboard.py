@@ -349,11 +349,12 @@ def build_html(trades_df: pd.DataFrame) -> str:
     <table><thead><tr><th>日期</th><th>時間</th><th>標的</th><th>價格</th><th>股數</th><th>損益</th><th>報酬率</th><th>累積損益</th></tr></thead><tbody>"""
         for t in last_trades_g1:
             cls = "positive" if t["pnl"] >= 0 else "negative"
+            cum_cls = "positive" if t["cumulative"] >= 0 else "negative"
             html += f"""<tr><td>{t["date"]}</td><td>{t["time"]}</td><td>{t["symbol"]}</td>
                 <td>{t["price"]:,.0f}</td><td>{t["qty"]}</td>
                 <td class="{cls}">{t["pnl"]:+,.0f}</td>
                 <td class="{cls}">{t["pnl_pct"]:+.2f}%</td>
-                <td class="{cls}">{t["cumulative"]:+,.0f}</td></tr>"""
+                <td class="{cum_cls}">{t["cumulative"]:+,.0f}</td></tr>"""
         html += "</tbody></table>"
 
         if symbol_stats_g1:
@@ -387,11 +388,12 @@ def build_html(trades_df: pd.DataFrame) -> str:
     <table><thead><tr><th>日期</th><th>時間</th><th>標的</th><th>價格</th><th>股數</th><th>損益</th><th>報酬率</th><th>累積損益</th></tr></thead><tbody>"""
         for t in last_trades_g2:
             cls = "positive" if t["pnl"] >= 0 else "negative"
+            cum_cls = "positive" if t["cumulative"] >= 0 else "negative"
             html += f"""<tr><td>{t["date"]}</td><td>{t["time"]}</td><td>{t["symbol"]}</td>
                 <td>{t["price"]:,.0f}</td><td>{t["qty"]}</td>
                 <td class="{cls}">{t["pnl"]:+,.0f}</td>
                 <td class="{cls}">{t["pnl_pct"]:+.2f}%</td>
-                <td class="{cls}">{t["cumulative"]:+,.0f}</td></tr>"""
+                <td class="{cum_cls}">{t["cumulative"]:+,.0f}</td></tr>"""
         html += "</tbody></table>"
 
         if symbol_stats_g2:
