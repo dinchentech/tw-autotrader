@@ -204,8 +204,8 @@ def _next_market_open(now: datetime) -> datetime:
     return now.replace(hour=8, minute=45) + timedelta(days=1)
 
 
-APP_VERSION = "1.34"
-BUILD_DATE = "2026-06-24"
+APP_VERSION = "1.35"
+BUILD_DATE = "2026-06-28"
 
 
 def get_stock_capital(symbol: str) -> float:
@@ -321,7 +321,7 @@ def main():
         new_total = net + cost
         if new_total > cap:
             remaining = cap - net
-            print(f"⚠️  {symbol} 配置已達上限：已用 {net:.0f} / {cap:.0f} 元（剩 {remaining:.0f}），跳過")
+            print(f"⚠️  {symbol} 本次需 NT${cost:,.0f}，已用 {net:.0f} / {cap:.0f} 元（剩 {remaining:.0f}），跳過")
             return False
         # 資金使用率超過 70% 時通知使用者
         usage = new_total / cap
@@ -571,12 +571,18 @@ def main():
 
         check_capital_injections()
 
-        # 重置單日交易次數（換日歸零）
+        # 重置單日交易次數與冷卻紀錄（換日歸零，且每週日歸零冷卻）
         today_str = now.strftime("%Y-%m-%d")
         if daily_symbol_trades_date != today_str:
             daily_symbol_trades = {}
             daily_symbol_trades_date = today_str
             save_daily_trades(daily_symbol_trades, today_str)
+            
+            # 每週日（6）重置冷卻紀錄
+            if now.weekday() == 6:
+                last_trade_times = {}
+                save_last_trade_times(last_trade_times)
+                print(f"🧹 每週自動清空冷卻紀錄 (last_trade_times.json)")
 
         # ------------------------------------------------------------
         # 時段 1：盤中 08:45-13:30 → 正常交易
@@ -589,18 +595,18 @@ def main():
                     accumulated_data = portfolio_history[symbol]
                     strategy_name = cfg["strategy"]
 
-                        # ---- 單日交易次數限制（提前攔截，免於浪費運算） ----
-                        if MAX_DAILY_TRADES_PER_SYMBOL > 0:
-                            sym_trades_today = daily_symbol_trades.get(symbol, 0)
-                            if sym_trades_today >= MAX_DAILY_TRADES_PER_SYMBOL:
-                                continue
+                    # ---- 單日交易次數限制（提前攔截，免於浪費運算） ----
+                    if MAX_DAILY_TRADES_PER_SYMBOL > 0:
+                        sym_trades_today = daily_symbol_trades.get(symbol, 0)
+                        if sym_trades_today >= MAX_DAILY_TRADES_PER_SYMBOL:
+                            continue
 
-                        # ---- 30 分鐘強制冷卻檢查 ----
-                        last_sell = last_trade_times.get(symbol)
-                        if last_sell:
-                            last_sell_dt = datetime.fromisoformat(last_sell)
-                            if (now - last_sell_dt).total_seconds() < 1800:
-                                continue
+                    # ---- 30 分鐘強制冷卻檢查 ----
+                    last_sell = last_trade_times.get(symbol)
+                    if last_sell:
+                        last_sell_dt = datetime.fromisoformat(last_sell)
+                        if (now - last_sell_dt).total_seconds() < 1800:
+                            continue
 
 
                     if USE_REAL_API:

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TW AutoTrader — 績效儀表板</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         background: #f5f7fa; color: #1a1a2e; padding: 24px; }
+  .container { max-width: 1200px; margin: 0 auto; }
+  h1 { font-size: 1.6rem; font-weight: 700; margin-bottom: 4px; }
+  .subtitle { color: #666; font-size: .85rem; margin-bottom: 24px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap: 12px; margin-bottom: 16px; }
+  .card { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+  .card .label { font-size: .75rem; color: #888; text-transform: uppercase; letter-spacing: .5px; }
+  .card .value { font-size: 1.5rem; font-weight: 700; margin-top: 4px; }
+  .card .value.positive { color: #e74c3c; }  .card .value.negative { color: #3498db; }
+  .group-label { font-size: .65rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;
+                  margin-bottom: 8px; padding: 2px 8px; border-radius: 4px; display: inline-block; }
+  .group-label.g1 { background: #fdeaea; color: #c0392b; }
+  .group-label.g2 { background: #eaf5ff; color: #2980b9; }
+  .group-label.total { background: #f0f0f0; color: #555; }
+  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  .chart-box { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+  .chart-box.full { grid-column: 1 / -1; }
+  .chart-box h3 { font-size: .9rem; color: #555; margin-bottom: 12px; }
+  .chart-box canvas { max-height: 320px; }
+  table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  th { text-align: left; padding: 8px 10px; border-bottom: 2px solid #e8e8e8; color: #888; font-weight: 600; }
+  td { padding: 8px 10px; border-bottom: 1px solid #f0f0f0; }
+  .positive { color: #e74c3c; }  .negative { color: #3498db; }
+  .section-title { font-size: 1.05rem; font-weight: 600; margin: 24px 0 12px; }
+  .empty { text-align: center; color: #999; padding: 48px 0; font-size: 1rem; }
+  .group-section { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px;
+                    box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+  .strategy-section { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px;
+                        box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+  .strategy-links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+  .strategy-link { display: inline-block; padding: 10px 18px; border-radius: 8px;
+                    background: #f0f4ff; color: #2563eb; text-decoration: none; font-weight: 500;
+                    font-size: .9rem; transition: background .15s; }
+  .strategy-link:hover { background: #dbeafe; }
+  @media (max-width: 640px) { .charts { grid-template-columns: 1fr; }
+     .cards { grid-template-columns: repeat(2, 1fr); } }
+  footer { text-align: center; color: #aaa; font-size: .75rem; margin-top: 32px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>📊 TW AutoTrader 績效儀表板</h1>
+  <div class="subtitle">最後更新：2026-06-28 12:19 · Group 1 + Group 2 雙群組</div>
+
+  <!-- 總覽卡片 -->
+  <div class="cards">
+    <div class="card"><div class="label">總已實現損益</div><div class="value positive">+0</div></div>
+    <div class="card"><div class="label">總交易次數</div><div class="value">0</div></div>
+    <div class="card"><div class="label">Group 1 損益</div><div class="value positive">+0</div></div>
+    <div class="card"><div class="label">Group 2 損益</div><div class="value positive">+0</div></div>
+  </div>
+
+  <div class="charts">
+    <div class="chart-box full"><h3>📈 累積損益曲線</h3><canvas id="chartPnlCombined"></canvas></div>
+    <div class="chart-box"><h3>📊 各標的損益 — Group 1</h3><canvas id="chartSymbolsG1"></canvas></div>
+    <div class="chart-box"><h3>📊 各標的損益 — Group 2</h3><canvas id="chartSymbolsG2"></canvas></div>
+  </div>
+
+  <div class="group-section">
+    <div class="group-label g1">Group 1 固定標的策略</div>
+    <div class="empty">📭 尚無交易紀錄</div>
+  </div>
+  <div class="group-section">
+    <div class="group-label g2">Group 2 法人抬轎動能策略</div>
+    <div class="empty">📭 尚無交易紀錄</div>
+  </div>
+  <div class="strategy-section">
+    <div class="section-title">🎬 六策略動畫說明</div>
+    <div class="strategy-links">
+      <a href="bollinger-animation.html" target="_blank" rel="noopener" class="strategy-link">布林通道反轉</a><a href="vwap-animation.html" target="_blank" rel="noopener" class="strategy-link">VWAP 偏離反轉</a><a href="ma_cross-animation.html" target="_blank" rel="noopener" class="strategy-link">均線交叉</a><a href="breakout-animation.html" target="_blank" rel="noopener" class="strategy-link">唐奇安突破</a><a href="keep_wait策略說明.html" target="_blank" rel="noopener" class="strategy-link">Keep & Wait 低接</a><a href="法人動能策略說明.html" target="_blank" rel="noopener" class="strategy-link">法人抬轎動能</a>
+    </div>
+  </div>
+  <footer>TW AutoTrader · 資料不構成投資建議 · 2026-06-28 12:19</footer>
+</div>
+<script>
+const DATA = {"labels": [], "curve_g1": [], "curve_g2": [], "symbol_stats_g1": [], "symbol_stats_g2": [], "pnl_list_g1": [], "pnl_list_g2": [], "g2_json": {}};
+
+// ─── 合併累積損益曲線 ───
+(function() {
+  const canvas = document.getElementById('chartPnlCombined');
+  if (!canvas || !DATA.labels || !DATA.labels.length) return;
+  const ds = [];
+  if (DATA.curve_g1 && DATA.curve_g1.some(v => v !== null))
+    ds.push({ label: 'Group 1', data: DATA.curve_g1, borderColor: '#e74c3c',
+             backgroundColor: 'rgba(231,76,60,.08)', fill: 1, tension: .3, pointRadius: 3 });
+  if (DATA.curve_g2 && DATA.curve_g2.some(v => v !== null))
+    ds.push({ label: 'Group 2', data: DATA.curve_g2, borderColor: '#2980b9',
+             backgroundColor: 'rgba(41,128,185,.08)', fill: 2, tension: .3, pointRadius: 3 });
+  if (!ds.length) return;
+  new Chart(canvas, {
+    type: 'line',
+    data: { labels: DATA.labels, datasets: ds },
+    options: { responsive: true,
+               scales: { y: { ticks: { callback: v=>v+'元' } } } }
+  });
+})();
+
+// ─── Group 1 各標的損益 ───
+(function() {
+  const canvas = document.getElementById('chartSymbolsG1');
+  if (!canvas || !DATA.symbol_stats_g1 || !DATA.symbol_stats_g1.length) return;
+  new Chart(canvas, {
+    type: 'bar',
+    data: { labels: DATA.symbol_stats_g1.map(s=>s.symbol),
+            datasets: [{ label: '損益', data: DATA.symbol_stats_g1.map(s=>s.pnl),
+                         backgroundColor: DATA.symbol_stats_g1.map(s=>s.pnl>=0?'rgba(231,76,60,.7)':'rgba(52,152,219,.7)') }] },
+    options: { responsive: true, plugins: { legend: { display: false } },
+               scales: { y: { ticks: { callback: v=>v+'元' } } } }
+  });
+})();
+
+// ─── Group 2 各標的損益 ───
+(function() {
+  const canvas = document.getElementById('chartSymbolsG2');
+  if (!canvas || !DATA.symbol_stats_g2 || !DATA.symbol_stats_g2.length) return;
+  new Chart(canvas, {
+    type: 'bar',
+    data: { labels: DATA.symbol_stats_g2.map(s=>s.symbol),
+            datasets: [{ label: '損益', data: DATA.symbol_stats_g2.map(s=>s.pnl),
+                         backgroundColor: DATA.symbol_stats_g2.map(s=>s.pnl>=0?'rgba(231,76,60,.7)':'rgba(52,152,219,.7)') }] },
+    options: { responsive: true, plugins: { legend: { display: false } },
+               scales: { y: { ticks: { callback: v=>v+'元' } } } }
+  });
+})();
+</script>
+</body>
+</html>
