@@ -27,7 +27,10 @@ mv ~/.local/share/opencode/auth.json /mnt/c/Users/frank/Documents/tw_autotrader_
 history -c && history -w
 
 # 5. （可選）移 SSH Key — 如果你有放金鑰在 WSL 裡 GCP SSH key安裝M過程會在產生
-mv ~/.ssh /mnt/c/Users/frank/Documents/tw_autotrader_backup/
+# 先複製
+cp -a ~/.ssh /mnt/c/Users/frank/Documents/tw_autotrader_backup/
+# 刪原件
+rm -rf ~/.ssh
 
 # 6. 移 .bashrc
 mv ~/.bashrc /mnt/c/Users/frank/Documents/tw_autotrader_backup/
