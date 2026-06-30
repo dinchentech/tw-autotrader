@@ -5,9 +5,10 @@ backtest_inst_momentum.py — 法人抬轎動能策略回測
 價格資料來自 FinMind（快取支援）。
 
 策略邏輯：
-  1. 每週五篩選全市場（流動性 > 2000 張 + 法人買超 > 3% + 創 20 日高 + 站穩 MA20）
-  2. 排序取前 TOP_N 名，次週一開盤進場
-   3. 每日監控：-7% 硬性停損 / 跌破 MA10 移動停利
+  1. 篩選全市場（--daily 每日篩選，否則每週五篩選）
+         流動性 > 2000 張 + 法人買超 > 3% + 創 20 日高 + 站穩 MA20
+  2. 排序取前 TOP_N 名，隔日開盤進場
+  3. 每日監控：硬性停損 / 跌破 MA10 移動停利
 
 使用方法：
   python backtest_inst_momentum.py                      # 預設：2025-01-01 ~ 2025-12-31
@@ -31,13 +32,47 @@ from pathlib import Path
 from collections import defaultdict
 from dotenv import load_dotenv
 load_dotenv()
+from core.inst_strategy_core import (
+    compute_fish_score as _core_compute_fish_score,
+    precompute_fish_scores as _core_precompute_fish_scores,
+    screen_fish_qualified as _core_screen_fish_qualified,
+    check_momentum_entry as _core_check_momentum_entry,
+    check_position_exit as _core_check_position_exit,
+    is_banned as _core_is_banned,
+    add_loser_ban as _core_add_loser_ban,
+    compute_profit_roll as _core_compute_profit_roll,
+    log_capital_roll as _core_log_capital_roll,
+)
+import core.inst_strategy_core as inst_core
+
+
+def precompute_fish_scores(all_data):
+    return _core_precompute_fish_scores(all_data)
+
+
+def screen_fish_qualified(all_data, screening_date, fish_scores, fish_days, fish_min_score):
+    return _core_screen_fish_qualified(all_data, screening_date, fish_scores, fish_days, fish_min_score)
+
+
+def check_momentum_entry(all_data, stock_id, check_date):
+    return _core_check_momentum_entry(all_data, stock_id, check_date)
+
+
+def screen_candidates(all_data, screening_date):
+    candidates = []
+    for stock_id in all_data:
+        passes, score = _core_check_momentum_entry(all_data, stock_id, screening_date)
+        if passes:
+            candidates.append((stock_id, score))
+    candidates.sort(key=lambda x: x[1], reverse=True)
+    return candidates[:TOP_N]
 
 # ─── 參數 ─────────────────────────────────────────────────
 parser = argparse.ArgumentParser(description="法人抬轎動能策略回測")
 parser.add_argument("--start", default="2025-01-01", help="起始日期 (YYYY-MM-DD)")
 parser.add_argument("--end", default="2025-12-31", help="結束日期 (YYYY-MM-DD)")
 parser.add_argument("--daily", action="store_true", help="啟用每日篩選（預設為每週五篩選）")
-parser.add_argument("--top", type=int, default=0, help="篩選標的數（預設 MAX_STOCKS=270）")
+parser.add_argument("--top", type=int, default=0, help="篩選標的數（預設 MAX_STOCKS=260）")
 parser.add_argument("--buy-ratio", type=float, default=None, help="法人買超門檻（預設 0.03）")
 parser.add_argument("--stop-loss", type=float, default=None, help="停損幅度（預設 0.07）")
 parser.add_argument("--min-volume", type=int, default=None, help="流動性門檻（張，預設 2000）")
@@ -58,8 +93,8 @@ args = parser.parse_args()
 START_DATE = args.start
 END_DATE = args.end
 DAILY_SCREENING = args.daily
-MAX_STOCKS = 270  # 前 N 大股票，控制 FinMind API 呼叫量
-TOP_N_STOCKS = args.top or MAX_STOCKS  # --top 覆蓋 MAX_STOCKS
+MAX_STOCKS = int(os.getenv("STOCK_NO", "260"))  # 前 N 大股票，控制 FinMind API 呼叫量
+TOP_N_STOCKS = args.top or MAX_STOCKS  # --top 覆蓋 MAX_STOCKS / STOCK_NO
 
 CACHE_DIR = Path(f"cache/inst_momentum/{START_DATE[:4]}")
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -71,7 +106,7 @@ TOP_N = 3
 MIN_VOLUME_SHARES = 2000        # 張
 BUY_RATIO_THRESHOLD = 0.03
 LOOKBACK = 20
-STOP_LOSS = 0.07
+STOP_LOSS = 0.10
 TRAILING_PERIOD = 10
 LOSER_BAN_DAYS = int(os.getenv("INST_MOM_LOSER_BAN_DAYS", "0"))
 BUY_COST = 0.001425
@@ -89,6 +124,16 @@ if args.loser_ban is not None:
 if args.lookback is not None:
     LOOKBACK = args.lookback
 
+# ─── 同步覆蓋到共用核心模組 ────────────────────────
+inst_core.MIN_VOLUME_SHARES = MIN_VOLUME_SHARES
+inst_core.BUY_RATIO_THRESHOLD = BUY_RATIO_THRESHOLD
+inst_core.LOOKBACK = LOOKBACK
+inst_core.STOP_LOSS = STOP_LOSS
+inst_core.TRAILING_PERIOD = TRAILING_PERIOD
+inst_core.LOSER_BAN_DAYS = LOSER_BAN_DAYS
+inst_core.BUY_COST = BUY_COST
+inst_core.SELL_COST = SELL_COST
+
 # ─── 法人低吃過濾參數 ────────────────────────────────
 FISH_PRE_FILTER = args.fish_pre_filter
 FISH_DAYS = args.fish_days or 60
@@ -99,6 +144,8 @@ AUTO_CAP_MONTHS = args.auto_cap_months
 AUTO_CAP_RATIO = args.auto_cap_ratio
 PROFIT_ROLL_MONTHS = args.profit_roll_months
 PROFIT_ROLL_PERCENTAGE = args.profit_roll_percentage
+inst_core.PROFIT_ROLL_MONTHS = PROFIT_ROLL_MONTHS
+inst_core.PROFIT_ROLL_PERCENTAGE = PROFIT_ROLL_PERCENTAGE
 
 
 def finmind_login():
@@ -148,15 +195,9 @@ def download_price_data(dl, stock_id: str) -> pd.DataFrame:
     cache_file = PRICE_CACHE_DIR / f"{stock_id}.pkl"
     if cache_file.exists():
         df = pickle.loads(cache_file.read_bytes())
-        if not df.empty and df["date"].max() >= pd.Timestamp(END_DATE):
+        if not df.empty and df["date"].max() >= pd.Timestamp(END_DATE) - timedelta(days=7):
             return df
-        last_date = df["date"].max().strftime("%Y-%m-%d") if not df.empty else None
-    else:
-        last_date = None
-
     start_dt = datetime.strptime(START_DATE, "%Y-%m-%d") - timedelta(days=60)
-    if last_date and last_date > start_dt.strftime("%Y-%m-%d"):
-        start_dt = datetime.strptime(last_date, "%Y-%m-%d") + timedelta(days=1)
     start = start_dt.strftime("%Y-%m-%d")
 
     # 先試 FinMind，失敗則以 yfinance 補
@@ -167,18 +208,7 @@ def download_price_data(dl, stock_id: str) -> pd.DataFrame:
     if df_new is None or df_new.empty:
         return pd.DataFrame()
 
-    # 若原先已有部分資料，合併
-    if last_date:
-        df_old = pickle.loads(cache_file.read_bytes())
-        if not df_old.empty:
-            df_old = df_old[df_old["date"] < df_new["date"].min()]
-            df_price = pd.concat([df_old, df_new], ignore_index=True).drop_duplicates(
-                subset=["date"], keep="last"
-            ).sort_values("date").reset_index(drop=True)
-        else:
-            df_price = df_new
-    else:
-        df_price = df_new
+    df_price = df_new
 
     # 計算技術指標
     df_price["ma20"] = df_price["close"].rolling(LOOKBACK).mean()
@@ -306,207 +336,7 @@ def merge_twse_inst(all_data: dict, twse_data: dict) -> dict:
 
 # ─── 階段 2a：法人低吃分數預計算 ──────────────────────
 
-def _fish_score_for_row(close_arr, open_arr, high_arr, low_arr, vol_arr,
-                        inst_buy_arr, inst_sell_arr, idx: int) -> float:
-    """計算第 idx 列的法人低吃分數（0-10），close_arr 等皆為 numpy array，不含前 29 列。"""
-    close_i = close_arr[idx]
-    vol_i = vol_arr[idx]
-
-    # ── 價格分數 (0-3) ──
-    recent_low = low_arr[max(0, idx-29):idx+1].min()
-    pct_from_low = (close_i - recent_low) / close_i if close_i > 0 else 1
-    price_score = 0
-    if pct_from_low < 0.02:
-        price_score += 1
-    # MA20
-    if idx >= 19:
-        ma20 = close_arr[idx-19:idx+1].mean()
-        if close_i < ma20:
-            price_score += 1
-    # MA60
-    if idx >= 59:
-        ma60 = close_arr[idx-59:idx+1].mean()
-        if close_i < ma60:
-            price_score += 1
-    # 連跌後止穩
-    if idx >= 5:
-        streak = sum(1 for j in range(idx-4, idx) if close_arr[j] < close_arr[j-1])
-        if streak >= 3 and close_i >= low_arr[max(0, idx-2):idx+1].min():
-            price_score += 0.5
-    price_score = min(price_score, 3)
-
-    # ── 量能分數 (0-3) ──
-    avg_vol_5 = vol_arr[max(0, idx-4):idx+1].mean()
-    avg_vol_20 = vol_arr[max(0, idx-19):idx+1].mean()
-    vol_ratio = vol_i / avg_vol_5 if avg_vol_5 > 0 else 1
-    vol_score = 0
-    if vol_ratio > 1.3:
-        vol_score += 1
-    if vol_ratio > 2:
-        vol_score += 1
-    if vol_ratio > 1.3:
-        pct_chg = (close_i - open_arr[idx]) / open_arr[idx] if open_arr[idx] > 0 else 0
-        if -0.02 <= pct_chg <= 0.02:
-            vol_score += 1
-        elif pct_chg > 0.03:
-            vol_score -= 0.5
-    if avg_vol_5 > avg_vol_20 * 1.2:
-        vol_score += 0.5
-    vol_score = max(0, min(vol_score, 3))
-
-    # ── K線型態分數 (0-2) ──
-    body = abs(close_i - open_arr[idx])
-    lower_shadow = min(open_arr[idx], close_i) - low_arr[idx]
-    upper_shadow = high_arr[idx] - max(open_arr[idx], close_i)
-    total_range = high_arr[idx] - low_arr[idx]
-    pattern_score = 0
-    if total_range > 0:
-        lower_ratio = lower_shadow / total_range
-        if lower_ratio > 0.5 and body < total_range * 0.4:
-            pattern_score += 1
-        if lower_ratio > 0.6 and upper_shadow < total_range * 0.2:
-            pattern_score += 1
-        if body / total_range < 0.1 and lower_shadow > 0 and upper_shadow > 0:
-            pattern_score += 1
-    pattern_score = min(pattern_score, 2)
-
-    # ── 法人分數 (0-2) ──
-    net = inst_buy_arr[idx] - inst_sell_arr[idx]
-    inst_score = 0
-    if net > 0:
-        inst_score += 1
-    if net > 1000:
-        inst_score += 1
-    inst_score = min(inst_score, 2)
-
-    return price_score + vol_score + pattern_score + inst_score
-
-
-def precompute_fish_scores(all_data: dict) -> dict:
-    """
-    為每檔股票每筆交易日計算低吃分數。
-    回傳 { stock_id: { date_str: score } }
-    """
-    fish_scores = {}
-    for sid, df in all_data.items():
-        if df.empty or len(df) < 30:
-            continue
-        close_arr = df["close"].values
-        open_arr = df["open"].values
-        high_arr = df["high"].values
-        low_arr = df["low"].values
-        vol_arr = df["volume"].values
-        inst_buy_arr = df["inst_buy"].values
-        inst_sell_arr = df["inst_sell"].values
-        dates = df["date"].values
-
-        scores = {}
-        for idx in range(29, len(df)):
-            score = _fish_score_for_row(
-                close_arr, open_arr, high_arr, low_arr, vol_arr,
-                inst_buy_arr, inst_sell_arr, idx
-            )
-            d = dates[idx]
-            d_str = d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d)[:10]
-            scores[d_str] = score
-        fish_scores[sid] = scores
-    print(f"  低吃分數預計算完成: {len(fish_scores)} 檔有 >=30 筆交易日")
-    return fish_scores
-
-
 # ─── 階段 2b：兩階段篩選（低吃過濾 → 動能監控）────────────
-
-def screen_fish_qualified(
-    all_data: dict, screening_date: pd.Timestamp,
-    fish_scores: dict, fish_days: int, fish_min_score: float
-) -> set:
-    """
-    階段一（每週）：篩選有法人低吃紀錄的股票進入觀察池。
-    回傳 set of stock_ids — 篩選日前 fish_days 天內低吃分數 >= fish_min_score。
-    """
-    qualified = set()
-    sd_str = screening_date.strftime("%Y-%m-%d") if hasattr(screening_date, "strftime") else str(screening_date)[:10]
-    lookback_start = (pd.Timestamp(sd_str) - timedelta(days=fish_days)).strftime("%Y-%m-%d")
-
-    for stock_id, df in all_data.items():
-        if df.empty or len(df) < 30:
-            continue
-        stock_fish = fish_scores.get(stock_id, {})
-        max_score = 0.0
-        for d_str, sc in stock_fish.items():
-            if lookback_start <= d_str < sd_str and sc > max_score:
-                max_score = sc
-                if max_score >= fish_min_score:
-                    break
-        if max_score >= fish_min_score:
-            qualified.add(stock_id)
-
-    return qualified
-
-
-def check_momentum_entry(
-    all_data: dict, stock_id: str, check_date: pd.Timestamp
-) -> tuple:
-    """
-    階段二（每日）：檢查單一股票在 check_date 是否出現動能訊號。
-    回傳 (passes: bool, score: float)，score = 法人買超佔比。
-    """
-    df = all_data.get(stock_id)
-    if df is None or df.empty or len(df) < LOOKBACK + 5:
-        return False, 0
-
-    date_mask = df["date"] <= check_date
-    if not date_mask.any():
-        return False, 0
-    recent = df[date_mask].tail(LOOKBACK + 5)
-    if len(recent) < LOOKBACK + 1:
-        return False, 0
-
-    latest = recent.iloc[-1]
-    latest_close = latest["close"]
-    if latest_close <= 0 or math.isnan(latest_close):
-        return False, 0
-
-    # 流動性
-    vol_5 = recent.tail(5)["volume"].mean()
-    if vol_5 / 1000 < MIN_VOLUME_SHARES:
-        return False, 0
-
-    # 創 LOOKBACK 日新高
-    if latest_close < recent.tail(LOOKBACK)["close"].max():
-        return False, 0
-
-    # 站穩 MA(LOOKBACK)
-    ma20 = latest.get("ma20")
-    if ma20 is None or math.isnan(ma20) or latest_close <= ma20:
-        return False, 0
-
-    # 法人買超佔比
-    inst_recent = recent.tail(5)
-    total_net_buy = inst_recent["inst_buy"].sum() - inst_recent["inst_sell"].sum()
-    total_vol_5 = inst_recent["volume"].sum()
-    if total_net_buy <= 0 or total_vol_5 <= 0:
-        return False, 0
-    ratio = total_net_buy / total_vol_5
-    if ratio < BUY_RATIO_THRESHOLD:
-        return False, 0
-
-    return True, round(ratio, 4)
-
-
-def screen_candidates(all_data: dict, screening_date: pd.Timestamp) -> list:
-    """
-    一般模式（無低吃過濾）：篩選當週動能候選股。
-    回傳 [(stock_id, 法人買超佔比)]，依佔比排序取 TOP_N。
-    """
-    candidates = []
-    for stock_id, df in all_data.items():
-        passes, score = check_momentum_entry(all_data, stock_id, screening_date)
-        if passes:
-            candidates.append((stock_id, score))
-    candidates.sort(key=lambda x: x[1], reverse=True)
-    return candidates[:TOP_N]
-
 
 # ─── 階段 3：交易模擬 ──────────────────────────────────
 
@@ -514,43 +344,8 @@ def check_position_exit(
     sid: str, positions: dict, daily_prices: dict, d: date, cash: float,
     trade_log: list, price_cache: dict
 ) -> tuple:
-    """檢查單一持倉是否需要出場。回傳 (出場收回的 cash, cost_basis, last_roll_date)（0 代表續抱）。"""
-    pos = positions[sid]
-
     price_info = daily_prices.get(sid, {})
-    current_price = price_info.get("close", 0)
-    if current_price <= 0:
-        return (0, 0, None)
-
-    loss_pct = (current_price - pos["buy_price"]) / pos["buy_price"]
-
-    # 硬性停損 -7%
-    if loss_pct <= -STOP_LOSS:
-        sell_price = current_price
-        reason = f"硬性停損 {loss_pct:.1%}"
-    # 跌破 MA10 移動停利（只在獲利時觸發）
-    elif loss_pct > 0:
-        ma10 = price_info.get("ma10")
-        if ma10 is not None and not math.isnan(ma10) and current_price < ma10:
-            sell_price = current_price
-            reason = f"跌破 MA10({ma10:.0f})移動停利"
-        else:
-            return (0, 0, None)  # 續抱
-    else:
-        return (0, 0, None)  # 小虧但沒破停損，續抱
-
-    proceeds = pos["shares"] * sell_price * (1 - SELL_COST)
-    cost_basis = pos["shares"] * pos["buy_price"]
-    pnl = proceeds - cost_basis
-    last_roll_date = pos.get("last_roll_date")
-    trade_log.append({
-        "date": d.isoformat(), "action": "SELL",
-        "stock_id": sid, "shares": pos["shares"],
-        "price": round(sell_price, 2), "pnl": round(pnl, 0),
-        "reason": reason,
-    })
-    del positions[sid]
-    return (proceeds, cost_basis, last_roll_date)
+    return _core_check_position_exit(sid, positions, price_info, d, cash, trade_log)
 
 
 def build_price_cache(all_data, all_dates):
@@ -590,7 +385,7 @@ def simulate(all_data: dict, candidates: dict = None,
       每週五篩選候選股，次週一開盤進場。
 
     低吃過濾模式（fish_qualified）：
-      每週五更新觀察池，每日檢查池內動能訊號，有訊號隔日進場。
+      每篩選日更新觀察池，每日檢查池內動能訊號，有訊號隔日進場。
 
     自動化加碼（auto_capital=True）：
       每 M 個月結算，期間有獲利則按 P% 增加本金（本金只增不减）。
@@ -704,6 +499,7 @@ def simulate(all_data: dict, candidates: dict = None,
                         can_roll = months_since >= profit_roll_months
                     if can_roll:
                         rolled_amount = profit * profit_roll_percentage
+                        current_capital += rolled_amount
                         trade_log.append({
                             "date": d.isoformat(), "action": "PROFIT_ROLL",
                             "stock_id": sid, "amount": round(rolled_amount, 0),
@@ -723,7 +519,7 @@ def simulate(all_data: dict, candidates: dict = None,
 
         # ── 低吃模式：每日檢查觀察池動能訊號 ──
         if fish_mode and current_qualified:
-            for sid in list(current_qualified):
+            for sid in sorted(current_qualified):
                 if sid in positions:
                     continue
                 if is_banned(sid, d):
@@ -775,6 +571,7 @@ def simulate(all_data: dict, candidates: dict = None,
                                 can_roll = months_since >= profit_roll_months
                             if can_roll:
                                 rolled_amount = pnl * profit_roll_percentage
+                                current_capital += rolled_amount
                                 trade_log.append({
                                     "date": d.isoformat(), "action": "PROFIT_ROLL",
                                     "stock_id": sid, "amount": round(rolled_amount, 0),
@@ -800,7 +597,7 @@ def simulate(all_data: dict, candidates: dict = None,
                     buy_price = price_info.get("open", price_info.get("close", 0))
                     if buy_price <= 0:
                         continue
-                    per_stock = INITIAL_CAPITAL / TOP_N
+                    per_stock = current_capital / TOP_N
                     shares = int(per_stock / buy_price / 1000) * 1000
                     if shares <= 0:
                         continue
@@ -835,7 +632,7 @@ def simulate(all_data: dict, candidates: dict = None,
                 buy_price = price_info.get("open", price_info.get("close", 0))
                 if buy_price <= 0:
                     continue
-                per_stock = INITIAL_CAPITAL / TOP_N
+                per_stock = current_capital / TOP_N
                 shares = int(per_stock / buy_price / 1000) * 1000
                 if shares <= 0:
                     continue
@@ -857,6 +654,54 @@ def simulate(all_data: dict, candidates: dict = None,
                     "reason": f"低吃池動能入場 score={score}",
                 })
             del marked_for_entry[d]
+
+        # ── 每日停損/停利檢查（第二輪，含 loser ban） ──
+        for sid in list(positions.keys()):
+            pos = positions[sid]
+            price_info = daily_prices.get(sid, {})
+            current_price = price_info.get("close", 0)
+            if current_price <= 0:
+                continue
+
+            loss_pct = (current_price - pos["buy_price"]) / pos["buy_price"]
+            if loss_pct <= -STOP_LOSS:
+                proceeds = pos["shares"] * current_price * (1 - SELL_COST)
+                cost_basis = pos["shares"] * pos["buy_price"]
+                cash += proceeds
+                pnl = proceeds - cost_basis
+                trade_log.append({
+                    "date": d.isoformat(),
+                    "action": "SELL",
+                    "stock_id": sid,
+                    "shares": pos["shares"],
+                    "price": round(current_price, 2),
+                    "pnl": round(pnl, 0),
+                    "reason": f"硬性停損 {loss_pct:.1%}",
+                })
+                if pnl < 0:
+                    add_loser_ban(sid, d)
+                del positions[sid]
+                continue
+
+            ma10 = price_info.get("ma10")
+            if ma10 is not None and not math.isnan(ma10) and loss_pct > 0:
+                if current_price < ma10:
+                    proceeds = pos["shares"] * current_price * (1 - SELL_COST)
+                    cost_basis = pos["shares"] * pos["buy_price"]
+                    cash += proceeds
+                    pnl = proceeds - cost_basis
+                    trade_log.append({
+                        "date": d.isoformat(),
+                        "action": "SELL",
+                        "stock_id": sid,
+                        "shares": pos["shares"],
+                        "price": round(current_price, 2),
+                        "pnl": round(pnl, 0),
+                        "reason": f"跌破 MA10({ma10:.0f})移動停利",
+                    })
+                    if pnl < 0:
+                        add_loser_ban(sid, d)
+                    del positions[sid]
 
         # ── 自動化加碼結算（月結） ──
         if auto_capital:
@@ -931,6 +776,7 @@ def simulate(all_data: dict, candidates: dict = None,
                 can_roll = months_since >= profit_roll_months
             if can_roll:
                 rolled_amount = pnl * profit_roll_percentage
+                current_capital += rolled_amount
                 trade_log.append({
                     "date": last_d.isoformat(), "action": "PROFIT_ROLL",
                     "stock_id": sid, "amount": round(rolled_amount, 0),
@@ -1129,7 +975,7 @@ def generate_report(result: dict, metrics: dict, monthly: list):
         if t["action"] == "PROFIT_ROLL":
             lines.append(
                 f"| {t['date']} | {t['action']} | {t['stock_id']} | "
-                f"- | - | +NT${t['amount']:,.0f} | {t['description']} |"
+                f"- | - | {t.get('amount', 0):,} | {t['description']} |"
             )
         else:
             pnl_str = f"NT${t['pnl']:+,.0f}" if t["action"] == "SELL" else "-"
@@ -1206,8 +1052,10 @@ def main():
         fridays = [d for d in fridays if d >= start_dt]
 
     if FISH_PRE_FILTER:
-        # ── 低吃模式：階段一 — 每週篩選觀察池 ──
-        print(f"\n🔍 階段 2/4：篩選法人低吃觀察池（每週）...")
+        # ── 低吃模式：階段一 — 觀察池篩選 ──
+        step_label = "日" if DAILY_SCREENING else "週"
+        freq_label = "每日" if DAILY_SCREENING else "每週"
+        print(f"\n🔍 階段 2/4：篩選法人低吃觀察池（{freq_label}）...")
         fish_qualified = {}
         for i, fd in enumerate(fridays):
             screening_ts = pd.Timestamp(fd)
@@ -1217,9 +1065,9 @@ def main():
             if qualified:
                 fish_qualified[fd] = qualified
             if (i + 1) % 50 == 0 or (i + 1) == len(fridays):
-                print(f"   篩選進度: {i+1}/{len(fridays)} 週（{len(fish_qualified)} 週有合格觀察池）")
+                print(f"   篩選進度: {i+1}/{len(fridays)} {step_label}（{len(fish_qualified)} {step_label}有合格觀察池）")
 
-        print(f"✅ 低吃觀察池篩選完成: {len(fridays)} 週中 {len(fish_qualified)} 週有觀察池")
+        print(f"✅ 低吃觀察池篩選完成: {len(fridays)} 個{step_label}中 {len(fish_qualified)} {step_label}有觀察池")
         print(f"   階段二：每日檢查觀察池動能訊號（在模擬交易中執行）")
         candidates = {}
     else:
