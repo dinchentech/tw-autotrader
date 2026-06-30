@@ -27,7 +27,7 @@ from pathlib import Path
 
 # ─── 參數 ─────────────────────────────────────────────────
 parser = argparse.ArgumentParser(description="法人低檔吃貨觀測器")
-parser.add_argument("--top", type=int, default=270, help="掃描標的數（預設 270）")
+parser.add_argument("--top", type=int, default=260, help="掃描標的數（預設 260）")
 parser.add_argument("--min-score", type=int, default=3, help="最低顯示分數（預設 3）")
 parser.add_argument("--date", default=None, help="觀測日期（預設最新交易日）")
 parser.add_argument("--days", type=int, default=60, help="下載回溯天數（預設 60）")

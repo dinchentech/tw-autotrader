@@ -35,7 +35,7 @@ print("=" * 60)
 
 # 1. Load cache
 if MCAP.exists():
-    stock_ids = [s for s in pickle.loads(MCAP.read_bytes()) if s.isdigit() and len(s) == 4][:270]
+    stock_ids = [s for s in pickle.loads(MCAP.read_bytes()) if s.isdigit() and len(s) == 4][:260]
 else:
     stock_ids = pickle.loads((PRICE_CACHE / "stock_ids.pkl").read_bytes())[:270]
 print(f"\n📂 股票：{len(stock_ids)} 檔")
