@@ -16,6 +16,7 @@ from typing import Optional
 import pandas as pd
 import numpy as np
 import calendar
+from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from data.yahoo_loader import load_historical_data
@@ -907,11 +908,15 @@ def generate_lumpsum_report(result: dict) -> str:
 
     # 總績效
     final_value = monthly[-1]["value"] if monthly else initial_capital
-    total_pnl = final_value - initial_capital
-    total_return = total_pnl / initial_capital
+    capital_injection_log = result.get("capital_injection_log", [])
+    total_injected = sum(inj["amount"] for inj in capital_injection_log if inj["source"] in ("initial", "external"))
+    if total_injected == 0:
+        total_injected = initial_capital
+    total_pnl = final_value - total_injected
+    total_return = total_pnl / total_injected
     days = (monthly[-1]["date"] - monthly[0]["date"]).days if len(monthly) >= 2 else 730
     years = days / 365.25
-    cagr = (final_value / initial_capital) ** (1 / years) - 1 if years > 0 else 0
+    cagr = (final_value / total_injected) ** (1 / years) - 1 if years > 0 else 0
     total_commission = sum(t.get("commission", 0) for t in tx_log)
     total_tax = sum(t.get("tax", 0) for t in tx_log)
     
@@ -924,6 +929,8 @@ def generate_lumpsum_report(result: dict) -> str:
     lines.append("| 指標 | 數值 |")
     lines.append("|------|------|")
     lines.append(f"| 初始資本 | {fmt_ntd(initial_capital)} |")
+    lines.append(f"| 外部加碼 | {fmt_ntd(total_injected - initial_capital)} |") if total_injected > initial_capital else None
+    lines.append(f"| **總投入資金** | **{fmt_ntd(total_injected)}** |")
     lines.append(f"| 組合終值 (2025-12-31) | {fmt_ntd(final_value)} |")
     lines.append(f"| **總損益** | **{fmt_ntd(total_pnl)} ({fmt_pct(total_return)})** |")
     lines.append(f"| **年化報酬率 (CAGR)** | **{fmt_pct(cagr)}** |")
@@ -931,6 +938,11 @@ def generate_lumpsum_report(result: dict) -> str:
     lines.append(f"| 總手續費 | {fmt_ntd(total_commission)} |")
     lines.append(f"| 總交易稅 | {fmt_ntd(total_tax)} |")
     lines.append(f"| **獲利滾入總額** | **{fmt_ntd(total_profit_roll)} (M={profit_roll_months}, P={profit_roll_percentage*100:.0f}%)** |")
+    if monthly:
+        avg_deployed = sum(r["value"] for r in monthly) / len(monthly)
+        max_deployed = max(r["value"] for r in monthly)
+        lines.append(f"| 平均動用資金 | {fmt_ntd(avg_deployed)} |")
+        lines.append(f"| 最高動用資金 | {fmt_ntd(max_deployed)} |")
     lines.append("")
     lines.append("> ✅ **VWAP 已修正**：改用真實成交量加權計算 VWAP（`Σ(close×volume)/Σ(volume)`），非之前收盤價近似。")
     lines.append("")
@@ -1232,6 +1244,7 @@ def attach_symbol_to_txlog(tx_log, positions):
 # ── main ────────────────────────────────────────────────────
 
 def main():
+    load_dotenv()
     parser = argparse.ArgumentParser(description="投資組合模擬報告產生器")
     parser.add_argument("--mode", choices=["dca", "lumpsum", "all"], default=None,
                         help="模擬模式（未指定時從 DCA_AMOUNT 環境變數判斷）")
