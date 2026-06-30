@@ -83,11 +83,6 @@ MARKET_TREND_FILTER=true        # 大盤年線過濾
 # ==========================================
 # 下單股數設定
 # ==========================================
-BOLLINGER_POSITION_AMOUNT=15000
-VWAP_POSITION_AMOUNT=10000
-MA_CROSS_POSITION_AMOUNT=10000
-BREAKOUT_POSITION_BUY=1000
-BREAKOUT_POSITION_SELL=1000
 
 # ==========================================
 # 策略參數

@@ -37,3 +37,11 @@ logs/
 
 # Backtest scripts (not part of live trader)
 backtest_*.py
+
+# Heavy local artifacts (not needed in image)
+.venv/
+TMP/
+node_modules/
+.vscode/
+.idea/
+# pyarmor_runtime_000000/ is needed inside the image (imported by obfuscated script)
