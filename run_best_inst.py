@@ -35,7 +35,7 @@ print(f"   參數: SL={SL:.0%} TM={TM} LB={LB} fish={FISH_SCORE} days={FISH_DAYS
 print(f"   本金: NT${INITIAL_CAPITAL:,}")
 print("=" * 60)
 
-STOCK_NO = int(os.getenv("STOCK_NO", "260"))
+STOCK_NO = int(os.getenv("STOCK_NO", "150"))
 
 # 1. Load cache
 if MCAP.exists():

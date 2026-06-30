@@ -72,7 +72,7 @@ parser = argparse.ArgumentParser(description="法人抬轎動能策略回測")
 parser.add_argument("--start", default="2025-01-01", help="起始日期 (YYYY-MM-DD)")
 parser.add_argument("--end", default="2025-12-31", help="結束日期 (YYYY-MM-DD)")
 parser.add_argument("--daily", action="store_true", help="啟用每日篩選（預設為每週五篩選）")
-parser.add_argument("--top", type=int, default=0, help="篩選標的數（預設 MAX_STOCKS=260）")
+parser.add_argument("--top", type=int, default=0, help="篩選標的數（依 STOCK_NO 環境變數，預設 150）")
 parser.add_argument("--buy-ratio", type=float, default=None, help="法人買超門檻（預設 0.03）")
 parser.add_argument("--stop-loss", type=float, default=None, help="停損幅度（預設 0.07）")
 parser.add_argument("--min-volume", type=int, default=None, help="流動性門檻（張，預設 2000）")
@@ -93,7 +93,7 @@ args = parser.parse_args()
 START_DATE = args.start
 END_DATE = args.end
 DAILY_SCREENING = args.daily
-MAX_STOCKS = int(os.getenv("STOCK_NO", "260"))  # 前 N 大股票，控制 FinMind API 呼叫量
+MAX_STOCKS = int(os.getenv("STOCK_NO", "150"))  # 前 N 大股票，控制 FinMind API 呼叫量
 TOP_N_STOCKS = args.top or MAX_STOCKS  # --top 覆蓋 MAX_STOCKS / STOCK_NO
 
 CACHE_DIR = Path(f"cache/inst_momentum/{START_DATE[:4]}")

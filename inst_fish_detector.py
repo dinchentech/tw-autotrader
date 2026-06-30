@@ -28,7 +28,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ─── 參數 ─────────────────────────────────────────────────
-DEFAULT_TOP = int(os.getenv("STOCK_NO", "260"))
+DEFAULT_TOP = int(os.getenv("STOCK_NO", "150"))
 parser = argparse.ArgumentParser(description="法人低檔吃貨觀測器")
 parser.add_argument("--top", type=int, default=DEFAULT_TOP, help=f"掃描標的數（預設 {DEFAULT_TOP}，可透過 STOCK_NO 環境變數設定）")
 parser.add_argument("--min-score", type=int, default=3, help="最低顯示分數（預設 3）")

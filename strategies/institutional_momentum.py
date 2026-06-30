@@ -177,7 +177,7 @@ class InstitutionalMomentumStrategy:
     def _get_dataloader(self) -> DataLoader:
         return DataLoader(token=self.finmind_token)
 
-    MAX_STOCKS = int(os.getenv("STOCK_NO", "260"))  # 前 N 大股票，控制 FinMind API 呼叫量
+    MAX_STOCKS = int(os.getenv("STOCK_NO", "150"))  # 前 N 大股票，控制 FinMind API 呼叫量
 
     def _get_all_stock_ids(self) -> list:
         """回傳上市普通股 stock_id 列表（前 MAX_STOCKS 檔，控制 API 配額）"""
