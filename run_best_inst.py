@@ -7,6 +7,8 @@ from pathlib import Path
 from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
+from dotenv import load_dotenv
+load_dotenv()
 
 sys.path.insert(0, str(Path(__file__).parent))
 from core.inst_strategy_core import precompute_fish_scores, screen_fish_qualified
@@ -33,11 +35,13 @@ print(f"   參數: SL={SL:.0%} TM={TM} LB={LB} fish={FISH_SCORE} days={FISH_DAYS
 print(f"   本金: NT${INITIAL_CAPITAL:,}")
 print("=" * 60)
 
+STOCK_NO = int(os.getenv("STOCK_NO", "260"))
+
 # 1. Load cache
 if MCAP.exists():
-    stock_ids = [s for s in pickle.loads(MCAP.read_bytes()) if s.isdigit() and len(s) == 4][:260]
+    stock_ids = [s for s in pickle.loads(MCAP.read_bytes()) if s.isdigit() and len(s) == 4][:STOCK_NO]
 else:
-    stock_ids = pickle.loads((PRICE_CACHE / "stock_ids.pkl").read_bytes())[:270]
+    stock_ids = pickle.loads((PRICE_CACHE / "stock_ids.pkl").read_bytes())[:STOCK_NO]
 print(f"\n📂 股票：{len(stock_ids)} 檔")
 
 all_data = {}

@@ -24,10 +24,13 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, date, timedelta
 from pathlib import Path
+from dotenv import load_dotenv
+load_dotenv()
 
 # ─── 參數 ─────────────────────────────────────────────────
+DEFAULT_TOP = int(os.getenv("STOCK_NO", "260"))
 parser = argparse.ArgumentParser(description="法人低檔吃貨觀測器")
-parser.add_argument("--top", type=int, default=260, help="掃描標的數（預設 260）")
+parser.add_argument("--top", type=int, default=DEFAULT_TOP, help=f"掃描標的數（預設 {DEFAULT_TOP}，可透過 STOCK_NO 環境變數設定）")
 parser.add_argument("--min-score", type=int, default=3, help="最低顯示分數（預設 3）")
 parser.add_argument("--date", default=None, help="觀測日期（預設最新交易日）")
 parser.add_argument("--days", type=int, default=60, help="下載回溯天數（預設 60）")
