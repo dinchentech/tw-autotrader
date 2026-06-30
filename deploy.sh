@@ -43,7 +43,7 @@ restore_original_script() {
   if [ -f "${PLANS_BACKUP}" ]; then
     cp "${PLANS_BACKUP}" "${TARGET_SCRIPT}"
     rm -rf "${PYARMOR_RUNTIME_DIR}" "${PYARMOR_DIST}"
-    echo "🔓 已還原原始 ${TARGET_SCRIPT}（pyarmor 加密產物已清除）"
+    echo "🔓 已還原原始 ${TARGET_SCRIPT}（pyarmor 加密產物已移至 TMP/）"
   fi
 }
 trap restore_original_script EXIT
@@ -115,12 +115,14 @@ rm -rf "${PYARMOR_DIST}"
 echo "   ✅ 加密完成（${TARGET_SCRIPT} 已是混淆版，runtime 已就位）"
 
 echo "🏗️  本機建構 Docker image..."
-sudo docker build -t tw-autotrader .
+docker build -t tw-autotrader .
 
-echo "📦 壓縮 image 並存到 ${TMP_FILE}（覆蓋舊版，僅保留最新）..."
+echo "📦 備份加密檔並壓縮 image 到 ${TMP_FILE}..."
 mkdir -p "${TMP_DIR}"
-sudo docker save tw-autotrader | gzip > "${TMP_FILE}"
-sudo chmod 644 "${TMP_FILE}"
+cp "${TARGET_SCRIPT}" "${TMP_DIR}/live_trader_multi.py.encrypted"
+cp -r "${PYARMOR_RUNTIME_DIR}" "${TMP_DIR}/"
+docker save tw-autotrader | gzip > "${TMP_FILE}"
+chmod 644 "${TMP_FILE}"
 
 echo "☁️  上傳 image 到 ${BUCKET}/tw-autotrader.tar.gz..."
 run_as_user gsutil cp "${TMP_FILE}" "${BUCKET}/tw-autotrader.tar.gz"
