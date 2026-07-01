@@ -99,6 +99,20 @@ echo "💾 備份原始 ${TARGET_SCRIPT} → ${PLANS_BACKUP}..."
 mkdir -p plans
 cp "${TARGET_SCRIPT}" "${PLANS_BACKUP}"
 
+echo "🔄 將 plans 子目錄單獨 Commit 與 Push..."
+(
+  cd plans
+  git add "${TARGET_SCRIPT}"
+  # 如果有變更才 commit
+  if ! git diff --cached --quiet; then
+    git commit -m "Auto-backup ${TARGET_SCRIPT} during deploy"
+    git push origin main
+  else
+    echo "   ✅ plans 目錄無變更，跳過 commit"
+  fi
+)
+echo "   ✅ plans 目錄處理完畢"
+
 echo "🔐 pyarmor 加密 ${TARGET_SCRIPT}（從 plans/）..."
 rm -rf "${PYARMOR_DIST}"
 "${PYARMOR_BIN}" gen -O "${PYARMOR_DIST}" "${PLANS_BACKUP}"
