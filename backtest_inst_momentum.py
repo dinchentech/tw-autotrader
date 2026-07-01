@@ -54,8 +54,8 @@ def screen_fish_qualified(all_data, screening_date, fish_scores, fish_days, fish
     return _core_screen_fish_qualified(all_data, screening_date, fish_scores, fish_days, fish_min_score)
 
 
-def check_momentum_entry(all_data, stock_id, check_date):
-    return _core_check_momentum_entry(all_data, stock_id, check_date)
+def check_momentum_entry(all_data, stock_id, check_date, accum_price=None):
+    return _core_check_momentum_entry(all_data, stock_id, check_date, accum_price=accum_price)
 
 
 def screen_candidates(all_data, screening_date):
@@ -78,6 +78,8 @@ parser.add_argument("--stop-loss", type=float, default=None, help="停損幅度�
 parser.add_argument("--min-volume", type=int, default=None, help="流動性門檻（張，預設 2000）")
 parser.add_argument("--loser-ban", type=int, default=None, help="停損黑名單天數（預設 0=停用）")
 parser.add_argument("--lookback", type=int, default=None, help="創高/MA 回溯期（預設 20）")
+parser.add_argument("--max-dist-from-accum", type=float, default=None,
+                    help="進場價離法人成本最大距離（預設 0.15=15%%，0=停用）")
 parser.add_argument("--no-fish-pre-filter", dest="fish_pre_filter", action="store_false",
                     help="停用法人低吃過濾（預設啟用）")
 parser.set_defaults(fish_pre_filter=True)
@@ -104,11 +106,12 @@ PRICE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 INITIAL_CAPITAL = float(os.getenv("INITIAL_CAPITAL", os.getenv("TOTAL_CAPITAL", 500000)))
 TOP_N = 3
 MIN_VOLUME_SHARES = 2000        # 張
-BUY_RATIO_THRESHOLD = 0.03
+BUY_RATIO_THRESHOLD = float(os.getenv("INST_MOM_BUY_RATIO", "0.03"))
 LOOKBACK = 20
 STOP_LOSS = 0.10
 TRAILING_PERIOD = 10
 LOSER_BAN_DAYS = int(os.getenv("INST_MOM_LOSER_BAN_DAYS", "0"))
+MAX_DIST_FROM_ACCUM = float(os.getenv("INST_MOM_MAX_DIST_FROM_ACCUM", "0.15"))
 BUY_COST = 0.001425
 SELL_COST = 0.004425
 
@@ -123,6 +126,8 @@ if args.loser_ban is not None:
     LOSER_BAN_DAYS = args.loser_ban
 if args.lookback is not None:
     LOOKBACK = args.lookback
+if args.max_dist_from_accum is not None:
+    MAX_DIST_FROM_ACCUM = args.max_dist_from_accum
 
 # ─── 同步覆蓋到共用核心模組 ────────────────────────
 inst_core.MIN_VOLUME_SHARES = MIN_VOLUME_SHARES
@@ -131,6 +136,7 @@ inst_core.LOOKBACK = LOOKBACK
 inst_core.STOP_LOSS = STOP_LOSS
 inst_core.TRAILING_PERIOD = TRAILING_PERIOD
 inst_core.LOSER_BAN_DAYS = LOSER_BAN_DAYS
+inst_core.MAX_DIST_FROM_ACCUM = MAX_DIST_FROM_ACCUM
 inst_core.BUY_COST = BUY_COST
 inst_core.SELL_COST = SELL_COST
 
@@ -527,7 +533,10 @@ def simulate(all_data: dict, candidates: dict = None,
                 if len([s for s in positions if s not in current_qualified or True]) >= TOP_N:
                     break
 
-                passes, score = check_momentum_entry(all_data, sid, pd.Timestamp(d))
+                passes, score = check_momentum_entry(
+                    all_data, sid, pd.Timestamp(d),
+                    accum_price=current_qualified.get(sid),
+                )
                 if passes:
                     entry_date = next_trading_day.get(d)
                     if entry_date:
@@ -616,7 +625,7 @@ def simulate(all_data: dict, candidates: dict = None,
                         "date": d.isoformat(), "action": "BUY",
                         "stock_id": stock_id, "shares": shares,
                         "price": round(buy_price, 2), "pnl": 0,
-                        "reason": f"篩選入選 score={score}",
+                        "reason": f"動能入選 法人買超比={score:.2%}",
                     })
 
         # ── 低吃模式：買入（隔日進場） ──
@@ -651,7 +660,7 @@ def simulate(all_data: dict, candidates: dict = None,
                     "date": d.isoformat(), "action": "BUY",
                     "stock_id": stock_id, "shares": shares,
                     "price": round(buy_price, 2), "pnl": 0,
-                    "reason": f"低吃池動能入場 score={score}",
+                        "reason": f"動能入場 法人買超比={score:.2%}",
                 })
             del marked_for_entry[d]
 
@@ -922,6 +931,8 @@ def generate_report(result: dict, metrics: dict, monthly: list):
     lines.append(f"| **篩選標的數** | 全市場前 {TOP_N_STOCKS} 檔（市值排序）|")
     if FISH_PRE_FILTER:
         lines.append(f"| **法人低吃過濾** | 篩選日前 {FISH_DAYS} 天內低吃分數 ≥ {FISH_MIN_SCORE} |")
+        if MAX_DIST_FROM_ACCUM > 0:
+            lines.append(f"| **護盤過濾** | 進場價離法人成本 ≤ {MAX_DIST_FROM_ACCUM:.0%}（超過即剔除）|")
     if AUTO_CAPITAL:
         lines.append(f"| **自動化加碼** | 每 {AUTO_CAP_MONTHS} 個月結算，獲利時加碼 {AUTO_CAP_RATIO:.0%}（本金只增不減）|")
     if PROFIT_ROLL_MONTHS > 0 or PROFIT_ROLL_PERCENTAGE < 1.0:

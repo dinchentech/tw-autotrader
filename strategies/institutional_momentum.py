@@ -450,17 +450,18 @@ class InstitutionalMomentumStrategy:
             fish_qualified = inst_core.screen_fish_qualified(
                 all_data, check_date, fish_scores, fish_days, fish_min)
         else:
-            fish_qualified = set(all_data.keys())
+            fish_qualified = {sid: None for sid in all_data.keys()}
 
         candidates = []
-        for stock_id in fish_qualified:
+        for stock_id, accum_price in fish_qualified.items():
             try:
                 df = all_data[stock_id]
                 vol_5 = df.tail(5)["volume"].mean() / 1000
                 if vol_5 < self.min_volume:
                     continue
                 single = {stock_id: df}
-                ok, score = _core_check_momentum_entry(single, stock_id, check_date)
+                ok, score = _core_check_momentum_entry(
+                    single, stock_id, check_date, accum_price=accum_price)
                 if ok:
                     candidates.append((stock_id, score))
             except Exception:
