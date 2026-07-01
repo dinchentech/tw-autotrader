@@ -135,14 +135,23 @@ class Position:
         """用 cash 買入最多股數, 回傳實際花費"""
         if cash <= 0 or price <= 0:
             return 0.0
-        commission = round(cash * COMMISSION_RATE)
+        # 先估算可買股數，決定零股(NT$1)或整張(0.1425%)手續費
+        estimated_shares = cash / price
+        if estimated_shares < 1000:
+            commission = 1  # 零股手續費 NT$1
+        else:
+            commission = round(cash * COMMISSION_RATE)
         # 實際可用於買股的錢
         available = cash - commission
         if available <= 0:
             return 0.0
         shares_bought = available / price
         cost = round(shares_bought * price, 2)
-        actual_commission = round(cost * COMMISSION_RATE)
+        # 用實際股數再次確認零股/整張（結果應與估算一致）
+        if shares_bought < 1000:
+            actual_commission = 1
+        else:
+            actual_commission = round(cost * COMMISSION_RATE)
         total_cost = cost + actual_commission
 
         self.shares += shares_bought
@@ -162,7 +171,10 @@ class Position:
         if self.shares <= 0 or price <= 0:
             return 0.0
         proceeds = self.shares * price
-        commission = round(proceeds * COMMISSION_RATE)
+        if self.shares < 1000:
+            commission = 1  # 零股手續費 NT$1
+        else:
+            commission = round(proceeds * COMMISSION_RATE)
         tax = round(proceeds * tax_rate(self.symbol))
         net = proceeds - commission - tax
 
@@ -400,7 +412,7 @@ def simulate_lumpsum(config_list, start_date="2024-01-01", end_date="2025-12-31"
                                 kw_p = KEEP_WAIT_PARAMS.get(sym, {})
                                 initial_buy_pct = kw_p.get("initial_buy_pct", 0.7)
                                 buy_amount = cash_buckets[sym] * initial_buy_pct
-                                if buy_amount >= px * (1 + COMMISSION_RATE):
+                                if buy_amount >= px + 1:
                                     pos = positions[sym]
                                     spent = pos.buy(current_date, px, buy_amount)
                                     if spent > 0:
@@ -436,7 +448,7 @@ def simulate_lumpsum(config_list, start_date="2024-01-01", end_date="2025-12-31"
                     kw_p = KEEP_WAIT_PARAMS.get(sym, {})
                     initial_buy_pct = kw_p.get("initial_buy_pct", 0.7)
                     buy_amount = cash_buckets[sym] * initial_buy_pct
-                    if buy_amount >= price * (1 + COMMISSION_RATE):
+                    if buy_amount >= price + 1:
                         spent = pos.buy(current_date, price, buy_amount)
                         if spent > 0:
                             cash_buckets[sym] -= spent
@@ -471,7 +483,7 @@ def simulate_lumpsum(config_list, start_date="2024-01-01", end_date="2025-12-31"
                         st["total_shares"] = 0
                         st["cooldown_until"] = current_date + timedelta(days=kw_cd)
                     elif drop_pct >= kw_drop and st["buy_count"] < kw_max:
-                        if cash_buckets[sym] >= kw_add * price * (1 + COMMISSION_RATE):
+                        if cash_buckets[sym] >= kw_add * price + 1:
                             spent = pos.buy(current_date, price, kw_add * price)
                             if spent > 0:
                                 cash_buckets[sym] -= spent
@@ -564,7 +576,7 @@ def simulate_lumpsum(config_list, start_date="2024-01-01", end_date="2025-12-31"
                                     if df is not None and current_date in df.index:
                                         px = float(df.loc[current_date, "close"])
                                         buy_amount = cash_buckets[sym] * initial_buy_pct
-                                        if buy_amount >= px * (1 + COMMISSION_RATE):
+                                if buy_amount >= px + 1:
                                             pos = positions[sym]
                                             spent = pos.buy(current_date, px, buy_amount)
                                             if spent > 0:
@@ -1178,7 +1190,8 @@ def buy_hold_dca(config_list, monthly_total=20000):
                 if px <= 0:
                     continue
                 alloc = monthly_total * sym_weight[sym]
-                commission = round(alloc * COMMISSION_RATE)
+                # 零股（每月金額小）手續費 NT$1
+                commission = 1
                 available = alloc - commission
                 if available > 0:
                     new_shares = available / px
@@ -1218,7 +1231,7 @@ def buy_hold_lumpsum(config_list):
         px = float(df.loc[first_date, "close"])
         if px <= 0:
             continue
-        commission = round(alloc * COMMISSION_RATE)
+        commission = round(alloc * COMMISSION_RATE) if alloc / px >= 1000 else 1
         available = alloc - commission
         shares = available / px
 
