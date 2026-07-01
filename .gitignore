@@ -198,12 +198,9 @@ esun_sdk/config.simulation.ini.example
 node_modules/
 # 一致化備份（原始檔已 copy 至 plans/）
 live_trader_multi.py
-
 # Pyarmor 加密產物 + Docker image 暫存（deploy.sh 產生）
-TMP/
-pyarmor_dist/
-pyarmor_runtime_*/
-# IDEs & accidental junk
+TMP/tw-autotrader.tar.gz 
+# IDTMP
 .idea/
 command
 package.json
