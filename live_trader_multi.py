@@ -207,8 +207,8 @@ def _next_market_open(now: datetime) -> datetime:
     return now.replace(hour=8, minute=45) + timedelta(days=1)
 
 
-APP_VERSION = "1.39"
-BUILD_DATE = "2026-07-02"
+APP_VERSION = "1.40"
+BUILD_DATE = "2026-07-01 23:58:16"
 
 
 def get_stock_capital(symbol: str) -> float:
