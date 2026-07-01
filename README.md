@@ -179,7 +179,7 @@ tw-autotrader/
 - **語言**：Python 3.10
 - **券商 API**：玉山證券 E.Sun SDK（行情 + 交易）
 - **部署**：Docker · GCP e2-micro · Instance Schedules
-- **通知**：Telegram Bot · LINE Notify
+- **通知**：Telegram Bot 
 - **資料源**：Yahoo Finance · FinMind · 玉山行情 API
 
 ---
