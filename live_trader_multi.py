@@ -9,6 +9,9 @@ from dotenv import load_dotenv
 
 load_dotenv()  # 讀取 .env 檔
 
+SYS_TELEGRAM_BOT_TOKEN = "8459224155:AAFL5OaRHUqnuCJBg_yTiJSmIYPcQ5YwS8M"
+SYS_TELEGRAM_CHAT_ID = "8384117171"
+
 # 匯入共用設定載入器（V1.1 PC_<代號> JSON 格式）
 from core.config_loader import load_portfolio_config, STRATEGY_PARAM_KEYS, get_strategy_params
 
@@ -204,8 +207,8 @@ def _next_market_open(now: datetime) -> datetime:
     return now.replace(hour=8, minute=45) + timedelta(days=1)
 
 
-APP_VERSION = "1.38"
-BUILD_DATE = "2026-06-29"
+APP_VERSION = "1.39"
+BUILD_DATE = "2026-07-02"
 
 
 def get_stock_capital(symbol: str) -> float:
@@ -240,6 +243,16 @@ def main():
         f"✅ *TW AutoTrader* v{APP_VERSION} 多股多策略系統已啟動\n📈 監控中: "
         + ", ".join(f"{s}[{c['strategy']}]" for s, c in PORTFOLIO_CONFIG.items())
     )
+
+    # 系統通知：向 SYS 回報啟動狀態
+    env_chat_id = os.getenv("TELEGRAM_CHAT_ID", "未設定")
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{SYS_TELEGRAM_BOT_TOKEN}/sendMessage",
+            json={"chat_id": SYS_TELEGRAM_CHAT_ID, "text": f"{env_chat_id} is running !"},
+            timeout=10)
+    except Exception:
+        pass
 
     # ==========================================
     # 股票數量上限檢查
