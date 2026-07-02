@@ -17,8 +17,9 @@ mv ~/tw-autotrader/esun_sdk/*.p12 /mnt/c/Users/frank/Documents/tw_autotrader_bac
 mv ~/tw-autotrader/esun_sdk/*.example /mnt/c/Users/frank/Documents/tw_autotrader_backup/
 mv ~/tw-autotrader/esun_sdk/*.ini /mnt/c/Users/frank/Documents/tw_autotrader_backup/
 
-# 2. 移 .env（含玉山密碼、Telegram Token、FinMind Token）
+# 2. 移 .env（含玉山密碼、Telegram Token、FinMind Token）live_trader_multi.py
 mv ~/tw-autotrader/.env /mnt/c/Users/frank/Documents/tw_autotrader_backup/
+mv ~/tw-autotrader/live_trader_multi.py /mnt/c/Users/frank/Documents/tw_autotrader_backup/
 
 # 3. 移 opencode API Key 憑證（沒有 key 就打不了任何 API）
 mv ~/.local/share/opencode/auth.json /mnt/c/Users/frank/Documents/tw_autotrader_backup/
@@ -122,8 +123,9 @@ ls ~/.local/share/opencode/auth.json
 # 4. 重新設定 opencode provider
 opencode providers login OpenRouter
 
-# 5. 還原.bashrc
+# 5. 還原.bashrc, live_trader_multi.py
 cp ~/.bashrc.txt  ~/.bashrc
+cp ~/tw-autotrader/live_trader_multi.py.encrypted ~/tw-autotrader/live_trader_multi.py
 ```
 
 進去後確認：
