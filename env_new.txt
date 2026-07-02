@@ -1,0 +1,124 @@
+# FinMind 設定
+FINMIND_API_TOKEN=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoiaHNpZWhpaHN1YW4iLCJlbWFpbCI6ImhzaWVoLmloc3VhbkBnbWFpbC5jb20iLCJ0b2tlbl92ZXJzaW9uIjowfQ.l0eNyXjsc9YadRoonUmI1TvOxv7Fe0EbZri11ZquCWQ
+
+# 券商
+BROKER=esun
+
+# 凱基 API 設定
+KGI_API_KEY=your_kgi_api_key_here
+KGI_API_SECRET=your_kgi_api_secret_here
+USE_REAL_API=true   # 使用玉山 SDK（市場行情 + 交易）
+ESUN_ENVIRONMENT=simulation  # simulation=模擬, real=真實（切換前請先跟玉山申請開通）
+
+# 玉山證券密碼（headless Docker 必設）
+ESUN_ACCOUNT_PASSWORD=KKkk8850
+ESUN_CERT_PASSWORD=KKkk8850
+
+# Telegram 通知金鑰
+TELEGRAM_BOT_TOKEN=8459224155:AAFL5OaRHUqnuCJBg_yTiJSmIYPcQ5YwS8M
+TELEGRAM_CHAT_ID=8384117171
+
+# LINE Notify 通知金鑰 (去 LINE Notify 官網連動免費申請)
+#LINE_NOTIFY_TOKEN=您的LineNotify權杖密碼
+
+# ==========================================
+# 系統級參數
+# ==========================================
+TOTAL_CAPITAL=500000            # 可動用總資金
+INITIAL_CAPITAL=500000          # 風險計算用初始資金
+
+# DCA 模式設定（0 = 一筆資金 Lumpsum，>0 = 每月定期定額 DCA）
+DCA_AMOUNT=0
+
+MAX_RISK_PER_TRADE=0.02         # 單筆最大風險 2%
+MAX_DAILY_LOSS=0.03             # 每日最大虧損 3%
+MAX_DAILY_TRADES=5              # 每日最大交易次數
+CAPITAL_CONTROL_LINE=30         # 剩餘資金低於此 % 才開始限制交易次數
+MARKET_TREND_FILTER=true        # 大盤年線過濾
+
+# ==========================================
+# 獲利滾入設定
+# ==========================================
+PROFIT_ROLL_MONTHS=5            # 每 5 個月滾入一次已實現獲利（0=立即滾入）
+PROFIT_ROLL_PERCENTAGE=100      # 滾入比例 100%（全部獲利滾入）
+
+# ==========================================
+# Group 2 — 法人抬轎動能策略（獨立資金池）
+# ==========================================
+INST_MOM_CAPITAL=500000         # 法人抬轎動能 獨立本金（動態選股 2 檔）
+INST_MOM_MIN_VOLUME=2000        # 最小近 5 日平均成交量（張）
+INST_MOM_BUY_RATIO=0.03         # 投信+外資買超佔總成交量門檻（3%）
+INST_MOM_LOOKBACK=20            # 創新高天數
+INST_MOM_TOP_N=3                # 持有標的數量
+INST_MOM_STOP_LOSS=0.10         # 硬性停損 -10%
+INST_MOM_TRAILING_PERIOD=10     # 移動停利 MA10
+INST_MOM_EXCLUDE_ETF=true       # 排除 ETF
+# ── 魚過濾（每日篩選：法人低吃 → 動能進場）──
+INST_MOM_FISH_FILTER=true       # 啟用魚過濾
+INST_MOM_FISH_DAYS=90           # 魚過濾回溯天數
+INST_MOM_FISH_MIN_SCORE=7.0     # 魚過濾最低分數門檻
+# ── 全市場動能搜索排名（市值排序，前 N 大）──
+STOCK_NO=150                    # 法人動能搜索排名
+# ── 獲利滾入 ──
+INST_MOM_PROFIT_ROLL_MONTHS=0   # M=0: 每筆獲利即時滾入
+INST_MOM_PROFIT_ROLL_PCT=1.0    # P=100%
+# ── 停損禁入 ──
+INST_MOM_LOSER_BAN_DAYS=0       # 停損禁入天數（0=不啟用）
+
+# ==========================================
+# ⭐ Group 1 — 個股策略參數（V1.1 新格式）
+# ==========================================
+# 每支股票一個 PC_<代號> 變數，JSON 格式。
+# 策略特定參數名稱對照：
+#
+#   bollinger  | window, std_dev, rsi_period
+#   vwap       | sigma_mult, rsi_period
+#   ma_cross   | fast_period, slow_period, atr_threshold
+#   breakout   | lookback, atr_period, atr_threshold
+#   keep_wait  | (無策略函式參數，DCA 參數如下)
+#
+# 通用參數：alloc, position_amount, monthly_budget
+# 金字塔（限 bollinger）：pyramid_enabled, pyramid_tier1_shares,
+#   pyramid_tier2_shares, pyramid_tier3_shares,
+#   pyramid_tier2_drop, pyramid_tier3_drop
+# DCA（限 keep_wait）：initial_shares, add_drop_pct, add_shares,
+#   max_additions, tp_trigger_pct, tp_sell_ratio, cooldown_days
+# 突破（限 breakout）：buy_shares, sell_shares
+# ==========================================
+
+# 0050 — 布林通道反轉 ｜ alloc=20% → NT$100,000
+# 變更：keep_wait → bollinger（ETF 牛市用趨勢策略，避免過早停利）
+PC_0050={"strategy":"bollinger","alloc":20,"window":20,"std_dev":2.0,"rsi_period":5,"position_amount":10000,"monthly_budget":0}
+
+# 2330 — 均線交叉 ｜ alloc=15% → NT$75,000
+# 不變
+PC_2330={"strategy":"ma_cross","alloc":15,"fast_period":9,"slow_period":21,"atr_threshold":0.005,"position_amount":10000,"monthly_budget":0}
+
+# 2454 — 均線交叉 ｜ alloc=15% → NT$75,000
+# 變更：keep_wait → ma_cross（波動 71.8% 高位低接風險極高，趨勢跟隨更安全）
+PC_2454={"strategy":"ma_cross","alloc":15,"fast_period":5,"slow_period":20,"atr_threshold":0.005,"position_amount":10000,"monthly_budget":0}
+
+# 2881 — VWAP 偏離反轉 ｜ alloc=10% → NT$50,000
+# 不變
+PC_2881={"strategy":"vwap","alloc":10,"sigma_mult":1.5,"rsi_period":5,"position_amount":10000,"monthly_budget":0}
+
+# 2382 — 唐奇安突破 ｜ alloc=10% → NT$50,000
+# 不變（已於 9.5 節優化參數）
+PC_2382={"strategy":"breakout","alloc":10,"lookback":15,"atr_period":14,"atr_threshold":0.008,"position_amount":10000,"monthly_budget":0}
+
+# 3034 — 均線交叉 ｜ alloc=10% → NT$50,000
+# 變更：keep_wait → ma_cross（波動 41.6% 趨勢股，法人持續買超，趨勢策略優於低接）
+PC_3034={"strategy":"ma_cross","alloc":10,"fast_period":9,"slow_period":21,"atr_threshold":0.005,"position_amount":10000,"monthly_budget":0}
+
+# 2882 — VWAP 偏離反轉 ｜ alloc=10% → NT$50,000
+# 不變
+PC_2882={"strategy":"vwap","alloc":10,"sigma_mult":1.5,"rsi_period":5,"position_amount":10000,"monthly_budget":0}
+
+# 2317 — VWAP 偏離反轉 ｜ alloc=10% → NT$50,000
+# 變更：ma_cross → vwap（YTD 僅 +7.6% 盤整股，ma_cross 雙巴，vwap 偏離反轉更適合）
+PC_2317={"strategy":"vwap","alloc":10,"sigma_mult":1.5,"rsi_period":5,"position_amount":10000,"monthly_budget":0}
+
+# ==========================================
+# 內部設定（請勿修改）
+# ==========================================
+GIT_PAGE=on
