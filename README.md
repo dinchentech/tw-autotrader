@@ -166,7 +166,7 @@ tw-autotrader/
 ├── backtest.py           # Yahoo Finance 回測
 ├── backtest_esun.py      # 玉山 SDK 回測
 ├── simulate_portfolio.py # 投資組合模擬引擎
-├── live_trader_multi.py  # 多股多策略實盤（主力程式）
+├── live_trader_multi.py  # 多股多策略實盤（主力程式）,已加密
 ├── 使用手冊.md            # 完整使用教學
 ├── 策略說明.md            # 四大策略原理解說
 └── 回溯說明.MD           # 回測操作指南
@@ -186,7 +186,8 @@ tw-autotrader/
 
 ## 版權聲明
 
-本專案（TW AutoTrader）僅供個人學習、研究與學術交流免費使用。
+本專案（TW AutoTrader）僅供個人學習、研究與學術使用。live_trader_multi.py 已加密僅可執行,
+其他策略部分開放源碼。
 
 未經原作者（dinchentech）書面明確授權，嚴格禁止：
 1. 將本系統之全部或部分原始碼進行商業販售、出租或轉讓。
