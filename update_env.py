@@ -349,39 +349,44 @@ def apply_new_env(new_env_path: Path):
 
 
 def clear_history():
-    """清除歷史資料"""
-    cleared = []
-    for fpath in HISTORY_FILES:
-        fp = Path(fpath)
-        if fp.exists():
-            fp.unlink()
-            cleared.append(fpath)
-    
-    if cleared:
-        print(f"✅ 已清除歷史資料：{', '.join(cleared)}")
+    """透過 SSH 清除 VM 上的歷史資料（本機 logs 無意義，實際資料在 VM）"""
+    rm_list = " ".join(HISTORY_FILES)
+    inner_cmd = f"rm -f {rm_list}"
+    docker_cmd = f"sudo docker exec tw_autotrader_bot sh -c '{inner_cmd}'"
+    ssh_cmd = [
+        "gcloud", "compute", "ssh", "tw-autotrader",
+        "--zone=asia-east1-b",
+        f"--command=cd ~/tw-autotrader && {docker_cmd}",
+    ]
+    print("🔄 正在清除 VM 上的歷史資料...")
+    result = subprocess.run(ssh_cmd, capture_output=True, text=True)
+    if result.returncode == 0:
+        print(f"✅ 已清除 VM 上的歷史資料")
     else:
-        print("ℹ️  無歷史資料需清除")
-    
-    # 重新生成空白 dashboard
-    try:
-        from scripts.generate_dashboard import main as gen_dashboard
-        gen_dashboard()
-        print("✅ 已重新生成空白儀表板")
-    except Exception:
-        print("ℹ️  儀表板將在下次交易時自動生成")
+        print(f"⚠️  VM 清除失敗（可能 VM 未啟動或 SSH 權限問題）")
+        print(f"   請手動執行：")
+        print(f"   gcloud compute ssh tw-autotrader --zone=asia-east1-b")
+        print(f"   cd ~/tw-autotrader")
+        print(f"   sudo docker exec tw_autotrader_bot sh -c '{inner_cmd}'")
 
 
 def check_holdings(removed_symbols: list[str]):
-    """檢查被刪除股票是否有持倉"""
-    holdings_path = LOGS_DIR / "holdings.json"
-    if not holdings_path.exists():
+    """透過 SSH 檢查 VM 上被刪除股票是否有持倉"""
+    ssh_cmd = [
+        "gcloud", "compute", "ssh", "tw-autotrader",
+        "--zone=asia-east1-b",
+        "--command=cd ~/tw-autotrader && sudo docker exec tw_autotrader_bot cat logs/holdings.json",
+    ]
+    result = subprocess.run(ssh_cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        print("ℹ️  無法連線 VM 檢查持倉（可能 VM 未啟動），請自行確認")
         return
-    
+
     try:
-        holdings = json.loads(holdings_path.read_text(encoding="utf-8"))
+        holdings = json.loads(result.stdout)
     except (json.JSONDecodeError, UnicodeDecodeError):
         return
-    
+
     for sym in removed_symbols:
         if sym in holdings and holdings[sym].get("quantity", 0) > 0:
             qty = holdings[sym]["quantity"]
@@ -443,11 +448,11 @@ def main():
     actions = []
     if diff["removed_stocks"]:
         actions.append("⚠️  手動賣出刪除股票的餘股（券商平台）")
-    actions.append("✅ 備份當前 .env")
-    actions.append("✅ 套用新配置到 .env")
+    actions.append("✅ 備份當前 .env（本機）")
+    actions.append("✅ 套用新配置到 .env（本機）")
     if needs_history_clear(diff):
-        actions.append("✅ 清除歷史資料（performance.csv, holdings.json 等）")
-    actions.append("✅ 部署到 VM（./deploy.sh）")
+        actions.append("✅ 清除 VM 上的歷史資料（SSH → VM）")
+    actions.append("✅ 部署到 VM（./deploy.sh → 重啟容器）")
     
     for i, action in enumerate(actions, 1):
         print(f"   {i}. {action}")
