@@ -85,13 +85,40 @@ if [ ! -f "${TARGET_SCRIPT}" ]; then
 fi
 
 PYARMOR_BIN=""
+PYARMOR_VERSION_OK=0
 if [ -x ".venv/bin/pyarmor" ]; then
   PYARMOR_BIN=".venv/bin/pyarmor"
 elif command -v pyarmor >/dev/null 2>&1; then
   PYARMOR_BIN="pyarmor"
-else
-  echo "❌ 找不到 pyarmor 執行檔（試過 .venv/bin/pyarmor 與 PATH）"
-  exit 1
+fi
+
+if [ -n "${PYARMOR_BIN}" ]; then
+  PV=$("${PYARMOR_BIN}" --version 2>&1 | head -1 | grep -oP 'Pyarmor \K[0-9]+' || echo "0")
+  if [ "${PV}" -ge 9 ]; then
+    echo "   ⚠️ PyArmor ${PV}.x 試用版已過期，降級至 8.x..."
+    pip install "pyarmor<9" 2>&1 | tail -1
+    if [ -x ".venv/bin/pyarmor" ]; then
+      PYARMOR_BIN=".venv/bin/pyarmor"
+    else
+      PYARMOR_BIN="pyarmor"
+    fi
+    "${PYARMOR_BIN}" --version 2>&1 | head -1
+  fi
+  PYARMOR_VERSION_OK=1
+fi
+
+# 如果還是沒 pyarmor，嘗試安裝
+if [ "${PYARMOR_VERSION_OK}" -eq 0 ]; then
+  echo "   📦 安裝 PyArmor 8.x（試用版永久有效）..."
+  pip install "pyarmor<9" 2>&1 | tail -1
+  if [ -x ".venv/bin/pyarmor" ]; then
+    PYARMOR_BIN=".venv/bin/pyarmor"
+  elif command -v pyarmor >/dev/null 2>&1; then
+    PYARMOR_BIN="pyarmor"
+  else
+    echo "❌ 無法安裝 pyarmor"
+    exit 1
+  fi
 fi
 echo "   ✅ pyarmor: ${PYARMOR_BIN}"
 
