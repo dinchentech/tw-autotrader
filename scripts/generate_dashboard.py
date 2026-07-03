@@ -12,6 +12,8 @@ import numpy as np
 CSV_PATH = Path("logs/performance.csv")
 OUT_PATH = Path("logs/dashboard.html")
 GROUP2_PNL_PATH = Path("data/inst_momentum_pnl.json")
+HOLDINGS_PATH = Path("logs/holdings.json")
+STOCK_ALLOC_PATH = Path("logs/stock_allocation.json")
 
 CHART_CDN = "https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"
 
@@ -30,6 +32,98 @@ def load_trades() -> pd.DataFrame:
     if "group" not in df.columns:
         df["group"] = 1
     return df
+
+
+def load_holdings() -> dict:
+    """讀取當前持倉"""
+    if not HOLDINGS_PATH.exists():
+        return {}
+    try:
+        with open(HOLDINGS_PATH, "r") as f:
+            holdings = json.load(f)
+        return holdings
+    except Exception:
+        return {}
+
+
+def load_stock_allocation() -> dict:
+    """讀取股票成本資訊"""
+    if not STOCK_ALLOC_PATH.exists():
+        return {}
+    try:
+        with open(STOCK_ALLOC_PATH, "r") as f:
+            alloc = json.load(f)
+        return alloc
+    except Exception:
+        return {}
+
+
+def compute_positions(df: pd.DataFrame, holdings: dict, stock_alloc: dict, current_prices: dict = None) -> list:
+    """
+    計算未平倉持倉
+    回傳 [{
+        "symbol": "2330",
+        "shares": 100,
+        "avg_cost": 600.0,
+        "total_cost": 60000.0,
+        "current_price": 620.0,
+        "current_value": 62000.0,
+        "unrealized_pnl": 2000.0,
+        "unrealized_pct": 3.33,
+        "last_buy_date": "2026-07-03",
+    }]
+    """
+    if df.empty or not holdings:
+        return []
+
+    # 獲取最新價格（從交易紀錄的最後一筆買賣）
+    latest_prices = {}
+    for sym in holdings.keys():
+        sym_df = df[df["symbol"] == sym]
+        if not sym_df.empty:
+            latest_prices[sym] = sym_df["price"].iloc[-1]
+
+    # 如果沒有外部價格資料，使用最新交易價格
+    if not current_prices:
+        current_prices = latest_prices
+
+    positions = []
+    for sym, shares in holdings.items():
+        if shares <= 0:
+            continue
+
+        # 從 stock_allocation 獲取成本資訊
+        alloc_data = stock_alloc.get(sym, {})
+        total_cost = alloc_data.get("total_buy_cost", 0)
+        total_shares = alloc_data.get("total_buy_shares", 0)
+
+        if total_shares == 0:
+            continue
+
+        avg_cost = total_cost / total_shares
+        current_price = current_prices.get(sym, avg_cost)  # 沒有當前價格就用成本價
+        current_value = current_price * shares
+        unrealized_pnl = (current_price - avg_cost) * shares
+        unrealized_pct = (current_price - avg_cost) / avg_cost * 100 if avg_cost > 0 else 0
+
+        # 找到最後買入日期
+        sym_df = df[df["symbol"] == sym]
+        last_buy = sym_df[sym_df["action"].str.upper() == "BUY"]["timestamp"].max()
+        last_buy_date = last_buy.strftime("%Y-%m-%d") if pd.notna(last_buy) else "-"
+
+        positions.append({
+            "symbol": sym,
+            "shares": int(shares),
+            "avg_cost": round(avg_cost, 2),
+            "total_cost": round(total_cost, 0),
+            "current_price": round(current_price, 2),
+            "current_value": round(current_value, 0),
+            "unrealized_pnl": round(unrealized_pnl, 0),
+            "unrealized_pct": round(unrealized_pct, 2),
+            "last_buy_date": last_buy_date,
+        })
+
+    return positions
 
 
 def compute_pnl(df: pd.DataFrame) -> list:
@@ -226,6 +320,11 @@ def build_html(trades_df: pd.DataFrame) -> str:
     last_trades_g1 = sorted(pnl_g1, key=lambda x: x["date"] + x["time"], reverse=True)[:50] if pnl_g1 else []
     last_trades_g2 = sorted(pnl_g2, key=lambda x: x["date"] + x["time"], reverse=True)[:50] if pnl_g2 else []
 
+    # 計算未平倉部位
+    holdings = load_holdings()
+    stock_alloc = load_stock_allocation()
+    positions = compute_positions(trades_df, holdings, stock_alloc)
+
     charts_data = _to_native({
         "labels": combined_daily,
         "curve_g1": curve_g1_data,
@@ -304,12 +403,20 @@ def build_html(trades_df: pd.DataFrame) -> str:
   <div class="subtitle">最後更新：{updated_at} · Group 1 + Group 2 雙群組</div>
 
   <!-- 總覽卡片 -->
-  <div class="cards">
-    <div class="card"><div class="label">總已實現損益</div><div class="value {"positive" if total_pnl >= 0 else "negative"}">{v(total_pnl)}</div></div>
-    <div class="card"><div class="label">總交易次數</div><div class="value">{total_trades}</div></div>
-    <div class="card"><div class="label">Group 1 損益</div><div class="value {"positive" if stats_g1['total_pnl'] >= 0 else "negative"}">{v(stats_g1['total_pnl'])}</div></div>
-    <div class="card"><div class="label">Group 2 損益</div><div class="value {"positive" if stats_g2['total_pnl'] >= 0 else "negative"}">{v(stats_g2['total_pnl'])}</div></div>
-  </div>
+   <div class="cards">
+     <div class="card"><div class="label">總已實現損益</div><div class="value {"positive" if total_pnl >= 0 else "negative"}">{v(total_pnl)}</div></div>
+     <div class="card"><div class="label">總交易次數</div><div class="value">{total_trades}</div></div>
+     <div class="card"><div class="label">Group 1 損益</div><div class="value {"positive" if stats_g1['total_pnl'] >= 0 else "negative"}">{v(stats_g1['total_pnl'])}</div></div>
+     <div class="card"><div class="label">Group 2 損益</div><div class="value {"positive" if stats_g2['total_pnl'] >= 0 else "negative"}">{v(stats_g2['total_pnl'])}</div></div>
+   </div>
+
+   <!-- 未平倉部位卡片 -->
+   <div class="cards">
+     <div class="card"><div class="label">未實現損益</div><div class="value {"positive" if sum(p["unrealized_pnl"] for p in positions) >= 0 else "negative"}">{v(sum(p["unrealized_pnl"] for p in positions))}</div></div>
+     <div class="card"><div class="label">持倉市值</div><div class="value">{sum(p["current_value"] for p in positions):,}</div></div>
+     <div class="card"><div class="label">持倉檔數</div><div class="value">{len(positions)}</div></div>
+     <div class="card"><div class="label">總權益</div><div class="value {"positive" if (total_pnl + sum(p["unrealized_pnl"] for p in positions)) >= 0 else "negative"}">{v(total_pnl + sum(p["unrealized_pnl"] for p in positions))}</div></div>
+   </div>
 """
 
     # Group 2 JSON 補充卡片（資本、權益）
@@ -325,7 +432,31 @@ def build_html(trades_df: pd.DataFrame) -> str:
   </div>
 """
 
-    # ─── 圖表 ───
+    # Add open positions section
+    if positions:
+        html += f"""
+  <div class="group-section">
+    <div class="section-title">📋 未平倉部位</div>
+    <table><thead><tr><th>標的</th><th>股數</th><th>平均成本</th><th>市價</th><th>市值</th><th>未實現損益</th><th>報酬率</th><th>持有天數</th></tr></thead><tbody>
+"""
+        for pos in positions:
+            cls = "positive" if pos["unrealized_pnl"] >= 0 else "negative"
+            html += f"""      <tr><td>{pos["symbol"]}</td><td>{pos["shares"]}</td><td>{pos["avg_cost"]:,.0f}</td><td>{pos["current_price"]:,.0f}</td>
+          <td>{pos["current_value"]:,.0f}</td><td class="{cls}">{pos["unrealized_pnl"]:+,.0f}</td>
+          <td class="{cls}">{pos["unrealized_pct"]:+.2f}%</td><td>{pos["last_buy_date"]}</td></tr>
+"""
+        html += """
+    </tbody></table>
+  </div>
+"""
+    else:
+        html += """
+  <div class="group-section">
+    <div class="section-title">📋 未平倉部位</div>
+    <div class="empty">📭 無未平倉部位</div>
+  </div>
+"""
+
     html += """
   <div class="charts">
     <div class="chart-box full"><h3>📈 累積損益曲線</h3><canvas id="chartPnlCombined"></canvas></div>
