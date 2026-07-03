@@ -28,6 +28,7 @@ def load_trades() -> pd.DataFrame:
     if df.empty:
         return df
     df["timestamp"] = pd.to_datetime(df["timestamp"])
+    df["symbol"] = df["symbol"].astype(str)
     df = df.sort_values("timestamp").reset_index(drop=True)
     if "group" not in df.columns:
         df["group"] = 1
@@ -59,31 +60,15 @@ def load_stock_allocation() -> dict:
 
 
 def compute_positions(df: pd.DataFrame, holdings: dict, stock_alloc: dict, current_prices: dict = None) -> list:
-    """
-    計算未平倉持倉
-    回傳 [{
-        "symbol": "2330",
-        "shares": 100,
-        "avg_cost": 600.0,
-        "total_cost": 60000.0,
-        "current_price": 620.0,
-        "current_value": 62000.0,
-        "unrealized_pnl": 2000.0,
-        "unrealized_pct": 3.33,
-        "last_buy_date": "2026-07-03",
-    }]
-    """
     if df.empty or not holdings:
         return []
 
-    # 獲取最新價格（從交易紀錄的最後一筆買賣）
     latest_prices = {}
     for sym in holdings.keys():
         sym_df = df[df["symbol"] == sym]
         if not sym_df.empty:
             latest_prices[sym] = sym_df["price"].iloc[-1]
 
-    # 如果沒有外部價格資料，使用最新交易價格
     if not current_prices:
         current_prices = latest_prices
 
@@ -92,21 +77,31 @@ def compute_positions(df: pd.DataFrame, holdings: dict, stock_alloc: dict, curre
         if shares <= 0:
             continue
 
-        # 從 stock_allocation 獲取成本資訊
+        # 從 stock_allocation 獲取成本（若不存在則從 trade records 推算）
         alloc_data = stock_alloc.get(sym, {})
         total_cost = alloc_data.get("total_buy_cost", 0)
         total_shares = alloc_data.get("total_buy_shares", 0)
 
-        if total_shares == 0:
+        if total_shares <= 0:
+            # Fallback: 從 CSV 所有 BUY 推算成本
+            sym_df = df[df["symbol"] == sym]
+            buy_rows = sym_df[sym_df["action"].str.upper() == "BUY"]
+            if not buy_rows.empty:
+                total_cost = (buy_rows["price"] * buy_rows["quantity"]).sum()
+                total_shares = buy_rows["quantity"].sum()
+            else:
+                total_cost = current_prices.get(sym, 0) * shares
+                total_shares = shares
+
+        if total_shares <= 0:
             continue
 
         avg_cost = total_cost / total_shares
-        current_price = current_prices.get(sym, avg_cost)  # 沒有當前價格就用成本價
+        current_price = current_prices.get(sym, avg_cost)
         current_value = current_price * shares
         unrealized_pnl = (current_price - avg_cost) * shares
         unrealized_pct = (current_price - avg_cost) / avg_cost * 100 if avg_cost > 0 else 0
 
-        # 找到最後買入日期
         sym_df = df[df["symbol"] == sym]
         last_buy = sym_df[sym_df["action"].str.upper() == "BUY"]["timestamp"].max()
         last_buy_date = last_buy.strftime("%Y-%m-%d") if pd.notna(last_buy) else "-"
