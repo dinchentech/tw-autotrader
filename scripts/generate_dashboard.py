@@ -15,6 +15,7 @@ GROUP2_PNL_PATH = Path("data/inst_momentum_pnl.json")
 HOLDINGS_PATH = Path("logs/holdings.json")
 STOCK_ALLOC_PATH = Path("logs/stock_allocation.json")
 
+APP_VERSION = "2.02"
 CHART_CDN = "https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"
 
 
@@ -394,7 +395,7 @@ def build_html(trades_df: pd.DataFrame) -> str:
 </head>
 <body>
 <div class="container">
-  <h1>📊 TW AutoTrader 績效儀表板</h1>
+  <h1>📊 TW AutoTrader 績效儀表板 <span style="font-size:.9rem;color:#999;font-weight:400;">v{APP_VERSION}</span></h1>
   <div class="subtitle">最後更新：{updated_at} · Group 1 + Group 2 雙群組</div>
 
   <!-- 總覽卡片 -->
