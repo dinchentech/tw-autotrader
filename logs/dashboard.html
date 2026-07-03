@@ -50,14 +50,32 @@
 <body>
 <div class="container">
   <h1>📊 TW AutoTrader 績效儀表板</h1>
-  <div class="subtitle">最後更新：2026-06-30 15:45 · Group 1 + Group 2 雙群組</div>
+  <div class="subtitle">最後更新：2026-07-03 20:04 · Group 1 + Group 2 雙群組</div>
 
   <!-- 總覽卡片 -->
-  <div class="cards">
-    <div class="card"><div class="label">總已實現損益</div><div class="value positive">+439</div></div>
-    <div class="card"><div class="label">總交易次數</div><div class="value">2</div></div>
-    <div class="card"><div class="label">Group 1 損益</div><div class="value positive">+439</div></div>
-    <div class="card"><div class="label">Group 2 損益</div><div class="value positive">+0</div></div>
+   <div class="cards">
+     <div class="card"><div class="label">總已實現損益</div><div class="value positive">+0</div></div>
+     <div class="card"><div class="label">總交易次數</div><div class="value">0</div></div>
+     <div class="card"><div class="label">Group 1 損益</div><div class="value positive">+0</div></div>
+     <div class="card"><div class="label">Group 2 損益</div><div class="value positive">+0</div></div>
+   </div>
+
+   <!-- 未平倉部位卡片 -->
+   <div class="cards">
+     <div class="card"><div class="label">未實現損益</div><div class="value positive">+0</div></div>
+     <div class="card"><div class="label">持倉市值</div><div class="value">59,430.0</div></div>
+     <div class="card"><div class="label">持倉檔數</div><div class="value">1</div></div>
+     <div class="card"><div class="label">總權益</div><div class="value positive">+0</div></div>
+   </div>
+
+  <div class="group-section">
+    <div class="section-title">📋 未平倉部位</div>
+    <table><thead><tr><th>標的</th><th>股數</th><th>平均成本</th><th>市價</th><th>市值</th><th>未實現損益</th><th>報酬率</th><th>持有天數</th></tr></thead><tbody>
+      <tr><td>2454</td><td>14</td><td>4,245</td><td>4,245</td>
+          <td>59,430</td><td class="positive">+0</td>
+          <td class="positive">+0.00%</td><td>2026-06-30</td></tr>
+
+    </tbody></table>
   </div>
 
   <div class="charts">
@@ -68,32 +86,8 @@
 
   <div class="group-section">
     <div class="group-label g1">Group 1 固定標的策略</div>
-    <div class="cards">
-      <div class="card"><div class="label">已實現損益</div><div class="value positive">+439</div></div>
-      <div class="card"><div class="label">交易次數</div><div class="value">2</div></div>
-      <div class="card"><div class="label">勝率</div><div class="value">100.0%</div></div>
-      <div class="card"><div class="label">交易天數</div><div class="value">3</div></div>
-    </div>
-    <div class="section-title">📋 近 50 筆交易</div>
-    <table><thead><tr><th>日期</th><th>時間</th><th>標的</th><th>價格</th><th>股數</th><th>損益</th><th>報酬率</th><th>累積損益</th></tr></thead><tbody><tr><td>2026-06-30</td><td>10:43</td><td>878</td>
-                <td>33</td><td>450</td>
-                <td class="positive">+103</td>
-                <td class="positive">+0.70%</td>
-                <td class="positive">+439</td></tr><tr><td>2026-06-30</td><td>09:04</td><td>50</td>
-                <td>107</td><td>140</td>
-                <td class="positive">+336</td>
-                <td class="positive">+2.29%</td>
-                <td class="positive">+336</td></tr></tbody></table>
-    <div class="section-title">🏷️ 各標的統計</div>
-    <table><thead><tr><th>標的</th><th>交易次數</th><th>買進</th><th>賣出</th><th>損益</th><th>勝率</th></tr></thead><tbody><tr><td>2454</td><td>0</td><td>1</td><td>0</td>
-                    <td class="positive">+0</td><td>0%</td></tr><tr><td>2330</td><td>0</td><td>1</td><td>0</td>
-                    <td class="positive">+0</td><td>0%</td></tr><tr><td>2881</td><td>0</td><td>2</td><td>0</td>
-                    <td class="positive">+0</td><td>0%</td></tr><tr><td>2886</td><td>0</td><td>2</td><td>0</td>
-                    <td class="positive">+0</td><td>0%</td></tr><tr><td>878</td><td>1</td><td>1</td><td>1</td>
-                    <td class="positive">+103</td><td>100.0%</td></tr><tr><td>6208</td><td>0</td><td>2</td><td>0</td>
-                    <td class="positive">+0</td><td>0%</td></tr><tr><td>50</td><td>1</td><td>1</td><td>1</td>
-                    <td class="positive">+336</td><td>100.0%</td></tr><tr><td>2382</td><td>0</td><td>1</td><td>0</td>
-                    <td class="positive">+0</td><td>0%</td></tr></tbody></table>
+    <div class="empty">📭 尚無交易紀錄</div>
+  </div>
   <div class="group-section">
     <div class="group-label g2">Group 2 法人抬轎動能策略</div>
     <div class="empty">📭 尚無交易紀錄</div>
@@ -104,10 +98,10 @@
       <a href="bollinger-animation.html" target="_blank" rel="noopener" class="strategy-link">布林通道反轉</a><a href="vwap-animation.html" target="_blank" rel="noopener" class="strategy-link">VWAP 偏離反轉</a><a href="ma_cross-animation.html" target="_blank" rel="noopener" class="strategy-link">均線交叉</a><a href="breakout-animation.html" target="_blank" rel="noopener" class="strategy-link">唐奇安突破</a><a href="keep_wait策略說明.html" target="_blank" rel="noopener" class="strategy-link">Keep & Wait 低接</a><a href="法人動能策略說明.html" target="_blank" rel="noopener" class="strategy-link">法人抬轎動能</a>
     </div>
   </div>
-  <footer>TW AutoTrader · 資料不構成投資建議 · 2026-06-30 15:45</footer>
+  <footer>TW AutoTrader · 資料不構成投資建議 · 2026-07-03 20:04</footer>
 </div>
 <script>
-const DATA = {"labels": ["2026-06-30"], "curve_g1": [439.0], "curve_g2": [null], "symbol_stats_g1": [{"symbol": 2454, "trades": 0, "buys": 1, "sells": 0, "pnl": 0, "win_rate": 0}, {"symbol": 2330, "trades": 0, "buys": 1, "sells": 0, "pnl": 0, "win_rate": 0}, {"symbol": 2881, "trades": 0, "buys": 2, "sells": 0, "pnl": 0, "win_rate": 0}, {"symbol": 2886, "trades": 0, "buys": 2, "sells": 0, "pnl": 0, "win_rate": 0}, {"symbol": 878, "trades": 1, "buys": 1, "sells": 1, "pnl": 103.0, "win_rate": 100.0}, {"symbol": 6208, "trades": 0, "buys": 2, "sells": 0, "pnl": 0, "win_rate": 0}, {"symbol": 50, "trades": 1, "buys": 1, "sells": 1, "pnl": 336.0, "win_rate": 100.0}, {"symbol": 2382, "trades": 0, "buys": 1, "sells": 0, "pnl": 0, "win_rate": 0}], "symbol_stats_g2": [], "pnl_list_g1": [{"date": "2026-06-30", "time": "09:04", "symbol": 50, "action": "SELL", "price": 107.1, "qty": 140, "pnl": 336.0, "pnl_pct": 2.29, "cumulative": 336.0}, {"date": "2026-06-30", "time": "10:43", "symbol": 878, "action": "SELL", "price": 33.3, "qty": 450, "pnl": 103.0, "pnl_pct": 0.7, "cumulative": 439.0}], "pnl_list_g2": [], "g2_json": {}};
+const DATA = {"labels": [], "curve_g1": [], "curve_g2": [], "symbol_stats_g1": [{"symbol": "2454", "trades": 0, "buys": 1, "sells": 0, "pnl": 0, "win_rate": 0}], "symbol_stats_g2": [], "pnl_list_g1": [], "pnl_list_g2": [], "g2_json": {}};
 
 // ─── 合併累積損益曲線 ───
 (function() {
