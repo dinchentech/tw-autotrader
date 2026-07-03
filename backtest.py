@@ -15,6 +15,16 @@ from strategies.ma_cross import ma_cross_strategy
 from strategies.bollinger import bollinger_reverse_strategy
 from strategies.breakout import breakout_strategy
 
+# 載入用戶自訂策略
+try:
+    from user_strategies import USER_STRATEGY_MAP
+    USER_STRATEGIES_AVAILABLE = True
+    print(f"✅ 已載入 {len(USER_STRATEGY_MAP)} 個用戶自訂策略")
+except ImportError:
+    USER_STRATEGIES_AVAILABLE = False
+    print("ℹ️  未找到 user_strategies.py，僅使用內建策略")
+    USER_STRATEGY_MAP = {}
+
 # 策略配置映射
 STRATEGY_CONFIG = {
     "vwap": {
@@ -32,7 +42,24 @@ STRATEGY_CONFIG = {
     "breakout": {
         "func": breakout_strategy,
         "params": {"lookback": 25, "atr_period": 14, "atr_threshold": 0.02}
-    }
+    },
+    # 用戶自訂策略（預設參數）
+    "g1_strategy_1": {
+        "func": USER_STRATEGY_MAP.get("g1_strategy_1"),
+        "params": {"fast_period": 5, "slow_period": 10}
+    },
+    "g1_strategy_2": {
+        "func": USER_STRATEGY_MAP.get("g1_strategy_2"),
+        "params": {"rsi_period": 14, "oversold": 30, "overbought": 70}
+    },
+    "g2_strategy_1": {
+        "func": USER_STRATEGY_MAP.get("g2_strategy_1"),
+        "params": {"lookback": 5, "threshold": 3}
+    },
+    "g2_strategy_2": {
+        "func": USER_STRATEGY_MAP.get("g2_strategy_2"),
+        "params": {"ma_period": 10, "volume_ma_period": 10, "volume_mult": 1.5}
+    },
 }
 
 # 所有策略參數統一定義（用於 argparse）
@@ -61,6 +88,25 @@ STRATEGY_PARAMS = {
         "atr_period":  {"default": 14,  "type": int,   "help": "ATR 計算週期"},
         "atr_threshold": {"default": 0.02, "type": float, "help": "ATR 波動度門檻"},
     },
+    # 用戶自訂策略參數
+    "g1_strategy_1": {
+        "fast_period": {"default": 5,  "type": int,   "help": "G1_S1: 快線週期"},
+        "slow_period": {"default": 10, "type": int,   "help": "G1_S1: 慢線週期"},
+    },
+    "g1_strategy_2": {
+        "rsi_period":  {"default": 14, "type": int,   "help": "G1_S2: RSI 計算週期"},
+        "oversold":    {"default": 30, "type": int,   "help": "G1_S2: 超賣門檻"},
+        "overbought":  {"default": 70, "type": int,   "help": "G1_S2: 超買門檻"},
+    },
+    "g2_strategy_1": {
+        "lookback":    {"default": 5,  "type": int,   "help": "G2_S1: 回看天數"},
+        "threshold":   {"default": 3,  "type": float, "help": "G2_S1: 漲跌幅門檻（百分比）"},
+    },
+    "g2_strategy_2": {
+        "ma_period":           {"default": 10, "type": int,   "help": "G2_S2: 價格均線週期"},
+        "volume_ma_period":    {"default": 10, "type": int,   "help": "G2_S2: 成交量均線週期"},
+        "volume_mult":         {"default": 1.5,"type": float, "help": "G2_S2: 成交量放大倍數"},
+    },
 }
 
 def get_strategy_from_env_or_args():
@@ -70,16 +116,19 @@ def get_strategy_from_env_or_args():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "各策略可用參數：\n"
-             "  vwap:     --sigma_mult, --rsi_period\n"
-             "  ma_cross: --fast_period, --slow_period, --atr_threshold\n"
-            "  bollinger: --window, --std_dev, --rsi_period\n"
-            "  breakout: --lookback, --atr_period\n"
-            "\n"
-            "範例：\n"
-            "  python backtest.py --strategy ma_cross --fast_period 5 --slow_period 30\n"
-            "  python backtest.py --strategy bollinger --std_dev 2.5 --rsi_period 7\n"
-            "  python backtest.py --strategy breakout --lookback 40\n"
-            "  python backtest.py --strategy vwap --sigma_mult 2.0"
+             "  vwap:          --sigma_mult, --rsi_period\n"
+              "  ma_cross:      --fast_period, --slow_period, --atr_threshold\n"
+             "  bollinger:     --window, --std_dev, --rsi_period\n"
+             "  breakout:      --lookback, --atr_period\n"
+             "  g1_strategy_1: --fast_period, --slow_period (用戶自訂)\n"
+             "  g1_strategy_2: --rsi_period, --oversold, --overbought (用戶自訂)\n"
+             "  g2_strategy_1: --lookback, --threshold (用戶自訂)\n"
+             "  g2_strategy_2: --ma_period, --volume_ma_period, --volume_mult (用戶自訂)\n"
+             "\n"
+             "範例：\n"
+             "  python backtest.py --strategy ma_cross --fast_period 5 --slow_period 30\n"
+             "  python backtest.py --strategy g1_strategy_1 --fast_period 10 --slow_period 20\n"
+             "  python backtest.py --strategy g1_strategy_2 --rsi_period 14 --oversold 25"
         )
     )
     parser.add_argument('--symbol', type=str, default=None,
@@ -122,8 +171,17 @@ def get_strategy_from_env_or_args():
         print(f"📋 {args.symbol} 使用 PC_ 設定：策略={strategy_name}, 參數={params}")
     else:
         if strategy_name not in STRATEGY_CONFIG:
-            print(f"❌ 無效策略: {strategy_name}，使用預設 'vwap'")
-            strategy_name = "vwap"
+            # 檢查是否為用戶自訂策略
+            if strategy_name in USER_STRATEGY_MAP:
+                func = USER_STRATEGY_MAP[strategy_name]
+                STRATEGY_CONFIG[strategy_name] = {
+                    "func": func,
+                    "params": {}
+                }
+                print(f"✅ 動態註冊用戶策略: {strategy_name}")
+            else:
+                print(f"❌ 無效策略: {strategy_name}，使用預設 'vwap'")
+                strategy_name = "vwap"
         params = STRATEGY_CONFIG[strategy_name]["params"].copy()
 
     # CLI 參數覆蓋（所有策略通用）

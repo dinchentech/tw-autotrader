@@ -15,4 +15,14 @@ class StrategyEngine:
         """
         執行策略並回傳帶有訊號的 DataFrame
         """
-        return self.strategy_func(df, **self.params)
+        result = self.strategy_func(df, **self.params)
+
+        # 如果結果只有 'signal' 欄位，則合併原始 DataFrame
+        if 'signal' in result.columns and set(result.columns) == {'signal'}:
+            # 將訊號合併到原始 DataFrame
+            df_copy = df.copy()
+            df_copy['signal'] = result['signal']
+            return df_copy
+
+        # 否則直接返回結果
+        return result

@@ -1,0 +1,203 @@
+# user_strategies.py - 用戶自定義策略檔案
+"""
+此檔案供使用者定義 Group 1 和 Group 2 的備用策略。
+使用者可自由修改此檔案，無需更動 live_trader_multi.py。
+
+使用方式：
+1. 修改下方的策略函式
+2. 在 .env 中設定 G1_STRATEGY_1、G1_STRATEGY_2、G2_STRATEGY_1、G2_STRATEGY_2
+3. 在 PORTFOLIO 設定中使用 g1_strategy_1、g1_strategy_2、g2_strategy_1、g2_strategy_2
+
+例如：
+PORTFOLIO=0050:g1_strategy_1,2330:g1_strategy_2
+G1_STRATEGY_1=my_custom_ma_cross
+G1_STRATEGY_2=my_custom_rsi
+"""
+
+import pandas as pd
+
+
+# ==========================================
+# Group 1 備用策略 1 (g1_strategy_1)
+# ==========================================
+def my_custom_ma_cross(df: pd.DataFrame, **kwargs) -> pd.DataFrame:
+    """
+    Group 1 備用策略 1 - 自訂均線策略
+
+    預設：簡單均線策略 - 當價格高於 5 日均線時買入，低於時賣出
+
+    Parameters:
+    - df: 包含 OHLCV 資料的 DataFrame
+    - kwargs: 策略參數
+        - fast_period: 快線週期 (預設 5)
+        - slow_period: 慢線週期 (預設 10)
+
+    Returns:
+    - DataFrame with 'signal' column (1=BUY, -1=SELL, 0=HOLD)
+    """
+    fast_period = kwargs.get('fast_period', 5)
+    slow_period = kwargs.get('slow_period', 10)
+
+    signals = pd.Series(0, index=df.index)
+
+    if len(df) >= slow_period:
+        ma_fast = df['close'].rolling(window=fast_period, min_periods=1).mean()
+        ma_slow = df['close'].rolling(window=slow_period, min_periods=1).mean()
+
+        # 快線穿過慢線向上 = 買進訊號
+        buy_signal = (ma_fast > ma_slow) & (ma_fast.shift(1) <= ma_slow.shift(1))
+        # 快線穿過慢線向下 = 賣出訊號
+        sell_signal = (ma_fast < ma_slow) & (ma_fast.shift(1) >= ma_slow.shift(1))
+
+        signals[buy_signal] = 1
+        signals[sell_signal] = -1
+
+    return pd.DataFrame({'signal': signals}, index=df.index)
+
+
+# ==========================================
+# Group 1 備用策略 2 (g1_strategy_2)
+# ==========================================
+def my_custom_rsi(df: pd.DataFrame, **kwargs) -> pd.DataFrame:
+    """
+    Group 1 備用策略 2 - 自訂 RSI 策略
+
+    預設：RSI 超買超賣策略
+    - RSI < 30 = 超賣，買進
+    - RSI > 70 = 超買，賣出
+
+    Parameters:
+    - df: 包含 OHLCV 資料的 DataFrame
+    - kwargs: 策略參數
+        - rsi_period: RSI 週期 (預設 14)
+        - oversold: 超賣門檻 (預設 30)
+        - overbought: 超買門檻 (預設 70)
+
+    Returns:
+    - DataFrame with 'signal' column (1=BUY, -1=SELL, 0=HOLD)
+    """
+    rsi_period = kwargs.get('rsi_period', 14)
+    oversold = kwargs.get('oversold', 30)
+    overbought = kwargs.get('overbought', 70)
+
+    signals = pd.Series(0, index=df.index)
+
+    if len(df) >= rsi_period + 1:
+        # 計算 RSI
+        delta = df['close'].diff()
+        gain = delta.where(delta > 0, 0)
+        loss = -delta.where(delta < 0, 0)
+
+        avg_gain = gain.rolling(window=rsi_period, min_periods=1).mean()
+        avg_loss = loss.rolling(window=rsi_period, min_periods=1).mean()
+
+        rs = avg_gain / avg_loss.replace(0, 1e-10)
+        rsi = 100 - (100 / (1 + rs))
+
+        # RSI 策略訊號
+        signals[(rsi < oversold) & (rsi.shift(1) >= oversold)] = 1  # 從超賣回升
+        signals[(rsi > overbought) & (rsi.shift(1) <= overbought)] = -1  # 從超買回落
+
+    return pd.DataFrame({'signal': signals}, index=df.index)
+
+
+# ==========================================
+# Group 2 備用策略 1 (g2_strategy_1)
+# ==========================================
+def my_custom_momentum(df: pd.DataFrame, **kwargs) -> pd.DataFrame:
+    """
+    Group 2 備用策略 1 - 自訂動能策略
+
+    預設：價格動能策略 - 基於過去 N 日的漲跌幅判斷
+
+    Parameters:
+    - df: 包含 OHLCV 資料的 DataFrame
+    - kwargs: 策略參數
+        - lookback: 回看天數 (預設 5)
+        - threshold: 漲跌幅門檻百分比 (預設 3)
+
+    Returns:
+    - DataFrame with 'signal' column (1=BUY, -1=SELL, 0=HOLD)
+    """
+    lookback = kwargs.get('lookback', 5)
+    threshold = kwargs.get('threshold', 3)  # 百分比
+
+    signals = pd.Series(0, index=df.index)
+
+    if len(df) >= lookback + 1:
+        # 計算 N 日漲跌幅
+        pct_change = df['close'].pct_change(lookback) * 100
+
+        # 動能策略訊號
+        signals[(pct_change >= threshold) & (pct_change.shift(1) < threshold)] = 1  # 動能轉正
+        signals[(pct_change <= -threshold) & (pct_change.shift(1) > -threshold)] = -1  # 動能轉負
+
+    return pd.DataFrame({'signal': signals}, index=df.index)
+
+
+# ==========================================
+# Group 2 備用策略 2 (g2_strategy_2)
+# ==========================================
+def my_custom_volume_price(df: pd.DataFrame, **kwargs) -> pd.DataFrame:
+    """
+    Group 2 備用策略 2 - 自訂量價策略
+
+    預設：量價配合策略 - 價格上漲 + 成交量放大 = 買進
+
+    Parameters:
+    - df: 包含 OHLCV 資料的 DataFrame
+    - kwargs: 策略參數
+        - ma_period: 價格均線週期 (預設 10)
+        - volume_ma_period: 成交量均線週期 (預設 10)
+        - volume_mult: 成交量放大倍數 (預設 1.5)
+
+    Returns:
+    - DataFrame with 'signal' column (1=BUY, -1=SELL, 0=HOLD)
+    """
+    ma_period = kwargs.get('ma_period', 10)
+    volume_ma_period = kwargs.get('volume_ma_period', 10)
+    volume_mult = kwargs.get('volume_mult', 1.5)
+
+    signals = pd.Series(0, index=df.index)
+
+    if len(df) >= ma_period:
+        # 價格均線
+        price_ma = df['close'].rolling(window=ma_period, min_periods=1).mean()
+        # 成交量均線
+        volume_ma = df['volume'].rolling(window=volume_ma_period, min_periods=1).mean()
+
+        # 量價配合訊號
+        # 價格站穩均線 + 成交量放大 = 買進
+        buy_condition = (df['close'] > price_ma) & (df['volume'] >= volume_ma * volume_mult)
+        buy_entry = buy_condition & (~buy_condition.shift(1).fillna(False))
+
+        # 價格跌破均線 = 賣出
+        sell_condition = df['close'] < price_ma
+        sell_entry = sell_condition & (~sell_condition.shift(1).fillna(False))
+
+        signals[buy_entry] = 1
+        signals[sell_entry] = -1
+
+    return pd.DataFrame({'signal': signals}, index=df.index)
+
+
+# ==========================================
+# 用戶策略映射表（請勿修改此行以下）
+# ==========================================
+# 此映射表讓 live_trader_multi.py 知道如何載入你的自訂策略
+# 左邊是你在 .env 中使用的名稱，右邊是上方定義的函式名稱
+USER_STRATEGY_MAP = {
+    # Group 1 備用策略
+    'g1_strategy_1': my_custom_ma_cross,
+    'g1_strategy_2': my_custom_rsi,
+
+    # Group 2 備用策略
+    'g2_strategy_1': my_custom_momentum,
+    'g2_strategy_2': my_custom_volume_price,
+}
+
+# 若要自訂名稱映射，可在 .env 中設定：
+# G1_STRATEGY_1=my_custom_ma_cross
+# G1_STRATEGY_2=my_custom_rsi
+# G2_STRATEGY_1=my_custom_momentum
+# G2_STRATEGY_2=my_custom_volume_price

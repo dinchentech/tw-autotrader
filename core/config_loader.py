@@ -14,6 +14,11 @@ STRATEGY_PARAM_KEYS = {
     "ma_cross": ["fast_period", "slow_period", "atr_period", "atr_threshold"],
     "breakout": ["lookback", "atr_period", "atr_threshold"],
     "keep_wait": [],
+    # 用戶自訂策略
+    "g1_strategy_1": ["fast_period", "slow_period"],
+    "g1_strategy_2": ["rsi_period", "oversold", "overbought"],
+    "g2_strategy_1": ["lookback", "threshold"],
+    "g2_strategy_2": ["ma_period", "volume_ma_period", "volume_mult"],
 }
 
 # keep_wait DCA 參數名稱（用於 backtest_2024_2025.py 等）
