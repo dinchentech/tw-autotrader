@@ -20,8 +20,11 @@ One-time interactive password setup:
 """
 
 import os
+import sys
+import time
 import glob
 import pandas as pd
+import requests
 from datetime import datetime, timedelta
 from configparser import ConfigParser
 
@@ -161,8 +164,42 @@ class EsunProvider:
         """Login to both market-data and trade SDKs."""
         if self._logged_in:
             return
-        self._marketdata = EsunMarketdata(self.config)
-        self._marketdata.login()
+        try:
+            self._marketdata = EsunMarketdata(self.config)
+            self._marketdata.login()
+        except ValueError as e:
+            error_msg = str(e)
+            if "AGA0000" in error_msg or "系統維護" in error_msg:
+                print(f"\n❌ 玉山 API 維護中（08:00-13:00）")
+                print(f"   錯誤訊息: {error_msg}")
+                print(f"   程式將在 3 分鐘後自動退出，請避開維護時間再重啟")
+
+                # 發送 Telegram 通知
+                bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+                chat_id = os.getenv("TELEGRAM_CHAT_ID")
+                if bot_token and chat_id:
+                    msg = (
+                        f"⚠️ *玉山 API 維護中*\n\n"
+                        f"錯誤: {error_msg}\n\n"
+                        f"維護時間: 08:00-13:00\n"
+                        f"程式將在 3 分鐘後退出\n"
+                        f"請避開維護時間再重啟\n\n"
+                        f"⏰ 當前時間: {datetime.now().strftime('%H:%M')}"
+                    )
+                    try:
+                        requests.post(
+                            f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                            json={"chat_id": chat_id, "text": msg, "parse_mode": "Markdown"},
+                            timeout=10)
+                    except Exception:
+                        pass  # 通知失敗不影響主流程
+
+                # 延遲 3 分鐘後退出
+                time.sleep(180)
+                sys.exit(1)
+            else:
+                # 其他 ValueError 直接拋出
+                raise
         try:
             self._trade_sdk = EsunTrade(self.config)
             self._trade_sdk.login()

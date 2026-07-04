@@ -289,19 +289,22 @@ const N = PRICE_DATA.length;
 const { high: HIGH_DATA, low: LOW_DATA } = generateHighLow(PRICE_DATA);
 
 // Donchian Channel (20-period)
+// Uses look-back only (excludes current value) so the price line
+// visibly crosses the upper/lower band on buy/sell signals.
 function donchian(data, period) {
   const result = [];
   for (let i = 0; i < data.length; i++) {
-    let mx = -Infinity, mn = Infinity;
-    for (let j = Math.max(0, i - period + 1); j <= i; j++) {
-      mx = Math.max(mx, data[j]);
-      mn = Math.min(mn, data[j]);
+    const start = Math.max(0, i - period);
+    let mx = data[start], mn = data[start];
+    for (let j = start; j < i; j++) {
+      if (data[j] > mx) mx = data[j];
+      if (data[j] < mn) mn = data[j];
     }
     result.push({ max: mx, min: mn });
   }
   return result;
 }
-const DC = donchian(HIGH_DATA.map((h,i) => Math.max(h, PRICE_DATA[i])), 20);
+const DC = donchian(PRICE_DATA, 20);
 
 // Pre-compute breakout/breakdown indices using direct rolling max/min of close
 // (excludes today's price — matches real strategy's iloc[-2] behavior)
