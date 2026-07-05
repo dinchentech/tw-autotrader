@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>震盪盤 — 盤勢解析與策略配置</title>
+<title>盤整盤 — 盤勢解析與策略配置</title>
 <style>
   *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
   html { scroll-behavior: smooth; }
@@ -34,24 +34,24 @@
     content: '';
     position: absolute; inset: 0;
     background:
-      radial-gradient(ellipse 80% 60% at 50% 40%, rgba(249, 115, 22, 0.08) 0%, transparent 70%),
-      radial-gradient(ellipse 60% 50% at 30% 60%, rgba(239, 68, 68, 0.05) 0%, transparent 60%),
-      radial-gradient(ellipse 50% 40% at 70% 30%, rgba(168, 85, 247, 0.04) 0%, transparent 50%);
+      radial-gradient(ellipse 80% 60% at 50% 40%, rgba(251, 191, 36, 0.08) 0%, transparent 70%),
+      radial-gradient(ellipse 60% 50% at 30% 60%, rgba(245, 158, 11, 0.05) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 40% at 70% 30%, rgba(59, 130, 246, 0.04) 0%, transparent 50%);
     pointer-events: none;
   }
 
   .hero-badge {
     display: inline-flex; align-items: center; gap: 8px;
-    background: rgba(249, 115, 22, 0.12);
-    border: 1px solid rgba(249, 115, 22, 0.25);
+    background: rgba(251, 191, 36, 0.12);
+    border: 1px solid rgba(251, 191, 36, 0.25);
     padding: 6px 18px; border-radius: 100px;
-    font-size: 0.85rem; color: #fb923c; letter-spacing: 0.06em;
+    font-size: 0.85rem; color: #fbbf24; letter-spacing: 0.06em;
     margin-bottom: 28px; backdrop-filter: blur(4px);
   }
-  .hero-badge svg { width: 14px; height: 14px; fill: #fb923c; }
+  .hero-badge svg { width: 14px; height: 14px; fill: #fbbf24; }
 
   .hero h1 {
-    background: linear-gradient(135deg, #fff7ed 0%, #fdba74 50%, #f97316 100%);
+    background: linear-gradient(135deg, #fefce8 0%, #fcd34d 50%, #f59e0b 100%);
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     background-clip: text;
     margin-bottom: 16px;
@@ -67,7 +67,7 @@
   }
   .hero-stat { text-align: center; }
   .hero-stat-value {
-    font-size: 1.5rem; font-weight: 700; color: #fb923c;
+    font-size: 1.5rem; font-weight: 700; color: #fbbf24;
   }
   .hero-stat-label { font-size: 0.82rem; color: #64748b; margin-top: 2px; }
 
@@ -80,6 +80,7 @@
   .chart-wrap svg { display: block; width: 100%; height: auto; }
 
   section { padding: 80px 0; }
+
   .section-label {
     display: inline-block;
     font-size: 0.75rem; font-weight: 600; letter-spacing: 0.1em;
@@ -112,13 +113,13 @@
   .card h3 { font-size: 1.05rem; color: #e2e8f0; margin-bottom: 8px; }
   .card p { font-size: 0.92rem; color: #94a3b8; line-height: 1.6; }
 
-  .icon-orange { background: rgba(249, 115, 22, 0.12); color: #fb923c; }
-  .icon-blue   { background: rgba(59, 130, 246, 0.12); color: #60a5fa; }
-  .icon-red    { background: rgba(239, 68, 68, 0.12);  color: #f87171; }
-  .icon-purple { background: rgba(168, 85, 247, 0.12); color: #a855f7; }
+  .icon-amber { background: rgba(251, 191, 36, 0.12); color: #fbbf24; }
+  .icon-blue  { background: rgba(59, 130, 246, 0.12); color: #60a5fa; }
+  .icon-green { background: rgba(16, 185, 129, 0.12); color: #34d399; }
+  .icon-red   { background: rgba(239, 68, 68, 0.12);  color: #f87171; }
 
-  .border-orange { border-left: 3px solid rgba(249, 115, 22, 0.4); }
-  .border-blue   { border-left: 3px solid rgba(59, 130, 246, 0.4); }
+  .border-amber { border-left: 3px solid rgba(251, 191, 36, 0.4); }
+  .border-blue  { border-left: 3px solid rgba(59, 130, 246, 0.4); }
 
   .strategy-row {
     display: flex; flex-wrap: wrap; gap: 24px; margin-bottom: 48px;
@@ -157,14 +158,13 @@
     display: inline-block; padding: 2px 10px; border-radius: 100px;
     font-size: 0.78rem; font-weight: 500;
   }
-  .tag-green  { background: rgba(16, 185, 129, 0.12); color: #34d399; }
-  .tag-red    { background: rgba(239, 68, 68, 0.12);  color: #f87171; }
-  .tag-amber  { background: rgba(251, 191, 36, 0.12); color: #fbbf24; }
-  .tag-orange { background: rgba(249, 115, 22, 0.12); color: #fb923c; }
-  .tag-blue   { background: rgba(59, 130, 246, 0.12);  color: #60a5fa; }
+  .tag-green { background: rgba(16, 185, 129, 0.12); color: #34d399; }
+  .tag-red   { background: rgba(239, 68, 68, 0.12);  color: #f87171; }
+  .tag-amber { background: rgba(251, 191, 36, 0.12); color: #fbbf24; }
+  .tag-blue  { background: rgba(59, 130, 246, 0.12);  color: #60a5fa; }
 
-  .highlight-row { background: rgba(249, 115, 22, 0.04); }
-  .highlight-row td { border-bottom-color: rgba(249, 115, 22, 0.10); }
+  .highlight-row { background: rgba(251, 191, 36, 0.04); }
+  .highlight-row td { border-bottom-color: rgba(251, 191, 36, 0.10); }
 
   .cta-section {
     text-align: center; padding: 80px 24px;
@@ -187,13 +187,13 @@
     background: rgba(255,255,255,0.06);
   }
   .nav-link-primary {
-    background: rgba(249, 115, 22, 0.12);
-    border-color: rgba(249, 115, 22, 0.25);
-    color: #fb923c;
+    background: rgba(251, 191, 36, 0.12);
+    border-color: rgba(251, 191, 36, 0.25);
+    color: #fbbf24;
   }
   .nav-link-primary:hover {
-    background: rgba(249, 115, 22, 0.18);
-    border-color: rgba(249, 115, 22, 0.35);
+    background: rgba(251, 191, 36, 0.18);
+    border-color: rgba(251, 191, 36, 0.35);
   }
 
   footer {
@@ -221,34 +221,34 @@
 <section class="hero">
   <div class="hero-badge">
     <svg viewBox="0 0 16 16"><path d="M8 0a8 8 0 110 16A8 8 0 018 0zm3.5 5.5l-4 4L5 7l-1.5 1.5 4 4 5.5-5.5L11.5 5z"/></svg>
-    盤勢分析 · 震盪盤
+    盤勢分析 · 盤整盤
   </div>
 
-  <h1>震盪盤</h1>
-  <p>急漲急跌但很快拉回 — 等乖離過大逆勢進場，追突破只會被雙巴</p>
+  <h1>盤整盤</h1>
+  <p>上下區間來回，沒方向 — 低買高賣來回做，追漲殺跌兩邊虧</p>
 
   <div class="hero-stats">
     <div class="hero-stat">
-      <div class="hero-stat-value">⚡ 波動劇烈</div>
-      <div class="hero-stat-label">短線急漲急跌，幅度大速度快</div>
+      <div class="hero-stat-value">↔ 區間明確</div>
+      <div class="hero-stat-label">價格在固定範圍內擺盪</div>
     </div>
     <div class="hero-stat">
-      <div class="hero-stat-value">VWAP · Bollinger</div>
-      <div class="hero-stat-label">適合乖離反轉策略</div>
+      <div class="hero-stat-value">Bollinger · VWAP</div>
+      <div class="hero-stat-label">適合逆向操作策略</div>
     </div>
     <div class="hero-stat">
-      <div class="hero-stat-value">✕ Breakout</div>
-      <div class="hero-stat-label">不適合追突破</div>
+      <div class="hero-stat-value">✕ 法人動能</div>
+      <div class="hero-stat-label">不適合追創新高</div>
     </div>
   </div>
 
-  <!-- ═══ CHART: Sharp spikes up and down, quick reversals ═══ -->
+  <!-- ═══ CHART: Simulated Range-Bound Market ═══ -->
   <div class="chart-wrap">
     <svg viewBox="0 0 780 280" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <linearGradient id="oscGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#f97316" stop-opacity="0.07"/>
-          <stop offset="100%" stop-color="#f97316" stop-opacity="0.01"/>
+        <linearGradient id="bandGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.06"/>
+          <stop offset="100%" stop-color="#f59e0b" stop-opacity="0.01"/>
         </linearGradient>
       </defs>
 
@@ -259,46 +259,48 @@
       <line x1="60" y1="190" x2="750" y2="190" stroke="rgba(255,255,255,0.04)" stroke-dasharray="4 4"/>
       <line x1="60" y1="240" x2="750" y2="240" stroke="rgba(255,255,255,0.04)" stroke-dasharray="4 4"/>
 
-      <!-- VWAP anchor zone (mid-range: y≈140) -->
-      <rect x="60" y="125" width="690" height="30" fill="url(#oscGrad)" rx="4"/>
-      <line x1="60" y1="140" x2="750" y2="140" stroke="rgba(148,163,184,0.20)" stroke-width="1" stroke-dasharray="3 5"/>
+      <!-- Range zone shading -->
+      <rect x="60" y="82" width="690" height="96" fill="url(#bandGrad)" rx="4"/>
+      <line x1="60" y1="82"  x2="750" y2="82"  stroke="rgba(251,191,36,0.30)" stroke-width="1.2" stroke-dasharray="5 3"/>
+      <line x1="60" y1="178" x2="750" y2="178" stroke="rgba(251,191,36,0.30)" stroke-width="1.2" stroke-dasharray="5 3"/>
 
-      <!-- Price line — sharp spikes above VWAP AND deep dips below VWAP -->
-      <polyline points="60,140 80,225 100,135 120,48 140,145 160,218 180,138 200,45 220,148
-                        240,215 260,142 280,50 300,150 320,225 340,145 360,55 380,148
-                        400,218 420,140 440,48 460,145 480,215 500,140 520,52 540,148
-                        560,225 580,142 600,50 620,150 640,220 660,138 680,55 700,145
-                        720,215 740,140"
-                fill="none" stroke="#fb923c" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+      <!-- Left range label -->
+      <text x="54" y="86"  fill="#fbbf24" font-size="8" text-anchor="end">壓力</text>
+      <text x="54" y="182" fill="#fbbf24" font-size="8" text-anchor="end">支撐</text>
 
-      <!-- VWAP line (flat mid-line) -->
-      <line x1="60" y1="140" x2="750" y2="140"
-            stroke="rgba(96,165,250,0.30)" stroke-width="1.8" stroke-dasharray="5 4"/>
+      <!-- Price line — oscillating sideways, full range usage -->
+      <polyline points="60,130 80,115 110,165 130,140 155,95 175,120 195,160 215,110 235,92
+                        260,135 280,155 305,105 325,170 345,98 365,130 385,165 405,105 425,140
+                        450,90 470,125 495,168 515,110 540,155 560,100 585,168 605,120 625,95
+                        650,145 670,110 695,162 715,105 735,150 750,96"
+                fill="none" stroke="#f59e0b" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
 
-      <!-- VWAP divergence BUY: price far BELOW VWAP (bottom of chart) → buy -->
-      <circle cx="80"  cy="225" r="7" fill="none" stroke="#34d399" stroke-width="1.5" opacity="0.7"/>
-      <text x="80"  y="236" text-anchor="middle" fill="#34d399" font-size="8" font-weight="500">乖離買</text>
+      <!-- Flat/neutral MA line -->
+      <line x1="60" y1="128" x2="750" y2="124" stroke="rgba(147,51,234,0.25)" stroke-width="1.8" stroke-dasharray="6 4"/>
 
-      <circle cx="320" cy="225" r="7" fill="none" stroke="#34d399" stroke-width="1.5" opacity="0.7"/>
-      <text x="320" y="236" text-anchor="middle" fill="#34d399" font-size="8" font-weight="500">乖離買</text>
+      <!-- Bollinger buy/sell signals — buy at support(bottom), sell at resistance(top) -->
+      <circle cx="110" cy="165" r="7" fill="none" stroke="#34d399" stroke-width="1.5" opacity="0.7"/>
+      <text x="110" y="176" text-anchor="middle" fill="#34d399" font-size="8.5" font-weight="500">買</text>
 
-      <circle cx="560" cy="225" r="7" fill="none" stroke="#34d399" stroke-width="1.5" opacity="0.7"/>
-      <text x="560" y="236" text-anchor="middle" fill="#34d399" font-size="8" font-weight="500">乖離買</text>
+      <circle cx="325" cy="170" r="7" fill="none" stroke="#34d399" stroke-width="1.5" opacity="0.7"/>
+      <text x="325" y="181" text-anchor="middle" fill="#34d399" font-size="8.5" font-weight="500">買</text>
 
-      <!-- VWAP divergence SELL: price far ABOVE VWAP (top of chart) → sell -->
-      <circle cx="120" cy="48" r="7" fill="none" stroke="#f87171" stroke-width="1.5" opacity="0.7"/>
-      <text x="120" y="38" text-anchor="middle" fill="#f87171" font-size="8" font-weight="500">乖離賣</text>
+      <circle cx="585" cy="168" r="7" fill="none" stroke="#34d399" stroke-width="1.5" opacity="0.7"/>
+      <text x="585" y="179" text-anchor="middle" fill="#34d399" font-size="8.5" font-weight="500">買</text>
 
-      <circle cx="360" cy="55" r="7" fill="none" stroke="#f87171" stroke-width="1.5" opacity="0.7"/>
-      <text x="360" y="45" text-anchor="middle" fill="#f87171" font-size="8" font-weight="500">乖離賣</text>
+      <circle cx="235" cy="92" r="7" fill="none" stroke="#f87171" stroke-width="1.5" opacity="0.7"/>
+      <text x="235" y="82" text-anchor="middle" fill="#f87171" font-size="8.5" font-weight="500">賣</text>
 
-      <circle cx="600" cy="50" r="7" fill="none" stroke="#f87171" stroke-width="1.5" opacity="0.7"/>
-      <text x="600" y="40" text-anchor="middle" fill="#f87171" font-size="8" font-weight="500">乖離賣</text>
+      <circle cx="450" cy="90" r="7" fill="none" stroke="#f87171" stroke-width="1.5" opacity="0.7"/>
+      <text x="450" y="80" text-anchor="middle" fill="#f87171" font-size="8.5" font-weight="500">賣</text>
 
-      <!-- Breakout trap: sharp spike up then crash back -->
-      <circle cx="200" cy="53" r="8" fill="none" stroke="#f87171" stroke-width="1.2" stroke-dasharray="3 3" opacity="0.6"/>
-      <text x="200" y="34" text-anchor="middle" fill="#f87171" font-size="8">假突破 ✕</text>
-      <line x1="200" y1="45" x2="200" y2="38" stroke="#f87171" stroke-width="0.8" stroke-dasharray="3 3" opacity="0.5"/>
+      <circle cx="750" cy="96" r="7" fill="none" stroke="#f87171" stroke-width="1.5" opacity="0.7"/>
+      <text x="750" y="86" text-anchor="middle" fill="#f87171" font-size="8.5" font-weight="500">賣</text>
+
+      <!-- Breakout trap annotation -->
+      <circle cx="305" cy="113" r="8" fill="none" stroke="#f87171" stroke-width="1.2" stroke-dasharray="3 3" opacity="0.6"/>
+      <text x="305" y="68" text-anchor="middle" fill="#f87171" font-size="8">假突破 ✕</text>
+      <line x1="305" y1="105" x2="305" y2="73" stroke="#f87171" stroke-width="0.8" stroke-dasharray="3 3" opacity="0.5"/>
 
       <!-- X-axis -->
       <text x="60"  y="266" fill="#475569" font-size="10">1月</text>
@@ -311,47 +313,46 @@
       <text x="52" y="248" fill="#475569" font-size="10" text-anchor="end">低</text>
 
       <!-- Legend -->
-      <line x1="560" y1="18" x2="580" y2="18" stroke="#fb923c" stroke-width="2" stroke-linecap="round"/>
-      <text x="585" y="22" fill="#94a3b8" font-size="10">價格</text>
-      <line x1="640" y1="18" x2="660" y2="18" stroke="rgba(96,165,250,0.35)" stroke-width="1.8" stroke-dasharray="5 4" stroke-linecap="round"/>
-      <text x="665" y="22" fill="#94a3b8" font-size="10">VWAP</text>
+      <line x1="580" y1="18" x2="600" y2="18" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"/>
+      <text x="605" y="22" fill="#94a3b8" font-size="10">價格</text>
+      <line x1="660" y1="18" x2="680" y2="18" stroke="rgba(251,191,36,0.3)" stroke-width="1.2" stroke-dasharray="5 3" stroke-linecap="round"/>
+      <text x="685" y="22" fill="#94a3b8" font-size="10">區間</text>
     </svg>
   </div>
 
   <p style="font-size:0.85rem;color:#475569;margin-bottom:0;">
-    圖中：價格劇烈上下穿刺後迅速回歸 VWAP 中線，乖離過大時反轉訊號明確，突破追高則屢遭假突破
+    圖中：價格在固定區間內上下擺盪，Bollinger 在支撐處給買點、在壓力處給賣點，突破策略屢遭假突破陷阱
   </p>
 </section>
 
 <div class="divider"></div>
 
-<!-- ════════════════════ WHAT IS OSCILLATING ════════════════════ -->
+<!-- ════════════════════ WHAT IS RANGE ════════════════════ -->
 <section>
   <div class="container reveal">
     <span class="section-label">定義</span>
-    <h2 class="section-title">什麼是震盪盤？</h2>
+    <h2 class="section-title">什麼是盤整盤？</h2>
     <p class="section-desc">
-      震盪盤與盤整盤類似卻更難操作——價格沒有方向，但<strong style="color:#e2e8f0;">波動幅度大、速度快</strong>。
-      短線急拉後急跌、急跌後又急拉，每一波都看似要突破區間卻立刻反轉。
-      策略核心是<strong style="color:#e2e8f0;">等乖離、吃反轉</strong>——在價格大幅偏離價值中樞時逆勢進場，
-      而不是在突破時追價。
+      盤整盤是市場中佔比最高的盤型（約 60–70% 時間）。價格在一個明確的區間內反覆擺盪，
+      沒有明顯的上漲或下跌趨勢。策略核心是<strong style="color:#e2e8f0;">低買高賣、區間操作</strong>——
+      在支撐區買入、壓力區賣出，直到價格突破區間為止。
     </p>
 
     <div class="cards cards-3">
       <div class="card">
-        <div class="card-icon icon-orange">⚡</div>
-        <h3>波動劇烈</h3>
-        <p>單日漲跌幅經常 >2%，K 線實體長、上下影線明顯。價格像彈簧一樣被拉緊就彈回。</p>
+        <div class="card-icon icon-amber">↔️</div>
+        <h3>區間明確</h3>
+        <p>價格在固定高低點之間來回，每次反彈不過前高、每次回檔不破前低，形成箱型整理。</p>
       </div>
       <div class="card">
-        <div class="card-icon icon-blue">🎯</div>
-        <h3>均值回歸強</h3>
-        <p>價格大幅偏離 VWAP 或移動平均後，在 1–3 天內迅速回歸。乖離率是可靠的進場依據。</p>
+        <div class="card-icon icon-amber">📏</div>
+        <h3>波動對稱</h3>
+        <p>上漲與下跌的幅度和時間大致對稱，沒有方向性偏移，適合以區間上下緣作為進出依據。</p>
       </div>
       <div class="card">
-        <div class="card-icon icon-red">🚫</div>
-        <h3>假突破頻繁</h3>
-        <p>急拉創高後隔天開低走低，突破追高者隔天就被套。突破策略在震盪盤中勝率極低。</p>
+        <div class="card-icon icon-blue">🔊</div>
+        <h3>雜訊最多</h3>
+        <p>趨勢指標（MACD、ADX）在盤整盤中反覆出現假訊號，ADX 通常在 20 以下，不宜用趨勢策略。</p>
       </div>
     </div>
   </div>
@@ -363,25 +364,25 @@
 <section>
   <div class="container reveal">
     <span class="section-label">特徵</span>
-    <h2 class="section-title">震盪盤的關鍵特徵</h2>
-    <p class="section-desc">如何判斷當前是震盪盤？觀察以下現象</p>
+    <h2 class="section-title">盤整盤的關鍵特徵</h2>
+    <p class="section-desc">如何判斷當前是盤整盤？觀察以下現象</p>
 
     <div class="cards cards-2">
-      <div class="card border-orange">
-        <h3>✅ K 線上下影線長</h3>
-        <p>每天都有明顯的上下影線——開低拉高、開高走低再拉回，多空交戰激烈但沒有人真正勝出。</p>
+      <div class="card border-amber">
+        <h3>✅ 價格在固定區間內擺盪</h3>
+        <p>至少兩次觸及同一壓力區後回落、兩次觸及同一支撐區後反彈，形成可辨識的水平箱型。</p>
       </div>
-      <div class="card border-orange">
-        <h3>✅ 價格頻繁穿越 VWAP</h3>
-        <p>一天之內價格數次站上又跌破 VWAP，VWAP 本身趨平，無法提供方向性參考。</p>
+      <div class="card border-amber">
+        <h3>✅ MA 趨平或橫向移動</h3>
+        <p>MA20 與 MA60 接近水平，甚至反覆交叉。均線失去方向性，無法提供趨勢參考。</p>
       </div>
-      <div class="card border-orange">
-        <h3>✅ 波動率指標升高</h3>
-        <p>ATR（平均真實區間）處於近期高檔但價格沒有創新高，表示波動大卻無方向。</p>
+      <div class="card border-amber">
+        <h3>✅ ADX < 20 且走平</h3>
+        <p>ADX 低於 20 是盤整的經典訊號，低於 25 即不適合趨勢策略。ADX 無上升跡象。</p>
       </div>
-      <div class="card border-orange">
-        <h3>✅ 連續跳空又回補</h3>
-        <p>頻繁出現向上或向下跳空缺口，但都在數日內完全回補，留下耗盡性缺口的特徵。</p>
+      <div class="card border-amber">
+        <h3>✅ 成交量萎縮</h3>
+        <p>上漲無量、下跌也無量。缺乏新資金進場，市場處於觀望狀態，大家都在等方向。</p>
       </div>
     </div>
   </div>
@@ -393,8 +394,8 @@
 <section>
   <div class="container reveal">
     <span class="section-label">策略配置</span>
-    <h2 class="section-title">震盪盤的應對策略</h2>
-    <p class="section-desc">震盪盤是乖離交易者的主場、突破交易者的墳場</p>
+    <h2 class="section-title">盤整盤的應對策略</h2>
+    <p class="section-desc">盤整盤是逆向操作者的天堂、趨勢交易者的地獄</p>
 
     <div class="strategy-row">
       <div class="strategy-col">
@@ -405,15 +406,15 @@
           <li>
             <span class="check">◆</span>
             <div>
-              <span class="label">VWAP（乖離過大反轉）</span>
-              <span class="reason">價格大幅偏離 VWAP 後回歸是震盪盤最可靠的交易模式，勝率高、停損短</span>
+              <span class="label">Bollinger（布林通道反轉）</span>
+              <span class="reason">價格觸及下軸反彈、上軸回落 — 盤整盤中 Bollinger 通道的買賣訊號最精準</span>
             </div>
           </li>
           <li>
             <span class="check">◆</span>
             <div>
-              <span class="label">Bollinger（布林通道反轉）</span>
-              <span class="reason">震盪盤中價格觸及通道上下軸後反轉機率高，配合乖離率使用效果更佳</span>
+              <span class="label">VWAP（偏離反轉）</span>
+              <span class="reason">價格大幅偏離均價後回歸 — 盤整盤中乖離率可靠，反轉機率高</span>
             </div>
           </li>
         </ul>
@@ -427,22 +428,28 @@
           <li>
             <span class="cross">✕</span>
             <div>
+              <span class="label">法人動能</span>
+              <span class="reason">盤整盤中沒有創新高標的，法人動能策略掃不到符合條件的股票，只能空手</span>
+            </div>
+          </li>
+          <li>
+            <span class="cross">✕</span>
+            <div>
               <span class="label">Breakout（突破策略）</span>
-              <span class="reason">震盪盤的特色就是急拉後急跌——突破買入後隔天就被套，假突破陷阱是所有盤型中最多的</span>
+              <span class="reason">價格突破區間後立刻拉回形成「假突破」，追高即套牢，反覆停損侵蝕本金</span>
             </div>
           </li>
         </ul>
       </div>
     </div>
 
-    <div style="background:rgba(249,115,22,0.04);border:1px solid rgba(249,115,22,0.10);border-radius:12px;padding:24px;margin-top:8px;">
+    <div style="background:rgba(251,191,36,0.04);border:1px solid rgba(251,191,36,0.10);border-radius:12px;padding:24px;margin-top:8px;">
       <p style="font-size:0.92rem;color:#94a3b8;margin-bottom:0;">
-        <strong style="color:#fb923c;">核心原則：</strong>
-        震盪盤不適合「追」，只適合「等」。VWAP 偏離反轉的精髓在於
-        <strong style="color:#e2e8f0;">耐心等待極端乖離出現</strong>——
-        不要在主升段追價、不要在主跌段殺低。同時停損要設得比盤整盤更窄，
-        因為震盪的反轉速度極快，錯過最佳進場點就放棄等下一次，不要追。
-        波動大不等於方向——記住：震盪盤中<strong style="color:#f87171;">每一次看似突破都是陷阱</strong>，直到真正的突破出現。
+        <strong style="color:#fbbf24;">核心原則：</strong>
+        盤整盤不是沒有獲利機會——只是不能用趨勢策略。Bollinger 與 VWAP 的核心思維是
+        <strong style="color:#e2e8f0;">均值回歸（Mean Reversion）</strong>：
+        價格不會永遠偏離均衡，在區間上下緣逆勢進場正是盤整盤最賺錢的做法。
+        但要嚴設停損——一旦價格真的突破區間，立即認錯出場，不要死守逆向仓位。
       </p>
     </div>
   </div>
@@ -474,14 +481,14 @@
             <td><span class="tag tag-green">MA Cross</span> <span class="tag tag-green">Breakout</span> <span class="tag tag-green">法人動能</span></td>
             <td><span class="tag tag-red">Bollinger</span>（抄底會被軋）</td>
           </tr>
-          <tr>
+          <tr class="highlight-row">
             <td><span class="tag tag-amber">盤整盤</span></td>
             <td>上下區間來回，沒方向</td>
             <td><span class="tag tag-blue">Bollinger</span> <span class="tag tag-blue">VWAP</span></td>
             <td><span class="tag tag-red">法人動能</span>（掃不到創新高標的）</td>
           </tr>
-          <tr class="highlight-row">
-            <td><span class="tag tag-orange">震盪盤</span></td>
+          <tr>
+            <td><span class="tag tag-amber">震盪盤</span></td>
             <td>急漲急跌但很快拉回</td>
             <td><span class="tag tag-blue">VWAP</span> <span class="tag tag-blue">Bollinger</span></td>
             <td><span class="tag tag-red">Breakout</span>（假突破陷阱多）</td>
@@ -513,17 +520,17 @@
   <p>每種盤勢都有自己的節奏——掌握它們，就能在對的市場用對的工具。</p>
   <div class="nav-links">
     <a href="趨勢盤說明.html" class="nav-link">📈 趨勢盤說明</a>
-    <a href="盤整盤說明.html" class="nav-link">↔️ 盤整盤說明</a>
-    <a href="vwap-animation.html" class="nav-link">📉 VWAP 策略</a>
-    <a href="bollinger-animation.html" class="nav-link">📊 布林通道策略</a>
-    <a href="breakout-animation.html" class="nav-link">🚀 突破策略</a>
-    <a href="法人動能策略說明.html" class="nav-link">🏦 法人動能策略</a>
-    <a href="keep_wait策略說明.html" class="nav-link">⏳ keep_wait 低接策略</a>
+    <a href="../bollinger-animation.html" class="nav-link">📊 布林通道策略</a>
+    <a href="../vwap-animation.html" class="nav-link">📉 VWAP 策略</a>
+    <a href="../ma_cross-animation.html" class="nav-link">📈 均線交叉策略</a>
+    <a href="../breakout-animation.html" class="nav-link">🚀 突破策略</a>
+    <a href="../法人動能策略說明.html" class="nav-link">🏦 法人動能策略</a>
+    <a href="../keep_wait策略說明.html" class="nav-link">⏳ keep_wait 低接策略</a>
   </div>
 </section>
 
 <footer>
-  TW AutoTrader · 盤勢分析系列 · 震盪盤
+  TW AutoTrader · 盤勢分析系列 · 盤整盤
 </footer>
 
 <script>

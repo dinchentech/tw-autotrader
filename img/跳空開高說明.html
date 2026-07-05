@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>跳空開高 — 圖解說明</title>
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; min-height: 100vh; background: #0b1219; }
+  body {
+    font-family: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    color: #d8dde4; line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 40px 24px;
+  }
+  .container { max-width: 780px; width: 100%; }
+
+  .header { text-align: center; margin-bottom: 28px; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(139,92,246,0.12); border: 1px solid rgba(139,92,246,0.20);
+    padding: 4px 14px; border-radius: 100px;
+    font-size: 0.78rem; color: #a78bfa; letter-spacing: 0.06em;
+    margin-bottom: 14px;
+  }
+  .header h1 {
+    font-size: clamp(1.8rem, 4vw, 2.6rem); font-weight: 700;
+    background: linear-gradient(135deg, #f5f3ff 0%, #c4b5fd 50%, #8b5cf6 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 6px;
+  }
+  .header p { color: #94a3b8; font-size: clamp(0.9rem, 1.3vw, 1.05rem); }
+
+  .chart-card {
+    background: rgba(255,255,255,0.015);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px; padding: 24px 20px 16px;
+    margin-bottom: 24px;
+  }
+  .chart-wrap { width: 100%; }
+  .chart-wrap svg { display: block; width: 100%; height: auto; }
+
+  .two-col {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 16px; margin-bottom: 24px;
+  }
+  .info-card {
+    background: rgba(255,255,255,0.015);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px; padding: 20px;
+  }
+  .info-card h3 {
+    font-size: 0.8rem; font-weight: 600; letter-spacing: 0.06em;
+    text-transform: uppercase; margin-bottom: 12px;
+  }
+  .info-card h3.green { color: #34d399; }
+  .info-card h3.red { color: #f87171; }
+  .info-card h3.purple { color: #a78bfa; }
+
+  .info-list { list-style: none; }
+  .info-list li {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 0.88rem;
+  }
+  .info-list li:last-child { border-bottom: none; }
+  .info-list .icon { flex-shrink: 0; font-weight: 700; }
+  .info-list .label { color: #e2e8f0; font-weight: 500; }
+  .info-list .desc { color: #64748b; font-size: 0.8rem; display: block; margin-top: 1px; }
+
+  .note {
+    background: rgba(139,92,246,0.04);
+    border: 1px solid rgba(139,92,246,0.10);
+    border-radius: 12px; padding: 20px 24px; margin-bottom: 24px;
+  }
+  .note p { font-size: 0.9rem; color: #94a3b8; }
+  .note strong.em { color: #e2e8f0; }
+  .note strong.acc { color: #a78bfa; }
+
+  .nav-links {
+    display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+  }
+  .nav-link {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 8px 18px; border-radius: 8px;
+    font-size: 0.85rem; font-weight: 500; text-decoration: none;
+    transition: all 0.2s;
+    border: 1px solid rgba(255,255,255,0.08);
+    color: #c8cdd4; background: rgba(255,255,255,0.03);
+  }
+  .nav-link:hover { border-color: rgba(255,255,255,0.18); background: rgba(255,255,255,0.06); }
+
+  footer { text-align: center; padding: 24px; font-size: 0.78rem; color: #475569; }
+
+  @media (max-width: 600px) { .two-col { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div class="badge">技術圖解</div>
+    <h1>跳空開高</h1>
+    <p>當天開盤價直接高於前一日的最高價，K 線之間出現空白的「缺口」</p>
+  </div>
+
+  <!-- ═══ CHART ═══ -->
+  <div class="chart-card">
+    <div class="chart-wrap">
+      <svg viewBox="0 0 740 320" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="gapGlow" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#a78bfa" stop-opacity="0.18"/>
+            <stop offset="100%" stop-color="#a78bfa" stop-opacity="0.01"/>
+          </linearGradient>
+        </defs>
+
+        <!-- Grid -->
+        <line x1="60" y1="40"  x2="700" y2="40"  stroke="rgba(255,255,255,0.03)" stroke-dasharray="4 4"/>
+        <line x1="60" y1="90"  x2="700" y2="90"  stroke="rgba(255,255,255,0.03)" stroke-dasharray="4 4"/>
+        <line x1="60" y1="140" x2="700" y2="140" stroke="rgba(255,255,255,0.03)" stroke-dasharray="4 4"/>
+        <line x1="60" y1="190" x2="700" y2="190" stroke="rgba(255,255,255,0.03)" stroke-dasharray="4 4"/>
+        <line x1="60" y1="240" x2="700" y2="240" stroke="rgba(255,255,255,0.03)" stroke-dasharray="4 4"/>
+        <line x1="60" y1="290" x2="700" y2="290" stroke="rgba(255,255,255,0.03)" stroke-dasharray="4 4"/>
+
+        <!-- ── Price line before gap ── -->
+        <polyline points="60,200 85,185 110,195 135,175 160,190 185,170 210,180 235,155 260,165 285,145"
+                    fill="none" stroke="#94a3b8" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+
+        <!-- ── The Gap (shaded area) ── -->
+        <rect x="285" y="50" width="30" height="96" rx="3" fill="url(#gapGlow)" stroke="rgba(167,139,250,0.35)" stroke-width="1.2" stroke-dasharray="4 3"/>
+        <text x="300" y="102" text-anchor="middle" fill="#a78bfa" font-size="11" font-weight="600">缺口</text>
+
+        <!-- Gap arrow annotation -->
+        <path d="M288,145 L288,50 M285,55 L288,50 L291,55" fill="none" stroke="#a78bfa" stroke-width="1.2"/>
+        <text x="330" y="52" fill="#a78bfa" font-size="9" opacity="0.8">昨收 145</text>
+
+        <!-- ── Price line after gap (gap up) ── -->
+        <polyline points="315,42 340,38 365,48 390,35 415,45 440,30 465,38 490,25 515,32 540,22 565,30 590,18 615,25 640,15 665,22 690,12"
+                    fill="none" stroke="#34d399" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+
+        <!-- ── K-line candles before gap ── -->
+        <!-- Candle 1 (small red) -->
+        <rect x="68" y="188" width="8" height="18" rx="1.5" fill="#f87171"/>
+        <line x1="72" y1="182" x2="72" y2="188" stroke="#f87171" stroke-width="1.2"/>
+        <line x1="72" y1="206" x2="72" y2="210" stroke="#f87171" stroke-width="1.2"/>
+
+        <!-- Candle 2 (green) -->
+        <rect x="118" y="175" width="8" height="22" rx="1.5" fill="#34d399"/>
+        <line x1="122" y1="168" x2="122" y2="175" stroke="#34d399" stroke-width="1.2"/>
+        <line x1="122" y1="197" x2="122" y2="202" stroke="#34d399" stroke-width="1.2"/>
+
+        <!-- Candle 3 (red) -->
+        <rect x="168" y="180" width="8" height="16" rx="1.5" fill="#f87171"/>
+        <line x1="172" y1="174" x2="172" y2="180" stroke="#f87171" stroke-width="1.2"/>
+        <line x1="172" y1="196" x2="172" y2="200" stroke="#f87171" stroke-width="1.2"/>
+
+        <!-- Candle 4 (green, closing higher) -->
+        <rect x="218" y="155" width="8" height="28" rx="1.5" fill="#34d399"/>
+        <line x1="222" y1="148" x2="222" y2="155" stroke="#34d399" stroke-width="1.2"/>
+        <line x1="222" y1="183" x2="222" y2="188" stroke="#34d399" stroke-width="1.2"/>
+
+        <!-- Candle 5 (green, lowest point before gap) -->
+        <rect x="263" y="138" width="8" height="14" rx="1.5" fill="#34d399"/>
+        <line x1="267" y1="130" x2="267" y2="138" stroke="#34d399" stroke-width="1.2"/>
+        <line x1="267" y1="152" x2="267" y2="160" stroke="#34d399" stroke-width="1.2"/>
+        <!-- High/low label -->
+        <text x="267" y="126" text-anchor="middle" fill="#94a3b8" font-size="8">高 148</text>
+        <text x="267" y="174" text-anchor="middle" fill="#94a3b8" font-size="8">低 130</text>
+
+        <!-- ── K-line candles after gap ── -->
+        <!-- Candle 6 (green, gap up open) -->
+        <rect x="330" y="36" width="8" height="16" rx="1.5" fill="#34d399"/>
+        <line x1="334" y1="28" x2="334" y2="36" stroke="#34d399" stroke-width="1.2"/>
+        <line x1="334" y1="52" x2="334" y2="56" stroke="#34d399" stroke-width="1.2"/>
+        <text x="358" y="40" fill="#e2e8f0" font-size="8.5">開 180</text>
+
+        <!-- Candle 7 -->
+        <rect x="380" y="30" width="8" height="12" rx="1.5" fill="#34d399"/>
+        <line x1="384" y1="22" x2="384" y2="30" stroke="#34d399" stroke-width="1.2"/>
+        <line x1="384" y1="42" x2="384" y2="46" stroke="#34d399" stroke-width="1.2"/>
+
+        <!-- Candle 8 -->
+        <rect x="430" y="38" width="8" height="14" rx="1.5" fill="#34d399"/>
+        <line x1="434" y1="30" x2="434" y2="38" stroke="#34d399" stroke-width="1.2"/>
+        <line x1="434" y1="52" x2="434" y2="56" stroke="#34d399" stroke-width="1.2"/>
+
+        <!-- Candle 9 -->
+        <rect x="480" y="35" width="8" height="16" rx="1.5" fill="#34d399"/>
+        <line x1="484" y1="26" x2="484" y2="35" stroke="#34d399" stroke-width="1.2"/>
+        <line x1="484" y1="51" x2="484" y2="56" stroke="#34d399" stroke-width="1.2"/>
+
+        <!-- Candle 10 -->
+        <rect x="530" y="28" width="8" height="14" rx="1.5" fill="#34d399"/>
+        <line x1="534" y1="20" x2="534" y2="28" stroke="#34d399" stroke-width="1.2"/>
+        <line x1="534" y1="42" x2="534" y2="46" stroke="#34d399" stroke-width="1.2"/>
+
+        <!-- Labels -->
+        <text x="72"  y="310" fill="#475569" font-size="9">T-4</text>
+        <text x="122" y="310" fill="#475569" font-size="9">T-3</text>
+        <text x="172" y="310" fill="#475569" font-size="9">T-2</text>
+        <text x="218" y="310" fill="#475569" font-size="9">T-1</text>
+        <text x="260" y="310" fill="#475569" font-size="9">T</text>
+        <text x="320" y="310" fill="#475569" font-size="9">T+1</text>
+        <text x="380" y="310" fill="#475569" font-size="9">T+2</text>
+        <text x="430" y="310" fill="#475569" font-size="9">T+3</text>
+        <text x="480" y="310" fill="#475569" font-size="9">T+4</text>
+        <text x="530" y="310" fill="#475569" font-size="9">T+5</text>
+
+        <!-- Before/After labels -->
+        <text x="165" y="282" text-anchor="middle" fill="#64748b" font-size="9">← 跳空前</text>
+        <text x="430" y="282" text-anchor="middle" fill="#64748b" font-size="9">跳空後 →</text>
+
+        <!-- Legend -->
+        <line x1="600" y1="20" x2="620" y2="20" stroke="#34d399" stroke-width="2" stroke-linecap="round"/>
+        <text x="625" y="24" fill="#94a3b8" font-size="10">紅 K（漲）</text>
+        <rect x="680" y="14" width="10" height="12" rx="1.5" fill="#f87171"/>
+        <text x="694" y="24" fill="#94a3b8" font-size="10">黑 K（跌）</text>
+      </svg>
+    </div>
+  </div>
+
+  <!-- ═══ TWO COLUMN INFO ═══ -->
+  <div class="two-col">
+    <div class="info-card">
+      <h3 class="green">📌 什麼是跳空開高？</h3>
+      <ul class="info-list">
+        <li><span class="icon" style="color:#34d399">◆</span><div><span class="label">當天開盤價 > 昨天最高價</span><span class="desc">一開盤就突破了昨天全天的價格區間，中間出現真空地帶</span></div></li>
+        <li><span class="icon" style="color:#34d399">◆</span><div><span class="label">K 線之間出現空白缺口</span><span class="desc">昨天的最高價與今天的最低价之間的空隙就是「缺口」</span></div></li>
+        <li><span class="icon" style="color:#34d399">◆</span><div><span class="label">通常伴隨重大利多</span><span class="desc">財報超預期、產業報價大漲、公司宣布重大合作或併購</span></div></li>
+      </ul>
+    </div>
+    <div class="info-card">
+      <h3 class="red">⚠️ 跳空開高的意義</h3>
+      <ul class="info-list">
+        <li><span class="icon" style="color:#f87171">◆</span><div><span class="label">買方力量極強</span><span class="desc">願意用遠高於昨日收盤的價格搶買，不給空單回補的機會</span></div></li>
+        <li><span class="icon" style="color:#f87171">◆</span><div><span class="label">缺口是否回補是關鍵</span><span class="desc">上漲缺口不補 = 強勢（噴出盤特徵）；補了 = 可能是假突破</span></div></li>
+        <li><span class="icon" style="color:#f87171">◆</span><div><span class="label">策略含義</span><span class="desc">噴出盤適合追突破；盤整/震盪盤的跳空常是陷阱</span></div></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="note">
+    <p>
+      <strong class="acc">與策略的關係：</strong>
+      <strong class="em">噴出盤</strong>的跳空開高通常不補，突破策略要在這時勇敢追進；
+      <strong class="em">震盪盤</strong>與<strong class="em">盤整盤</strong>的跳空開高則常在 1~3 天內回補，屬於「竭盡缺口」，突破策略容易被假突破雙巴。
+      關鍵判斷：缺口回補前能否站穩前高 + 成交量是否持續放大。
+    </p>
+  </div>
+
+  <div class="nav-links">
+    <a href="噴出盤說明.html" class="nav-link">🚀 噴出盤</a>
+    <a href="趨勢盤說明.html" class="nav-link">📈 趨勢盤</a>
+    <a href="盤整盤說明.html" class="nav-link">↔️ 盤整盤</a>
+    <a href="震盪盤說明.html" class="nav-link">⚡ 震盪盤</a>
+    <a href="../策略說明.md" class="nav-link">📄 策略說明</a>
+  </div>
+
+  <footer>TW AutoTrader · 技術圖解 · 跳空開高</footer>
+</div>
+</body>
+</html>
