@@ -1323,6 +1323,7 @@ def main():
             ("2382", "keep_wait", 3000),
             ("2881", "vwap",      3000),
         ]
+        monthly_total = sum(c[2] for c in dca_config)
         # ── 預設 Lump sum config ──
         lumpsum_config = [
             ("0050",  "bollinger", 66666),
