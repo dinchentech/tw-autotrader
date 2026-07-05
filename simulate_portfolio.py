@@ -895,8 +895,10 @@ def generate_lumpsum_report(result: dict) -> str:
     profit_roll_months = result.get("profit_roll_months", 3.0)
     profit_roll_percentage = result.get("profit_roll_percentage", 1.0)
 
+    start_yr = monthly[0]["date"].year if monthly else 2024
+    end_yr = monthly[-1]["date"].year if monthly else 2025
     lines = []
-    lines.append("# 50萬一筆資金 — 2024 & 2025 回溯模擬")
+    lines.append(f"# 50萬一筆資金 — {start_yr}~{end_yr} 回溯模擬")
     lines.append("")
     lines.append(f"> 📅 模擬日期：{datetime.now().strftime('%Y-%m-%d')}")
     lines.append("> ⚠️ **過去績效不代表未來獲利，僅供參考。**")
@@ -948,10 +950,13 @@ def generate_lumpsum_report(result: dict) -> str:
     lines.append(f"| 初始資本 | {fmt_ntd(initial_capital)} |")
     lines.append(f"| 外部加碼 | {fmt_ntd(total_injected - initial_capital)} |") if total_injected > initial_capital else None
     lines.append(f"| **總投入資金** | **{fmt_ntd(total_injected)}** |")
-    lines.append(f"| 組合終值 (2025-12-31) | {fmt_ntd(final_value)} |")
+    end_date_str = monthly[-1]["date"].strftime('%Y-%m-%d') if monthly else "?"
+    lines.append(f"| 組合終值 ({end_date_str}) | {fmt_ntd(final_value)} |")
     lines.append(f"| **總損益** | **{fmt_ntd(total_pnl)} ({fmt_pct(total_return)})** |")
     lines.append(f"| **年化報酬率 (CAGR)** | **{fmt_pct(cagr)}** |")
-    lines.append(f"| 模擬期間 | 2024-01-02 ~ 2025-12-31 ({days} 天) |")
+    start_str = monthly[0]["date"].strftime('%Y-%m-%d') if monthly else "?"
+    end_str = monthly[-1]["date"].strftime('%Y-%m-%d') if monthly else "?"
+    lines.append(f"| 模擬期間 | {start_str} ~ {end_str} ({days} 天) |")
     lines.append(f"| 總手續費 | {fmt_ntd(total_commission)} |")
     lines.append(f"| 總交易稅 | {fmt_ntd(total_tax)} |")
     lines.append(f"| **獲利滾入總額** | **{fmt_ntd(total_profit_roll)} (M={profit_roll_months}, P={profit_roll_percentage*100:.0f}%)** |")
@@ -1143,7 +1148,7 @@ def generate_lumpsum_report(result: dict) -> str:
     lines.append("1. 過去績效不代表未來獲利，本模擬基於歷史資料不保證未來表現")
     lines.append("2. 已計入交易成本：手續費0.1425% + 證交稅（ETF 0.1%/股票 0.3%）")
     lines.append("3. 未計入：滑價、金字塔加碼、大盤年線過濾、股利收入")
-    lines.append("4. 參數固定使用預設值，未針對2024-2025市場最佳化")
+    lines.append(f"4. 參數固定使用預設值，未針對{start_yr}-{end_yr}市場最佳化")
     lines.append("5. 資料來源：Yahoo Finance (auto_adjust=True)")
     lines.append("")
     lines.append("---")
