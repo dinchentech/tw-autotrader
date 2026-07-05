@@ -667,7 +667,9 @@ def generate_dca_report(result: dict) -> str:
 
     # 各標的績效
     lines = []
-    lines.append("# 每月2萬元策略 — 2022 & 2025 回溯模擬")
+    start_yr = monthly[0]["date"].year if monthly else 2022
+    end_yr = monthly[-1]["date"].year if monthly else 2025
+    lines.append(f"# 每月{fmt_ntd_compact(monthly_total)}策略 — {start_yr}~{end_yr} 回溯模擬")
     lines.append("")
     lines.append(f"> 📅 模擬日期：{datetime.now().strftime('%Y-%m-%d')}")
     lines.append("> ⚠️ **過去績效不代表未來獲利，本模擬僅供參考。**")
@@ -704,7 +706,9 @@ def generate_dca_report(result: dict) -> str:
     lines.append("")
     lines.append("| 指標 | 數值 |")
     lines.append("|------|------|")
-    lines.append(f"| 模擬期間 | 2024-01-02 ~ 2025-12-31（{days} 天） |")
+    start_str = monthly[0]["date"].strftime('%Y-%m-%d') if monthly else "?"
+    end_str = monthly[-1]["date"].strftime('%Y-%m-%d') if monthly else "?"
+    lines.append(f"| 模擬期間 | {start_str} ~ {end_str}（{days} 天） |")
     lines.append(f"| 總投入資金 | {fmt_ntd(total_injected)} |")
     lines.append(f"| 組合終值 | {fmt_ntd(total_final_value)} |")
     lines.append(f"| **總損益** | **{fmt_ntd(total_pnl)} ({fmt_pct(total_return)})** |")
@@ -758,11 +762,12 @@ def generate_dca_report(result: dict) -> str:
     lines.append("## 📅 年度績效")
     lines.append("")
 
-    for year in [2024, 2025]:
+    years_in_data = sorted(set(r["date"].year for r in monthly))
+    for year in years_in_data:
         yr_records = [r for r in monthly if r["date"].year == year]
         if not yr_records:
             continue
-        yr_start_val = yr_records[0]["value"] - (monthly_total if year == 2024 else monthly_total)  # 年初(不含當月投入)
+        yr_start_val = yr_records[0]["value"] - monthly_total  # 年初(不含當月投入)
         yr_end_val = yr_records[-1]["value"] if yr_records else 0
         yr_injection = monthly_total * len(yr_records)
         yr_pnl = yr_end_val - yr_start_val - yr_injection
@@ -1023,11 +1028,12 @@ def generate_lumpsum_report(result: dict) -> str:
     lines.append("## 📅 年度績效")
     lines.append("")
 
-    for year in [2024, 2025]:
+    years_in_data = sorted(set(r["date"].year for r in monthly))
+    for year in years_in_data:
         yr_records = [r for r in monthly if r["date"].year == year]
         if not yr_records:
             continue
-        yr_start_val = result["initial_capital"] if year == 2024 else monthly[[i for i, r in enumerate(monthly) if r["date"].year == year][0] - 1]["value"] if any(r["date"].year == year - 1 for r in monthly) else yr_records[0]["value"]
+        yr_start_val = result["initial_capital"] if year == years_in_data[0] else monthly[[i for i, r in enumerate(monthly) if r["date"].year == year][0] - 1]["value"] if any(r["date"].year == year - 1 for r in monthly) else yr_records[0]["value"]
         # 更簡單：年初 = 前一年底
         prev_yr_records = [r for r in monthly if r["date"].year == year - 1]
         if prev_yr_records:
@@ -1333,9 +1339,9 @@ def main():
     assert total_ls == 500000, f"Lumpsum config totals {total_ls}, expected 500000"
 
     if args.mode in ("all", "dca"):
-        print(f"📊 模擬：每月定期定額 NT$20,000... (M={args.profit_roll_months}, P={args.profit_roll_percentage*100:.0f}%) ({args.start_date} ~ {args.end_date})")
+        print(f"📊 模擬：每月定期定額 NT${monthly_total:,}... (M={args.profit_roll_months}, P={args.profit_roll_percentage*100:.0f}%) ({args.start_date} ~ {args.end_date})")
         dca_result = simulate_dca(dca_config, start_date=args.start_date, end_date=args.end_date,
-                                  monthly_total=20000, profit_roll_months=args.profit_roll_months,
+                                  monthly_total=monthly_total, profit_roll_months=args.profit_roll_months,
                                   profit_roll_percentage=args.profit_roll_percentage)
         dca_report = generate_dca_report(dca_result)
         dca_path = os.path.join(output_dir, f"回溯_{args.start_date[:4]}_{args.end_date[:4]}.MD")
