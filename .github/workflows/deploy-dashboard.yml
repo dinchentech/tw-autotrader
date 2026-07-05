@@ -77,10 +77,11 @@ jobs:
 
       - name: Prepare artifact
         run: |
-          mkdir -p _site
+          mkdir -p _site/img
           cp dashboard.html _site/index.html
           for f in *.html; do [ "$f" = "dashboard.html" ] || cp "$f" _site/; done 2>/dev/null || true
-          echo "✅ _site 內容:" && ls -la _site/
+          cp img/*.html img/*.png _site/img/ 2>/dev/null || true
+          echo "✅ _site 內容:" && ls -la _site/ && echo "---" && ls -la _site/img/
 
       - name: Upload artifact
         if: steps.check-gitpage.outputs.gitpage == 'on'
