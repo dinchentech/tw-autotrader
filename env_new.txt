@@ -104,7 +104,7 @@ PC_2881={"strategy":"vwap","alloc":10,"sigma_mult":1.5,"rsi_period":5,"position_
 
 # 2382 — 唐奇安突破 ｜ alloc=10% → NT$50,000
 # 不變（已於 9.5 節優化參數）
-PC_2382={"strategy":"breakout","alloc":10,"lookback":15,"atr_period":14,"atr_threshold":0.008,"position_amount":10000,"monthly_budget":0}
+PC_2382={"strategy":"breakout","alloc":10,"lookback":25,"atr_period":14,"atr_threshold":0.02,"position_amount":10000,"monthly_budget":0}
 
 # 3034 — 均線交叉 ｜ alloc=10% → NT$50,000
 # 變更：keep_wait → ma_cross（波動 41.6% 趨勢股，法人持續買超，趨勢策略優於低接）
