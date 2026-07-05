@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>趨勢盤 — 盤勢解析與策略配置</title>
+<style>
+  /* ── Reset & Base ── */
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: #0b1219;
+    color: #d8dde4;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Typography ── */
+  h1, h2, h3 { font-weight: 600; letter-spacing: 0.02em; line-height: 1.3; }
+  h1 { font-size: clamp(2.4rem, 6vw, 4.2rem); }
+  h2 { font-size: clamp(1.4rem, 3vw, 2rem); }
+  p { max-width: 68ch; }
+
+  /* ── Container ── */
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+
+  /* ── Hero Section ── */
+  .hero {
+    position: relative;
+    min-height: 100vh;
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
+    text-align: center;
+    padding: 80px 24px 60px;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 80% 60% at 50% 40%, rgba(16, 185, 129, 0.08) 0%, transparent 70%),
+      radial-gradient(ellipse 60% 50% at 30% 60%, rgba(251, 191, 36, 0.05) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 40% at 70% 30%, rgba(59, 130, 246, 0.04) 0%, transparent 50%);
+    pointer-events: none;
+  }
+
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    padding: 6px 18px; border-radius: 100px;
+    font-size: 0.85rem; color: #34d399; letter-spacing: 0.06em;
+    margin-bottom: 28px; backdrop-filter: blur(4px);
+  }
+  .hero-badge svg { width: 14px; height: 14px; fill: #34d399; }
+
+  .hero h1 {
+    background: linear-gradient(135deg, #f0fdf4 0%, #6ee7b7 50%, #34d399 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 16px;
+  }
+  .hero p {
+    font-size: clamp(1.05rem, 1.8vw, 1.3rem);
+    color: #94a3b8; margin: 0 auto 40px;
+  }
+
+  .hero-stats {
+    display: flex; gap: 48px; flex-wrap: wrap; justify-content: center;
+    margin-bottom: 48px;
+  }
+  .hero-stat { text-align: center; }
+  .hero-stat-value {
+    font-size: 1.5rem; font-weight: 700; color: #6ee7b7;
+  }
+  .hero-stat-label { font-size: 0.82rem; color: #64748b; margin-top: 2px; }
+
+  /* ── Chart ── */
+  .chart-wrap {
+    width: 100%; max-width: 820px; margin: 0 auto 20px;
+    background: rgba(255,255,255,0.02);
+    border-radius: 16px; padding: 20px 20px 10px;
+    border: 1px solid rgba(255,255,255,0.04);
+  }
+  .chart-wrap svg { display: block; width: 100%; height: auto; }
+
+  /* ── Sections ── */
+  section { padding: 80px 0; }
+
+  .section-label {
+    display: inline-block;
+    font-size: 0.75rem; font-weight: 600; letter-spacing: 0.1em;
+    text-transform: uppercase; color: #64748b; margin-bottom: 8px;
+  }
+  .section-title {
+    margin-bottom: 16px;
+    color: #e2e8f0;
+  }
+  .section-desc { color: #94a3b8; margin-bottom: 48px; }
+
+  /* ── Divider ── */
+  .divider {
+    height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
+    max-width: 1100px; margin: 0 auto;
+  }
+
+  /* ── Cards Grid ── */
+  .cards { display: grid; gap: 24px; }
+  .cards-2 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .cards-3 { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+
+  .card {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 14px; padding: 28px 24px;
+    transition: border-color 0.3s, background 0.3s;
+  }
+  .card:hover { border-color: rgba(255,255,255,0.12); background: rgba(255,255,255,0.03); }
+  .card-icon {
+    width: 40px; height: 40px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.2rem; margin-bottom: 16px;
+  }
+  .card h3 { font-size: 1.05rem; color: #e2e8f0; margin-bottom: 8px; }
+  .card p { font-size: 0.92rem; color: #94a3b8; line-height: 1.6; }
+
+  /* Accent colors for cards */
+  .icon-green { background: rgba(16, 185, 129, 0.12); color: #34d399; }
+  .icon-amber { background: rgba(251, 191, 36, 0.12); color: #fbbf24; }
+  .icon-blue  { background: rgba(59, 130, 246, 0.12); color: #60a5fa; }
+  .icon-red   { background: rgba(239, 68, 68, 0.12);  color: #f87171; }
+  .icon-purple{ background: rgba(168, 85, 247, 0.12); color: #a855f7; }
+
+  .border-green { border-left: 3px solid rgba(16, 185, 129, 0.4); }
+  .border-red   { border-left: 3px solid rgba(239, 68, 68, 0.4); }
+  .border-amber { border-left: 3px solid rgba(251, 191, 36, 0.4); }
+
+  /* ── Strategy Match ── */
+  .strategy-row {
+    display: flex; flex-wrap: wrap; gap: 24px; margin-bottom: 48px;
+  }
+  .strategy-col { flex: 1; min-width: 240px; }
+
+  .strategy-list { list-style: none; }
+  .strategy-list li {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 0.95rem;
+  }
+  .strategy-list li:last-child { border-bottom: none; }
+  .strategy-list .check { color: #34d399; font-weight: 700; flex-shrink: 0; }
+  .strategy-list .cross { color: #f87171; font-weight: 700; flex-shrink: 0; }
+  .strategy-list .label { color: #e2e8f0; font-weight: 500; }
+  .strategy-list .note  { color: #94a3b8; font-size: 0.85rem; }
+  .strategy-list .reason{ color: #64748b; font-size: 0.82rem; display: block; margin-top: 2px; }
+
+  /* ── Full Reference Table ── */
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    background: rgba(255,255,255,0.01);
+  }
+  table { width: 100%; border-collapse: collapse; min-width: 640px; }
+  th, td { padding: 14px 18px; text-align: left; font-size: 0.9rem; }
+  th {
+    background: rgba(255,255,255,0.03);
+    color: #94a3b8; font-weight: 600; font-size: 0.82rem;
+    letter-spacing: 0.04em; white-space: nowrap;
+  }
+  td { border-bottom: 1px solid rgba(255,255,255,0.04); color: #c8cdd4; }
+  tr:last-child td { border-bottom: none; }
+
+  .tag {
+    display: inline-block; padding: 2px 10px; border-radius: 100px;
+    font-size: 0.78rem; font-weight: 500;
+  }
+  .tag-green { background: rgba(16, 185, 129, 0.12); color: #34d399; }
+  .tag-red   { background: rgba(239, 68, 68, 0.12);  color: #f87171; }
+  .tag-amber { background: rgba(251, 191, 36, 0.12); color: #fbbf24; }
+  .tag-blue  { background: rgba(59, 130, 246, 0.12);  color: #60a5fa; }
+
+  .highlight-row { background: rgba(16, 185, 129, 0.04); }
+  .highlight-row td { border-bottom-color: rgba(16, 185, 129, 0.1); }
+
+  /* ── CTA ── */
+  .cta-section {
+    text-align: center; padding: 80px 24px;
+  }
+  .cta-section p { margin: 0 auto 32px; }
+
+  .nav-links {
+    display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;
+  }
+  .nav-link {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 10px 22px; border-radius: 10px;
+    font-size: 0.9rem; font-weight: 500; text-decoration: none;
+    transition: all 0.2s;
+    border: 1px solid rgba(255,255,255,0.08);
+    color: #c8cdd4; background: rgba(255,255,255,0.03);
+  }
+  .nav-link:hover {
+    border-color: rgba(255,255,255,0.18);
+    background: rgba(255,255,255,0.06);
+  }
+  .nav-link-primary {
+    background: rgba(16, 185, 129, 0.12);
+    border-color: rgba(16, 185, 129, 0.25);
+    color: #6ee7b7;
+  }
+  .nav-link-primary:hover {
+    background: rgba(16, 185, 129, 0.18);
+    border-color: rgba(16, 185, 129, 0.35);
+  }
+
+  /* ── Footer ── */
+  footer {
+    text-align: center; padding: 32px 24px;
+    font-size: 0.82rem; color: #475569;
+    border-top: 1px solid rgba(255,255,255,0.04);
+  }
+
+  /* ── Scroll-triggered fade ── */
+  .reveal {
+    opacity: 0; transform: translateY(24px);
+    transition: opacity 0.8s ease, transform 0.8s ease;
+  }
+  .reveal.visible { opacity: 1; transform: translateY(0); }
+
+  /* ── Responsive ── */
+  @media (max-width: 600px) {
+    section { padding: 48px 0; }
+    .hero-stats { gap: 24px; }
+    th, td { padding: 10px 12px; font-size: 0.82rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════ HERO ════════════════════ -->
+<section class="hero">
+  <div class="hero-badge">
+    <svg viewBox="0 0 16 16"><path d="M8 0a8 8 0 110 16A8 8 0 018 0zm3.5 5.5l-4 4L5 7l-1.5 1.5 4 4 5.5-5.5L11.5 5z"/></svg>
+    盤勢分析 · 趨勢盤
+  </div>
+
+  <h1>趨勢盤</h1>
+  <p>一直漲或一直跌，不回檔 — 趨勢是你的朋友，不要跟它對做</p>
+
+  <div class="hero-stats">
+    <div class="hero-stat">
+      <div class="hero-stat-value">↑ 趨勢明確</div>
+      <div class="hero-stat-label">方向單一，不回檔</div>
+    </div>
+    <div class="hero-stat">
+      <div class="hero-stat-value">MA Cross · Breakout</div>
+      <div class="hero-stat-label">適合追趨勢策略</div>
+    </div>
+    <div class="hero-stat">
+      <div class="hero-stat-value">✕ Bollinger</div>
+      <div class="hero-stat-label">不適合逆向操作</div>
+    </div>
+  </div>
+
+  <!-- ═══ CHART: Simulated Strong Uptrend ═══ -->
+  <div class="chart-wrap">
+    <svg viewBox="0 0 780 280" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#10b981" stop-opacity="0.25"/>
+          <stop offset="100%" stop-color="#10b981" stop-opacity="0.01"/>
+        </linearGradient>
+        <linearGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#10b981" stop-opacity="0.6"/>
+          <stop offset="100%" stop-color="#34d399"/>
+        </linearGradient>
+      </defs>
+
+      <!-- Grid lines -->
+      <line x1="60" y1="40"  x2="750" y2="40"  stroke="rgba(255,255,255,0.04)" stroke-dasharray="4 4"/>
+      <line x1="60" y1="90"  x2="750" y2="90"  stroke="rgba(255,255,255,0.04)" stroke-dasharray="4 4"/>
+      <line x1="60" y1="140" x2="750" y2="140" stroke="rgba(255,255,255,0.04)" stroke-dasharray="4 4"/>
+      <line x1="60" y1="190" x2="750" y2="190" stroke="rgba(255,255,255,0.04)" stroke-dasharray="4 4"/>
+      <line x1="60" y1="240" x2="750" y2="240" stroke="rgba(255,255,255,0.04)" stroke-dasharray="4 4"/>
+
+      <!-- Area fill -->
+      <polygon points="60,248 90,235 130,240 170,218 210,210 250,195 290,188 330,170 370,155 410,140 450,128 490,115 530,98 570,85 610,72 650,60 690,50 730,42 750,40 750,248"
+               fill="url(#areaGrad)"/>
+
+      <!-- Main price line -->
+      <polyline points="60,248 90,235 130,240 170,218 210,210 250,195 290,188 330,170 370,155 410,140 450,128 490,115 530,98 570,85 610,72 650,60 690,50 730,42 750,40"
+                fill="none" stroke="url(#lineGrad)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+
+      <!-- MA line (slower, smoother) -->
+      <polyline points="60,243 90,232 130,235 170,222 210,215 250,202 290,195 330,180 370,167 410,152 450,140 490,128 530,112 570,100 610,88 650,76 690,65 730,56 750,54"
+                fill="none" stroke="rgba(147,51,234,0.35)" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"
+                stroke-dasharray="6 4"/>
+
+      <!-- Dots on line -->
+      <circle cx="60"  cy="248" r="2.5" fill="#10b981" opacity="0.4"/>
+      <circle cx="170" cy="218" r="2.5" fill="#10b981" opacity="0.4"/>
+      <circle cx="290" cy="188" r="2.5" fill="#10b981" opacity="0.4"/>
+      <circle cx="410" cy="140" r="2.5" fill="#10b981" opacity="0.4"/>
+      <circle cx="530" cy="98"  r="2.5" fill="#10b981" opacity="0.4"/>
+      <circle cx="650" cy="60"  r="2.5" fill="#10b981" opacity="0.4"/>
+      <circle cx="750" cy="40"  r="4"   fill="#34d399" stroke="#0b1219" stroke-width="1.5"/>
+
+      <!-- Buy signals -->
+      <circle cx="250" cy="200" r="8" fill="none" stroke="#34d399" stroke-width="1.5" opacity="0.6"/>
+      <text x="250" y="190" text-anchor="middle" fill="#34d399" font-size="9" font-weight="500">MA 交叉</text>
+
+      <circle cx="490" cy="120" r="8" fill="none" stroke="#60a5fa" stroke-width="1.5" opacity="0.6"/>
+      <text x="490" y="110" text-anchor="middle" fill="#60a5fa" font-size="9" font-weight="500">突破買入</text>
+
+      <circle cx="650" cy="66" r="8" fill="none" stroke="#a855f7" stroke-width="1.5" opacity="0.6"/>
+      <text x="650" y="56" text-anchor="middle" fill="#a855f7" font-size="9" font-weight="500">法人動能</text>
+
+      <!-- Bollinger touch (bad) -->
+      <line x1="330" y1="170" x2="330" y2="126" stroke="#f87171" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/>
+      <text x="330" y="120" text-anchor="middle" fill="#f87171" font-size="8.5">抄底被軋 ✕</text>
+
+      <!-- X-axis labels -->
+      <text x="60"  y="266" fill="#475569" font-size="10">1月</text>
+      <text x="230" y="266" fill="#475569" font-size="10">3月</text>
+      <text x="410" y="266" fill="#475569" font-size="10">5月</text>
+      <text x="590" y="266" fill="#475569" font-size="10">7月</text>
+      <text x="750" y="266" fill="#475569" font-size="10">9月</text>
+
+      <!-- Y-axis labels -->
+      <text x="52" y="44"  fill="#475569" font-size="10" text-anchor="end">高</text>
+      <text x="52" y="248" fill="#475569" font-size="10" text-anchor="end">低</text>
+
+      <!-- Legend -->
+      <line x1="580" y1="18" x2="600" y2="18" stroke="#34d399" stroke-width="2" stroke-linecap="round"/>
+      <text x="605" y="22" fill="#94a3b8" font-size="10">價格</text>
+      <line x1="660" y1="18" x2="680" y2="18" stroke="rgba(147,51,234,0.35)" stroke-width="1.8" stroke-dasharray="6 4" stroke-linecap="round"/>
+      <text x="685" y="22" fill="#94a3b8" font-size="10">MA</text>
+    </svg>
+  </div>
+
+  <p style="font-size:0.85rem;color:#475569;margin-bottom:0;">
+    圖中：價格沿 MA 穩定攀升，MA 交叉、突破、法人動能依序給出買點，逆向操作（抄底）則被軋空
+  </p>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════════════ WHAT IS TREND ════════════════════ -->
+<section>
+  <div class="container reveal">
+    <span class="section-label">定義</span>
+    <h2 class="section-title">什麼是趨勢盤？</h2>
+    <p class="section-desc">
+      趨勢盤是市場中最容易獲利的盤型之一。價格沿著固定方向持續移動，過程中不回檔或僅小幅回檔，
+      直到趨勢結束。多頭趨勢一路創高、空頭趨勢一路破底。策略核心只有一句話：
+      <strong style="color:#e2e8f0;">順勢而為，不要摸底</strong>。
+    </p>
+
+    <div class="cards cards-3">
+      <div class="card">
+        <div class="card-icon icon-green">📈</div>
+        <h3>方向明確</h3>
+        <p>價格沿 MA 斜率穩定前進，頻創波段新高，拉回不破前低。屬高勝率環境。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon icon-amber">⏳</div>
+        <h3>持續時間長</h3>
+        <p>趨勢一旦形成，可持續數週至數月。不會一天就結束，給足進場與加碼時間。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon icon-blue">📊</div>
+        <h3>指標同步</h3>
+        <p>MA 多頭排列、MACD 在零軸上、ADX > 25 — 不同指標給出一致方向，雜訊最少。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════════════ CHARACTERISTICS ════════════════════ -->
+<section>
+  <div class="container reveal">
+    <span class="section-label">特徵</span>
+    <h2 class="section-title">趨勢盤的關鍵特徵</h2>
+    <p class="section-desc">如何判斷當前是不是趨勢盤？觀察以下現象</p>
+
+    <div class="cards cards-2">
+      <div class="card border-green">
+        <h3>✅ 價格沿均線爬升</h3>
+        <p>K 線從未（或極少）收盤跌破 MA20 / MA60，且均線斜率 > 0，呈現整齊的多頭排列。</p>
+      </div>
+      <div class="card border-green">
+        <h3>✅ 拉回快速收復</h3>
+        <p>每次回檔都在 2–3 天內被買盤收復，沒有連續黑 K 的轉弱跡象。這就是「不回檔」的本質。</p>
+      </div>
+      <div class="card border-green">
+        <h3>✅ 成交量漸增</h3>
+        <p>上漲時成交量溫和放大，回檔時量縮。量價結構健康，非單一資金拉抬的虛漲。</p>
+      </div>
+      <div class="card border-green">
+        <h3>✅ ADX > 25 持續上升</h3>
+        <p>ADX（平均趨向指標）大於 25 且持續走高，確認市場處於強勢趨勢狀態，非盤整雜訊。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════════════ STRATEGY MATCH ════════════════════ -->
+<section>
+  <div class="container reveal">
+    <span class="section-label">策略配置</span>
+    <h2 class="section-title">趨勢盤的應對策略</h2>
+    <p class="section-desc">不同策略在趨勢盤中的表現差異極大，選對工具至關重要</p>
+
+    <div class="strategy-row">
+      <div class="strategy-col">
+        <h3 style="color:#6ee7b7;margin-bottom:16px;font-size:1.1rem;">
+          ✅ 適合策略
+        </h3>
+        <ul class="strategy-list">
+          <li>
+            <span class="check">◆</span>
+            <div>
+              <span class="label">MA Cross（均線交叉）</span>
+              <span class="reason">黃金交叉進場、死亡交叉出場 — 趨勢盤中訊號精準，不會反覆被巴</span>
+            </div>
+          </li>
+          <li>
+            <span class="check">◆</span>
+            <div>
+              <span class="label">Breakout（突破策略）</span>
+              <span class="reason">創新高買入，趨勢盤中假突破極少，勝率高且能吃到完整波段</span>
+            </div>
+          </li>
+          <li>
+            <span class="check">◆</span>
+            <div>
+              <span class="label">法人動能</span>
+              <span class="reason">外資/投信持續買超推升股價，法人動能在趨勢盤中訊號最強</span>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="strategy-col">
+        <h3 style="color:#f87171;margin-bottom:16px;font-size:1.1rem;">
+          ✕ 不適合策略
+        </h3>
+        <ul class="strategy-list">
+          <li>
+            <span class="cross">✕</span>
+            <div>
+              <span class="label">Bollinger（布林通道反轉）</span>
+              <span class="reason">趨勢盤中價格沿通道上緣前行、不跌回中線，抄底等不到回落，只會被持續軋空</span>
+            </div>
+          </li>
+          <li>
+            <span class="cross">✕</span>
+            <div>
+              <span class="label">VWAP 偏離反轉</span>
+              <span class="reason">VWAP 在強趨勢中持續偏離，等回跌才進場會完全錯過整段行情</span>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Strategy philosophy -->
+    <div style="background:rgba(16,185,129,0.04);border:1px solid rgba(16,185,129,0.10);border-radius:12px;padding:24px;margin-top:8px;">
+      <p style="font-size:0.92rem;color:#94a3b8;margin-bottom:0;">
+        <strong style="color:#6ee7b7;">核心原則：</strong>
+        趨勢盤是「追高」唯一合理的市場環境。價格創新高不是風險，而是趨勢確認。
+        MA Cross 與 Breakout 的精髓在於<strong style="color:#e2e8f0;">讓獲利奔跑（let profits run）</strong>，
+        不在高檔預設目標價、不隨意獲利了結，直到趨勢出現反轉訊號。
+      </p>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════════════ REFERENCE TABLE ════════════════════ -->
+<section>
+  <div class="container reveal">
+    <span class="section-label">完整對照</span>
+    <h2 class="section-title">五大盤勢 × 策略適用表</h2>
+    <p class="section-desc">理解每種盤勢的特性，才能在不同市場環境中做出正確的策略配置</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>盤勢</th>
+            <th>特徵</th>
+            <th>適合策略</th>
+            <th>不適合策略</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="highlight-row">
+            <td><span class="tag tag-green">趨勢盤</span></td>
+            <td>一直漲或一直跌，不回檔</td>
+            <td><span class="tag tag-green">MA Cross</span> <span class="tag tag-green">Breakout</span> <span class="tag tag-green">法人動能</span></td>
+            <td><span class="tag tag-red">Bollinger</span>（抄底會被軋）</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-amber">盤整盤</span></td>
+            <td>上下區間來回，沒方向</td>
+            <td><span class="tag tag-blue">Bollinger</span> <span class="tag tag-blue">VWAP</span></td>
+            <td><span class="tag tag-red">法人動能</span>（掃不到創新高標的）</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-amber">震盪盤</span></td>
+            <td>急漲急跌但很快拉回</td>
+            <td><span class="tag tag-blue">VWAP</span> <span class="tag tag-blue">Bollinger</span></td>
+            <td><span class="tag tag-red">Breakout</span>（假突破陷阱多）</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-red">崩跌盤</span></td>
+            <td>連續大跌，躲都來不及</td>
+            <td><span class="tag tag-blue">keep_wait</span>（慢慢低接，等復甦）</td>
+            <td><span class="tag tag-red">Breakout</span> <span class="tag tag-red">法人動能</span>（一買就停損）</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-blue">噴出盤</span></td>
+            <td>短線急拉，跳空不補</td>
+            <td><span class="tag tag-green">Breakout</span> <span class="tag tag-green">法人動能</span></td>
+            <td><span class="tag tag-red">Bollinger</span>（跌不下來，根本沒買點）</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════════════ CTA ════════════════════ -->
+<section class="cta-section container reveal">
+  <span class="section-label">延伸閱讀</span>
+  <h2 class="section-title" style="margin-bottom:12px;">了解更多盤勢與策略</h2>
+  <p>每種盤勢都有自己的節奏——掌握它們，就能在對的市場用對的工具。</p>
+  <div class="nav-links">
+    <a href="bollinger-animation.html" class="nav-link">📊 布林通道策略</a>
+    <a href="ma_cross-animation.html" class="nav-link">📈 均線交叉策略</a>
+    <a href="breakout-animation.html" class="nav-link">🚀 突破策略</a>
+    <a href="vwap-animation.html" class="nav-link">📉 VWAP 策略</a>
+    <a href="法人動能策略說明.html" class="nav-link">🏦 法人動能策略</a>
+    <a href="keep_wait策略說明.html" class="nav-link">⏳ keep_wait 低接策略</a>
+  </div>
+</section>
+
+<footer>
+  TW AutoTrader · 盤勢分析系列 · 趨勢盤
+</footer>
+
+<script>
+  // ── Scroll Reveal ──
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.12 });
+
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+</script>
+
+</body>
+</html>

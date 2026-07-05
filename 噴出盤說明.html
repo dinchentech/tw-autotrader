@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>噴出盤 — 盤勢說明</title>
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; min-height: 100vh; background: #0b1219; }
+  body {
+    font-family: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    color: #d8dde4; line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 48px 24px;
+  }
+  .container { max-width: 960px; width: 100%; }
+
+  .header { text-align: center; margin-bottom: 32px; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(139,92,246,0.12); border: 1px solid rgba(139,92,246,0.20);
+    padding: 4px 14px; border-radius: 100px;
+    font-size: 0.78rem; color: #a78bfa; letter-spacing: 0.06em;
+    margin-bottom: 16px;
+  }
+  .header h1 {
+    font-size: clamp(2rem, 5vw, 3.2rem); font-weight: 700;
+    background: linear-gradient(135deg, #f5f3ff 0%, #c4b5fd 50%, #8b5cf6 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 8px;
+  }
+  .header p { color: #94a3b8; font-size: clamp(0.95rem, 1.4vw, 1.15rem); }
+
+  .chart-card {
+    background: rgba(255,255,255,0.015);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px; padding: 24px 20px 16px;
+    margin-bottom: 32px;
+  }
+  .chart-wrap { width: 100%; }
+  .chart-wrap svg { display: block; width: 100%; height: auto; }
+  .chart-caption {
+    text-align: center; font-size: 0.82rem; color: #475569;
+    margin-top: 12px;
+  }
+
+  .info-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 16px; margin-bottom: 24px;
+  }
+  .info-card {
+    background: rgba(255,255,255,0.015);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px; padding: 20px;
+  }
+  .info-card h3 {
+    font-size: 0.8rem; font-weight: 600; letter-spacing: 0.06em;
+    text-transform: uppercase; margin-bottom: 12px;
+  }
+  .info-card h3.fit { color: #34d399; }
+  .info-card h3.no { color: #f87171; }
+  .info-card h3.tag { color: #a78bfa; }
+
+  .tag-list { list-style: none; }
+  .tag-list li {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 0.88rem;
+  }
+  .tag-list li:last-child { border-bottom: none; }
+  .tag-list .check { color: #34d399; font-weight: 700; flex-shrink: 0; }
+  .tag-list .cross { color: #f87171; font-weight: 700; flex-shrink: 0; }
+  .tag-list .label { color: #e2e8f0; font-weight: 500; }
+  .tag-list .reason { color: #64748b; font-size: 0.8rem; display: block; margin-top: 1px; }
+
+  .principle {
+    background: rgba(139,92,246,0.04);
+    border: 1px solid rgba(139,92,246,0.10);
+    border-radius: 12px; padding: 20px 24px;
+    margin-bottom: 32px;
+  }
+  .principle strong.acc { color: #a78bfa; }
+  .principle strong.em { color: #e2e8f0; }
+  .principle p { font-size: 0.9rem; color: #94a3b8; }
+
+  .nav-links {
+    display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+  }
+  .nav-link {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 8px 18px; border-radius: 8px;
+    font-size: 0.85rem; font-weight: 500; text-decoration: none;
+    transition: all 0.2s;
+    border: 1px solid rgba(255,255,255,0.08);
+    color: #c8cdd4; background: rgba(255,255,255,0.03);
+  }
+  .nav-link:hover { border-color: rgba(255,255,255,0.18); background: rgba(255,255,255,0.06); }
+
+  footer { text-align: center; padding: 24px; font-size: 0.78rem; color: #475569; }
+
+  @media (max-width: 600px) { .info-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div class="badge">盤勢分析 · 噴出盤</div>
+    <h1>噴出盤</h1>
+    <p>短線急拉，跳空不補 — 最強勢的盤型，追就對了，不要等拉回</p>
+  </div>
+
+  <!-- ═══ MAIN CHART: Steep surge with gaps ═══ -->
+  <div class="chart-card">
+    <div class="chart-wrap">
+      <svg viewBox="0 0 840 320" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="surgeGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.25"/>
+            <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0.01"/>
+          </linearGradient>
+          <linearGradient id="gapGrad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.5"/>
+            <stop offset="100%" stop-color="#a78bfa" stop-opacity="0.8"/>
+          </linearGradient>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="2" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+
+        <!-- Grid -->
+        <line x1="60" y1="40"  x2="810" y2="40"  stroke="rgba(255,255,255,0.03)" stroke-dasharray="4 4"/>
+        <line x1="60" y1="85"  x2="810" y2="85"  stroke="rgba(255,255,255,0.03)" stroke-dasharray="4 4"/>
+        <line x1="60" y1="130" x2="810" y2="130" stroke="rgba(255,255,255,0.03)" stroke-dasharray="4 4"/>
+        <line x1="60" y1="175" x2="810" y2="175" stroke="rgba(255,255,255,0.03)" stroke-dasharray="4 4"/>
+        <line x1="60" y1="220" x2="810" y2="220" stroke="rgba(255,255,255,0.03)" stroke-dasharray="4 4"/>
+        <line x1="60" y1="265" x2="810" y2="265" stroke="rgba(255,255,255,0.03)" stroke-dasharray="4 4"/>
+
+        <!-- Area under curve -->
+        <polygon points="60,260 90,250 120,240 150,230 180,210 210,195 240,175 270,160 300,140
+                        330,120 360,100 390,85 420,80 450,75 480,70 510,65 540,60 570,55
+                        600,52 630,48 660,46 690,44 720,42 750,40 780,38 810,36 810,280 60,280"
+                  fill="url(#surgeGrad)"/>
+
+        <!-- Price line: explosive surge from bottom-left to top-right -->
+        <polyline points="60,260 90,250 120,240 150,230 180,210 210,195 240,175 270,160 300,140
+                          330,120 360,100 390,85 420,80 450,75 480,70 510,65 540,60 570,55
+                          600,52 630,48 660,46 690,44 720,42 750,40 780,38 810,36"
+                    fill="none" stroke="url(#gapGrad)" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"
+                    filter="url(#glow)"/>
+
+        <!-- MA line (lagging behind, steepening) -->
+        <polyline points="60,253 150,227 240,180 330,133 420,92 510,72 600,58 690,48 780,42 810,40"
+                    fill="none" stroke="rgba(139,92,246,0.25)" stroke-width="1.5" stroke-linejoin="round"
+                    stroke-dasharray="6 4"/>
+
+        <!-- Gap-up annotations: price jumps that don't fill -->
+        <!-- Gap 1 -->
+        <rect x="175" y="200" width="14" height="16" rx="2" fill="rgba(255,255,255,0.04)" stroke="rgba(167,139,250,0.3)" stroke-width="0.8"/>
+        <path d="M178,215 L182,200 L186,215" fill="none" stroke="#a78bfa" stroke-width="1.2" opacity="0.7"/>
+        <text x="182" y="226" text-anchor="middle" fill="#a78bfa" font-size="7.5">跳空</text>
+
+        <!-- Gap 2 -->
+        <rect x="325" y="128" width="14" height="14" rx="2" fill="rgba(255,255,255,0.04)" stroke="rgba(167,139,250,0.3)" stroke-width="0.8"/>
+        <path d="M328,141 L332,128 L336,141" fill="none" stroke="#a78bfa" stroke-width="1.2" opacity="0.7"/>
+        <text x="332" y="152" text-anchor="middle" fill="#a78bfa" font-size="7.5">跳空</text>
+
+        <!-- Gap 3 -->
+        <rect x="450" y="68" width="14" height="14" rx="2" fill="rgba(255,255,255,0.04)" stroke="rgba(167,139,250,0.3)" stroke-width="0.8"/>
+        <path d="M453,81 L457,68 L461,81" fill="none" stroke="#a78bfa" stroke-width="1.2" opacity="0.7"/>
+        <text x="457" y="92" text-anchor="middle" fill="#a78bfa" font-size="7.5">跳空</text>
+
+        <!-- Breakout buy signals -->
+        <circle cx="270" cy="160" r="9" fill="none" stroke="#34d399" stroke-width="1.8" opacity="0.8"/>
+        <text x="270" y="150" text-anchor="middle" fill="#34d399" font-size="8.5" font-weight="500">突破買入</text>
+
+        <circle cx="480" cy="70" r="9" fill="none" stroke="#34d399" stroke-width="1.8" opacity="0.8"/>
+        <text x="480" y="60" text-anchor="middle" fill="#34d399" font-size="8.5" font-weight="500">法人動能</text>
+
+        <circle cx="690" cy="44" r="9" fill="none" stroke="#34d399" stroke-width="1.8" opacity="0.8"/>
+        <text x="690" y="34" text-anchor="middle" fill="#34d399" font-size="8.5" font-weight="500">加碼追入</text>
+
+        <!-- Bollinger annotation: never pulls back -->
+        <line x1="360" y1="104" x2="420" y2="104" stroke="#f87171" stroke-width="0.8" stroke-dasharray="3 3" opacity="0.5"/>
+        <text x="390" y="118" text-anchor="middle" fill="#f87171" font-size="8">Bollinger 等不到買點 ✕</text>
+
+        <!-- Labels -->
+        <text x="60"  y="290" fill="#475569" font-size="10">1月</text>
+        <text x="250" y="290" fill="#475569" font-size="10">3月</text>
+        <text x="450" y="290" fill="#475569" font-size="10">5月</text>
+        <text x="650" y="290" fill="#475569" font-size="10">7月</text>
+        <text x="810" y="290" fill="#475569" font-size="10">9月</text>
+
+        <text x="52" y="44"  fill="#475569" font-size="10" text-anchor="end">高</text>
+        <text x="52" y="268" fill="#475569" font-size="10" text-anchor="end">低</text>
+
+        <line x1="680" y1="20" x2="700" y2="20" stroke="#a78bfa" stroke-width="2" stroke-linecap="round"/>
+        <text x="705" y="24" fill="#94a3b8" font-size="10">價格</text>
+        <line x1="760" y1="20" x2="780" y2="20" stroke="rgba(139,92,246,0.25)" stroke-width="1.5" stroke-dasharray="6 4" stroke-linecap="round"/>
+        <text x="785" y="24" fill="#94a3b8" font-size="10">MA</text>
+      </svg>
+    </div>
+    <div class="chart-caption">
+      價格從低檔噴出，連續跳空上漲不補缺，突破買入與法人動能接連給訊，Bollinger 因價格不回跌完全沒有買點
+    </div>
+  </div>
+
+  <!-- ═══ INFO ═══ -->
+  <div class="info-grid">
+    <div class="info-card">
+      <h3 class="tag">📌 特徵</h3>
+      <ul class="tag-list">
+        <li><span class="check">◆</span><div><span class="label">連續跳空上漲</span><span class="reason">開高走高，缺口久久不補甚至成為中繼缺口</span></div></li>
+        <li><span class="check">◆</span><div><span class="label">量價齊揚</span><span class="reason">成交量隨著價格創新高持續放大，動能充沛</span></div></li>
+        <li><span class="check">◆</span><div><span class="label">均線多頭乖離大</span><span class="reason">價格遠離所有均線，MA5 以 45° 以上斜率上攻</span></div></li>
+        <li><span class="check">◆</span><div><span class="label">外資法人積極買超</span><span class="reason">籌碼面與技術面同步，法人帶頭拉抬</span></div></li>
+      </ul>
+    </div>
+
+    <div class="info-card">
+      <h3 class="fit">✅ 適合策略</h3>
+      <ul class="tag-list">
+        <li><span class="check">◆</span><div><span class="label">Breakout（追強勢股最賺）</span><span class="reason">噴出盤是突破策略的完美場景 — 突破高點後繼續噴，不是假突破</span></div></li>
+        <li><span class="check">◆</span><div><span class="label">法人動能（吃外資買超最甜）</span><span class="reason">外資與投信大舉買超的標的在噴出盤中漲勢最兇猛</span></div></li>
+      </ul>
+      <h3 class="no" style="margin-top:16px;">✕ 不適合策略</h3>
+      <ul class="tag-list">
+        <li><span class="cross">✕</span><div><span class="label">Bollinger（布林通道反轉）</span><span class="reason">價格沿通道上緣狂奔，跌不下來，根本等不到買點</span></div></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="principle">
+    <p>
+      <strong class="acc">核心原則：</strong>
+      噴出盤是唯一應該<strong class="em">追高</strong>的市場環境。
+      不要等拉回、不要等「合理價」——噴出盤的特色就是<strong class="em">跳空上漲不補缺</strong>，
+      等拉回就永遠上不了車。Breakout 與法人動能的精髓在於<strong class="em">讓獲利奔跑</strong>
+      （let profits run），用移動停利保護獲利，而不是預設目標價。
+      切記：噴出盤有多爽，崩跌盤就有多痛——<strong class="acc">嚴設停損</strong>，因為噴出結束後往往就是崩跌的開始。
+    </p>
+  </div>
+
+  <div class="nav-links">
+    <a href="趨勢盤說明.html" class="nav-link">📈 趨勢盤</a>
+    <a href="盤整盤說明.html" class="nav-link">↔️ 盤整盤</a>
+    <a href="震盪盤說明.html" class="nav-link">⚡ 震盪盤</a>
+    <a href="崩跌盤說明.html" class="nav-link">📉 崩跌盤</a>
+    <a href="breakout-animation.html" class="nav-link">🚀 突破策略</a>
+    <a href="法人動能策略說明.html" class="nav-link">🏦 法人動能策略</a>
+  </div>
+
+  <footer>TW AutoTrader · 盤勢分析系列 · 噴出盤</footer>
+</div>
+</body>
+</html>
