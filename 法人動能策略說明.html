@@ -181,7 +181,39 @@
     </div>
   </div>
 
-  <!-- ─── Page 1: 週五盤後篩選 ─── -->
+  <!-- ─── Page 1: 魚過濾 — 降低雜訊 ─── -->
+  <div class="slide">
+    <div class="step-page">
+      <div class="icon-big">🐟</div>
+      <div class="step-num">PRE-FILTER</div>
+      <h2>魚過濾（Fish Score）— 只留法人真正吃貨的股票</h2>
+      <div class="desc">
+        在四大條件之前，先用 <strong>法人低吃分數</strong>（0-10）
+        過濾掉 85% 以上的雜訊。分數由四個維度組成，
+        只有四項 <strong>同時達標</strong>（總分 ≥ 7.0）的股票才進下一步。
+      </div>
+      <div class="detail-card">
+        <dt>📌 Fish Score 四維評分（每項獨立計分）</dt>
+        <dd>
+          <div class="item"><span class="key">📉 價格位置（滿分 3）</span><span class="val">低於 MA20/MA60 · 近 30 日低檔</span></div>
+          <div class="item"><span class="key">📊 量能型態（滿分 3）</span><span class="val">量放大但價格不動 = 默默收籌碼</span></div>
+          <div class="item"><span class="key">🕯️ K 線型態（滿分 2）</span><span class="val">下影線長 · 鎚子 / 十字線</span></div>
+          <div class="item"><span class="key">🏦 法人買超（滿分 2）</span><span class="val">低檔法人大手筆吃貨</span></div>
+        </dd>
+      </div>
+      <div class="detail-card" style="margin-top:12px;border-color:rgba(192,57,43,.12);">
+        <dt>⚙️ 實證參數</dt>
+        <dd>
+          <div class="item"><span class="key">門檻分數</span><span class="val">≥ 7.0</span></div>
+          <div class="item"><span class="key">回溯天數</span><span class="val">90 天</span></div>
+          <div class="item"><span class="key">搜索範圍</span><span class="val">市值前 150 大</span></div>
+          <div class="item"><span class="key">Grid Search</span><span class="val">2022-2025 最佳參數</span></div>
+        </dd>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Page 2: 週五盤後篩選 ─── -->
   <div class="slide">
     <div class="step-page">
       <div class="icon-big">📡</div>
@@ -307,9 +339,15 @@
         <tr><td>硬性停損</td><td>-7%</td></tr>
         <tr><td>移動停利週期</td><td>MA10</td></tr>
         <tr><td>篩選回看天數</td><td>20 日</td></tr>
+        <tr><td>🐟 魚過濾啟用</td><td>✅ 開啟</td></tr>
+        <tr><td>魚過濾最低分數 (FISH_MIN_SCORE)</td><td>≥ 7.0</td></tr>
+        <tr><td>魚過濾回溯天數 (FISH_DAYS)</td><td>90 天</td></tr>
+        <tr><td>市值搜索範圍 (STOCK_NO)</td><td>前 150 大</td></tr>
       </table>
 
       <div class="cycle-viz">
+        <div class="node"><span class="icon">🐟</span><span class="label">魚過濾</span></div>
+        <span class="arr">→</span>
         <div class="node"><span class="icon">📡</span><span class="label">週五篩選</span></div>
         <span class="arr">→</span>
         <div class="node"><span class="icon">🏆</span><span class="label">排序取 N</span></div>
@@ -322,8 +360,8 @@
       </div>
 
       <div class="result-box">
-        <div class="value">+26.03%</div>
-        <div class="meta">回測 2025 · 勝率 45.4% · 獲利因子 2.13 · 最大回落 17.5%</div>
+        <div class="value">+85.2%</div>
+        <div class="meta">回測 2022-2025（魚過濾 + 護盤過濾）· 勝率 71.7% · 年化 16.7% · 最大回落 22.0%</div>
       </div>
     </div>
   </div>
@@ -334,7 +372,7 @@
   <button id="prevBtn" disabled>◀</button>
   <div class="dots" id="dotContainer"></div>
   <button id="nextBtn">▶</button>
-  <span class="label" id="pageLabel">1 / 7</span>
+  <span class="label" id="pageLabel">1 / 8</span>
 </div>
 
 <script>
