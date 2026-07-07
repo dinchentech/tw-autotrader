@@ -437,8 +437,8 @@ class InstitutionalMomentumStrategy:
         loser_ban = self.state.get("loser_ban", {})
 
         fish_enabled = os.getenv("INST_MOM_FISH_FILTER", "true").lower() == "true"
-        fish_days = int(os.getenv("INST_MOM_FISH_DAYS", "60"))
-        fish_min = float(os.getenv("INST_MOM_FISH_MIN_SCORE", "4.0"))
+        fish_days = int(os.getenv("INST_MOM_FISH_DAYS", "90"))
+        fish_min = float(os.getenv("INST_MOM_FISH_MIN_SCORE", "7.0"))
 
         all_data = {}
         for stock_id in all_ids:

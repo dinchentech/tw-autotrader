@@ -22,8 +22,8 @@ MIN_VOL = 2000
 BUY_RATIO = 0.03
 BUY_COST = 0.001425
 SELL_COST = 0.004425
-FISH_SCORE = 4.0
-FISH_DAYS = 60
+FISH_SCORE = 7.0
+FISH_DAYS = 90
 
 PRICE_CACHE = Path("cache/inst_momentum/price")
 TWSE_CACHE  = Path("cache/inst_momentum/2022/twse_inst_2022-01-01_2025-12-31.pkl")

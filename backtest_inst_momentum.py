@@ -142,8 +142,8 @@ inst_core.SELL_COST = SELL_COST
 
 # ─── 法人低吃過濾參數 ────────────────────────────────
 FISH_PRE_FILTER = args.fish_pre_filter
-FISH_DAYS = args.fish_days or 60
-FISH_MIN_SCORE = args.fish_score if args.fish_score is not None else 4.0
+FISH_DAYS = args.fish_days or 90
+FISH_MIN_SCORE = args.fish_score if args.fish_score is not None else 7.0
 
 AUTO_CAPITAL = args.auto_capital
 AUTO_CAP_MONTHS = args.auto_cap_months
