@@ -1,11 +1,13 @@
 """
 Institutional Momentum Strategy — 法人抬轎動能策略
 
-不同於固定標的策略，此策略每週動態選股：
-  1. 週五盤後篩選（流動性 > 2,000 張、法人買超 > 3%、創 20 日新高 + 站穩 MA20）
+不同於固定標的策略，此策略動態選股（由 INST_MOM_DAILY_SCREENING 控制頻率）：
+  1. 盤後篩選（流動性 > 2,000 張、法人買超 > 3%、創 20 日新高 + 站穩 MA20）
+     每週（預設）：週五 13:31-13:45
+     每日（INST_MOM_DAILY_SCREENING=true）：每個交易日 13:31-13:45
   2. 依投信+外資買超佔比排序，選前 N 名（預設 2 檔）
-  3. 週一開盤買入，每檔配置 (alloc / N)
-   4. 每日監控：硬性停損 -10%、跌破 MA10 移動停利
+  3. 隔日開盤 09:00-09:05 買入（每週模式為週一，每日模式為下個交易日）
+  4. 每日監控：硬性停損 -10%、跌破 MA10 移動停利
 
 共用核心邏輯來自 core/inst_strategy_core.py，確保回測與實盤一致性。
 """
@@ -52,6 +54,7 @@ class InstitutionalMomentumStrategy:
         self.stop_loss = float(os.getenv("INST_MOM_STOP_LOSS", "0.10"))         # -10%
         self.trailing_period = int(os.getenv("INST_MOM_TRAILING_PERIOD", "10")) # MA10
         self.exclude_etf = os.getenv("INST_MOM_EXCLUDE_ETF", "true").lower() == "true"  # 預設排除 ETF
+        self.daily_screening = os.getenv("INST_MOM_DAILY_SCREENING", "false").lower() == "true"
 
         # 內部狀態
         self.state = self._load_state()
@@ -544,34 +547,46 @@ class InstitutionalMomentumStrategy:
         last_screen = self.state.get("last_screen_date")
 
         # ================================================================
-        # 週五 13:31-13:45 → 盤後篩選（只在未篩選過時執行）
+        # 盤後 13:31-13:45 → 篩選候選股
+        #   每週模式（預設）：週五執行
+        #   每日模式（INST_MOM_DAILY_SCREENING=true）：每個交易日執行
         # ================================================================
-        if is_weekday and now.weekday() == 4 and now.hour == 13 and 31 <= now.minute <= 45:
-            if last_screen != today_str:
-                print("📡 [INST_MOM] 週五盤後篩選法人抬轎標的...")
-                candidates = self.get_candidates()
-                self.state["candidates"] = [{"stock_id": s, "score": sc} for s, sc in candidates]
-                self.state["last_screen_date"] = today_str
-                self._save_state()
+        screen_cond = (
+            is_weekday and now.hour == 13 and 31 <= now.minute <= 45
+            and (self.daily_screening or now.weekday() == 4)
+        )
+        if screen_cond and last_screen != today_str:
+            freq = "每日" if self.daily_screening else "週"
+            print(f"📡 [INST_MOM] {freq}盤後篩選法人抬轎標的...")
+            candidates = self.get_candidates()
+            self.state["candidates"] = [{"stock_id": s, "score": sc} for s, sc in candidates]
+            self.state["last_screen_date"] = today_str
+            self._save_state()
 
-                if candidates:
-                    names = ", ".join(f"{s}({sc:.2%})" for s, sc in candidates)
-                    print(f"✅ [INST_MOM] 篩選結果: {names}")
-                    from utils.telegram import send_telegram_message
-                    send_telegram_message(
-                        f"📡 *法人抬轎動能策略* 週篩選結果\n"
-                        f"候選標的: {names}\n"
-                        f"📅 週一開盤自動進場"
-                    )
-                else:
-                    print("⚠️ [INST_MOM] 本週無符合標的")
-                    from utils.telegram import send_telegram_message
-                    send_telegram_message("⚠️ *法人抬轎動能策略* 本週無符合篩選條件的標的")
+            if candidates:
+                names = ", ".join(f"{s}({sc:.2%})" for s, sc in candidates)
+                print(f"✅ [INST_MOM] 篩選結果: {names}")
+                from utils.telegram import send_telegram_message
+                send_telegram_message(
+                    f"📡 *法人抬轎動能策略* {freq}篩選結果\n"
+                    f"候選標的: {names}\n"
+                    f"📅 明日開盤自動進場"
+                )
+            else:
+                print(f"⚠️ [INST_MOM] 本{freq}無符合標的")
+                from utils.telegram import send_telegram_message
+                send_telegram_message(f"⚠️ *法人抬轎動能策略* 本{freq}無符合篩選條件的標的")
 
         # ================================================================
-        # 週一 09:00-09:05 → 執行新倉位進場
+        # 開盤 09:00-09:05 → 執行新倉位進場
+        #   每週模式（預設）：週一進場
+        #   每日模式（INST_MOM_DAILY_SCREENING=true）：每個交易日進場
         # ================================================================
-        if is_weekday and now.weekday() == 0 and now.hour == 9 and now.minute < 5:
+        entry_cond = (
+            is_weekday and now.hour == 9 and now.minute < 5
+            and (self.daily_screening or now.weekday() == 0)
+        )
+        if entry_cond:
             candidates = self.state.get("candidates", [])
             last_entry = self.state.get("last_entry_date")
             positions = self.state.get("positions", {})

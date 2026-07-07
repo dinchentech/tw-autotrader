@@ -50,6 +50,7 @@ INST_MOM_MIN_VOLUME=2000        # 最小近 5 日平均成交量（張）
 INST_MOM_BUY_RATIO=0.03         # 投信+外資買超佔總成交量門檻（3%）
 INST_MOM_LOOKBACK=20            # 創新高天數
 INST_MOM_TOP_N=3                # 持有標的數量
+INST_MOM_DAILY_SCREENING=false  # true=每日篩選進場, false=每週五篩選週一進場
 INST_MOM_STOP_LOSS=0.10         # 硬性停損 -10%
 INST_MOM_TRAILING_PERIOD=10     # 移動停利 MA10
 INST_MOM_EXCLUDE_ETF=true       # 排除 ETF

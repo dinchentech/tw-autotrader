@@ -165,17 +165,17 @@
     <div class="page-hero">
       <div class="badge">Group 2 · 獨立資金池</div>
       <h1>📈 法人抬轎動能策略</h1>
-      <p>全市場每週動態選股 · 順勢跟隨法人籌碼</p>
+      <p>全市場動態選股 · 順勢跟隨法人籌碼<br><span style="font-size:.82rem;color:rgba(255,255,255,.2);">篩選頻率：預設每週（週五→週一），可切換每日</span></p>
       <div class="flow-summary">
-        <span class="seg">週五篩選</span>
+        <span class="seg">盤後篩選</span>
         <span class="arr">→</span>
         <span class="seg">排序取 N</span>
         <span class="arr">→</span>
-        <span class="seg">週一進場</span>
+        <span class="seg">隔日進場</span>
         <span class="arr">→</span>
         <span class="seg">每日監控</span>
         <span class="arr">→</span>
-        <span class="seg">下週重選</span>
+        <span class="seg">重新篩選</span>
       </div>
       <div class="arrow-hint">▼ 下一步</div>
     </div>
@@ -218,7 +218,7 @@
     <div class="step-page">
       <div class="icon-big">📡</div>
       <div class="step-num">STEP 1 / 5</div>
-      <h2>週五 13:31 — 盤後篩選</h2>
+      <h2>盤後 13:31 — 篩選候選股<br><span style="font-size:.82rem;color:rgba(255,255,255,.15);">預設週五（INST_MOM_DAILY_SCREENING=true 則每日）</span></h2>
       <div class="desc">
         從全市場 <strong>~900 檔</strong> 上市普通股逐一檢查四大條件，
         只保留 <strong>全部符合</strong> 的標的進下一步。
@@ -309,17 +309,18 @@
     <div class="step-page">
       <div class="icon-big">🔄</div>
       <div class="step-num">STEP 5 / 5</div>
-      <h2>每週循環</h2>
+      <h2>循環週期</h2>
       <div class="desc">
-        一個完整的策略循環：週五選股 → 週一進場 → 每日監控。
+        篩選頻率由 <code>INST_MOM_DAILY_SCREENING</code> 控制：<br>
+        <strong>每週模式</strong>（預設）：週五選股 → 週一進場<br>
+        <strong>每日模式</strong>：每個交易日盤後篩選 → 隔日開盤進場<br>
         持股週期通常 <strong>1 ~ 4 週</strong>，動態汰弱留強。
-        從不固定持有任何標的，完全依法人籌碼流向決定。
       </div>
       <div class="detail-card">
         <dt>📌 時程表</dt>
         <dd>
-          <div class="item"><span class="key">週五 13:31</span><span class="val">盤後篩選</span></div>
-          <div class="item"><span class="key">週一 09:00</span><span class="val">開盤進場</span></div>
+          <div class="item"><span class="key">篩選日 13:31</span><span class="val">每週五（預設）或每個交易日</span></div>
+          <div class="item"><span class="key">進場日 09:00</span><span class="val">次週一（預設）或隔日</span></div>
           <div class="item"><span class="key">每日盤中</span><span class="val">三層監控</span></div>
           <div class="item"><span class="key">持股週期</span><span class="val">1 ~ 4 週</span></div>
         </dd>
@@ -334,6 +335,7 @@
       <table>
         <tr><td>持有標的數 (top_n)</td><td>2 檔</td></tr>
         <tr><td>起始資金 (INST_MOM_CAPITAL)</td><td>NT$500,000</td></tr>
+        <tr><td>篩選頻率 (INST_MOM_DAILY_SCREENING)</td><td>false=每週（預設）／ true=每日</td></tr>
         <tr><td>法人買超門檻</td><td>&gt; 3%</td></tr>
         <tr><td>最低流動性</td><td>&gt; 2,000 張</td></tr>
         <tr><td>硬性停損</td><td>-7%</td></tr>
@@ -348,11 +350,11 @@
       <div class="cycle-viz">
         <div class="node"><span class="icon">🐟</span><span class="label">魚過濾</span></div>
         <span class="arr">→</span>
-        <div class="node"><span class="icon">📡</span><span class="label">週五篩選</span></div>
+        <div class="node"><span class="icon">📡</span><span class="label">篩選</span></div>
         <span class="arr">→</span>
         <div class="node"><span class="icon">🏆</span><span class="label">排序取 N</span></div>
         <span class="arr">→</span>
-        <div class="node"><span class="icon">📥</span><span class="label">週一進場</span></div>
+        <div class="node"><span class="icon">📥</span><span class="label">隔日進場</span></div>
         <span class="arr">→</span>
         <div class="node"><span class="icon">🛡️</span><span class="label">每日監控</span></div>
         <span class="arr">→</span>
