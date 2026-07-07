@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>K線型態說明 — 法人動能魚過濾</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
+    background: #0d0f15;
+    color: #e8eaed;
+    padding: 48px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .container { max-width: 960px; width: 100%; }
+
+  h1 {
+    font-size: 2rem; font-weight: 700; margin-bottom: 8px;
+    text-align: center;
+  }
+  .subtitle {
+    text-align: center; color: rgba(255,255,255,.35); font-size: 1.05rem;
+    margin-bottom: 48px; line-height: 1.6;
+  }
+  .subtitle strong { color: rgba(255,255,255,.6); }
+
+  /* ── K線基本結構 ── */
+  .anatomy {
+    background: rgba(255,255,255,.025);
+    border: 1px solid rgba(255,255,255,.06);
+    border-radius: 16px;
+    padding: 32px 28px;
+    margin-bottom: 40px;
+  }
+  .anatomy h2 {
+    font-size: 1.3rem; font-weight: 600; margin-bottom: 24px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .anatomy .candle-pair {
+    display: flex; gap: 32px; justify-content: center;
+    flex-wrap: wrap;
+  }
+  .anatomy .candle-pair .col {
+    flex: 1; min-width: 240px; max-width: 340px;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .anatomy .candle-pair .col svg { width: 100%; height: auto; }
+  .anatomy .candle-pair .col .label {
+    font-size: .95rem; font-weight: 600; margin-top: 10px;
+  }
+  .anatomy .candle-pair .col .label.red { color: #dc3c3c; }
+  .anatomy .candle-pair .col .label.green { color: #2e9e5e; }
+  .anatomy .legends {
+    display: flex; gap: 24px; justify-content: center;
+    margin-top: 24px; padding-top: 20px;
+    border-top: 1px solid rgba(255,255,255,.04);
+    flex-wrap: wrap;
+  }
+  .anatomy .legends .item {
+    font-size: .9rem; color: rgba(255,255,255,.4);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .anatomy .legends .item .dot {
+    width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0;
+  }
+  .anatomy .legends .item .dot.shadow { background: rgba(255,255,255,.15); width: 3px; height: 18px; border-radius: 1px; }
+  .anatomy .legends .item strong { color: rgba(255,255,255,.65); }
+
+  /* ── 型態卡片網格 ── */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 24px;
+  }
+  .card {
+    background: rgba(255,255,255,.03);
+    border: 1px solid rgba(255,255,255,.06);
+    border-radius: 16px;
+    padding: 28px 24px 24px;
+    transition: border-color .2s;
+  }
+  .card:hover { border-color: rgba(255,255,255,.12); }
+
+  .card .name-cn {
+    font-size: 1.5rem; font-weight: 700; margin-bottom: 2px;
+  }
+  .card .name-jp {
+    font-size: 1rem; color: rgba(255,255,255,.25); margin-bottom: 4px;
+  }
+  .card .name-en {
+    font-size: .85rem; color: rgba(255,255,255,.15); margin-bottom: 16px;
+    font-style: italic;
+  }
+
+  .card .candle-wrap {
+    display: flex; justify-content: center; align-items: center;
+    margin-bottom: 16px; height: 160px;
+  }
+  .card .candle-wrap svg { width: 100%; max-width: 180px; height: 160px; }
+
+  .card .meaning {
+    font-size: .95rem; line-height: 1.7;
+    color: rgba(255,255,255,.55);
+    border-top: 1px solid rgba(255,255,255,.05);
+    padding-top: 14px;
+  }
+  .card .meaning strong { color: rgba(255,255,255,.75); }
+  .card .fish-note {
+    margin-top: 10px; font-size: .85rem;
+    padding: 8px 12px; border-radius: 8px;
+    background: rgba(192,57,43,.08);
+    color: rgba(255,255,255,.45);
+  }
+  .card .fish-note strong { color: #c0392b; }
+
+  @media (max-width: 640px) {
+    body { padding: 24px 16px; }
+    .grid { grid-template-columns: 1fr; }
+    .anatomy { padding: 20px 16px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <h1>📊 K線型態速查</h1>
+  <p class="subtitle">
+    法人動能 · 魚過濾中 <strong>K線型態</strong>（滿分 2）評分依據<br>
+    判讀重點：<strong>下影線</strong> 代表低檔有買盤承接，是法人默默吃貨的常見痕跡
+  </p>
+
+  <!-- ═══ K線基本結構 ═══ -->
+  <div class="anatomy">
+    <h2>🔬 K線基本結構</h2>
+
+    <div class="candle-pair">
+      <!-- 紅K線（漲） -->
+      <div class="col">
+        <svg viewBox="0 0 240 200">
+          <!-- 上影線 -->
+          <line x1="80" y1="6" x2="80" y2="40" stroke="rgba(255,255,255,.15)" stroke-width="1.5"/>
+          <line x1="80" y1="6" x2="80" y2="0" stroke="rgba(255,255,255,.35)" stroke-width="1.5" stroke-dasharray="3,3"/>
+          <!-- 實體 -->
+          <rect x="44" y="40" width="72" height="60" rx="3" fill="#dc3c3c" opacity=".8"/>
+          <!-- 下影線 -->
+          <line x1="80" y1="100" x2="80" y2="135" stroke="rgba(255,255,255,.15)" stroke-width="1.5"/>
+          <line x1="80" y1="135" x2="80" y2="145" stroke="rgba(255,255,255,.35)" stroke-width="1.5" stroke-dasharray="3,3"/>
+          <!-- 標籤（延箭頭線從右側拉出） -->
+          <text x="140" y="8" fill="rgba(255,255,255,.3)" font-size="11">最高價</text>
+          <line x1="116" y1="6" x2="138" y2="6" stroke="rgba(255,255,255,.12)" stroke-width="1"/>
+          <text x="140" y="48" fill="rgba(255,255,255,.3)" font-size="11">收盤價</text>
+          <line x1="116" y1="45" x2="138" y2="45" stroke="rgba(255,255,255,.12)" stroke-width="1"/>
+          <text x="140" y="90" fill="rgba(255,255,255,.3)" font-size="11">開盤價</text>
+          <line x1="116" y1="85" x2="138" y2="85" stroke="rgba(255,255,255,.12)" stroke-width="1"/>
+          <text x="140" y="144" fill="rgba(255,255,255,.3)" font-size="11">最低價</text>
+          <line x1="116" y1="140" x2="138" y2="140" stroke="rgba(255,255,255,.12)" stroke-width="1"/>
+          <!-- 上影線／下影線說明 -->
+          <text x="140" y="26" fill="rgba(255,255,255,.12)" font-size="10" font-style="italic">↑ 上影線</text>
+          <text x="140" y="120" fill="rgba(255,255,255,.12)" font-size="10" font-style="italic">↓ 下影線</text>
+          <!-- 實體箭括 -->
+          <text x="140" y="67" fill="rgba(255,255,255,.15)" font-size="10" font-style="italic">實 體</text>
+        </svg>
+        <div class="label red">🔴 紅 K 線（陽線 · 漲）</div>
+        <div style="font-size:.82rem; color:rgba(255,255,255,.2); margin-top:4px;">收盤價 &gt; 開盤價</div>
+      </div>
+
+      <!-- 綠K線（跌） -->
+      <div class="col">
+        <svg viewBox="0 0 240 200">
+          <!-- 上影線 -->
+          <line x1="80" y1="6" x2="80" y2="40" stroke="rgba(255,255,255,.15)" stroke-width="1.5"/>
+          <line x1="80" y1="6" x2="80" y2="0" stroke="rgba(255,255,255,.35)" stroke-width="1.5" stroke-dasharray="3,3"/>
+          <!-- 實體 -->
+          <rect x="44" y="40" width="72" height="60" rx="3" fill="#2e9e5e" opacity=".8"/>
+          <!-- 下影線 -->
+          <line x1="80" y1="100" x2="80" y2="135" stroke="rgba(255,255,255,.15)" stroke-width="1.5"/>
+          <line x1="80" y1="135" x2="80" y2="145" stroke="rgba(255,255,255,.35)" stroke-width="1.5" stroke-dasharray="3,3"/>
+          <!-- 標籤 -->
+          <text x="140" y="8" fill="rgba(255,255,255,.3)" font-size="11">最高價</text>
+          <line x1="116" y1="6" x2="138" y2="6" stroke="rgba(255,255,255,.12)" stroke-width="1"/>
+          <text x="140" y="48" fill="rgba(255,255,255,.3)" font-size="11">開盤價</text>
+          <line x1="116" y1="45" x2="138" y2="45" stroke="rgba(255,255,255,.12)" stroke-width="1"/>
+          <text x="140" y="90" fill="rgba(255,255,255,.3)" font-size="11">收盤價</text>
+          <line x1="116" y1="85" x2="138" y2="85" stroke="rgba(255,255,255,.12)" stroke-width="1"/>
+          <text x="140" y="144" fill="rgba(255,255,255,.3)" font-size="11">最低價</text>
+          <line x1="116" y1="140" x2="138" y2="140" stroke="rgba(255,255,255,.12)" stroke-width="1"/>
+          <text x="140" y="26" fill="rgba(255,255,255,.12)" font-size="10" font-style="italic">↑ 上影線</text>
+          <text x="140" y="120" fill="rgba(255,255,255,.12)" font-size="10" font-style="italic">↓ 下影線</text>
+          <text x="140" y="67" fill="rgba(255,255,255,.15)" font-size="10" font-style="italic">實 體</text>
+        </svg>
+        <div class="label green">🟢 綠 K 線（陰線 · 跌）</div>
+        <div style="font-size:.82rem; color:rgba(255,255,255,.2); margin-top:4px;">收盤價 &lt; 開盤價</div>
+      </div>
+    </div>
+
+    <div class="legends">
+      <div class="item">
+        <span style="display:inline-block; width:14px; height:10px; background:#dc3c3c; border-radius:2px; opacity:.7;"></span>
+        <strong>紅 K</strong>：收盤價 &gt; 開盤價（漲）
+      </div>
+      <div class="item">
+        <span style="display:inline-block; width:14px; height:10px; background:#2e9e5e; border-radius:2px; opacity:.7;"></span>
+        <strong>綠 K</strong>：收盤價 &lt; 開盤價（跌）
+      </div>
+      <div class="item">
+        <span style="display:inline-block; width:3px; height:16px; background:rgba(255,255,255,.2); border-radius:1px;"></span>
+        <strong>上影線</strong>：最高價～實體頂端（賣壓區）
+      </div>
+      <div class="item">
+        <span style="display:inline-block; width:3px; height:16px; background:rgba(255,255,255,.2); border-radius:1px;"></span>
+        <strong>下影線</strong>：最低價～實體底端（買盤支撐區）
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ 說明分類 ═══ -->
+  <div style="text-align:center; margin-bottom:24px;">
+    <span style="display:inline-block; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.06); border-radius:8px; padding:6px 16px; font-size:.85rem; color:rgba(255,255,255,.3);">
+      分類依據：影線位置 · 依量化通 QuantPass 命名
+    </span>
+  </div>
+
+  <!-- ═══ 型態卡片網格 ═══ -->
+  <div class="grid">
+
+    <!-- 長下影線 -->
+    <div class="card">
+      <div class="name-cn">🔴 長下影線</div>
+      <div class="name-jp">長い下髭</div>
+      <div class="name-en">Long Lower Shadow</div>
+      <div class="candle-wrap">
+        <svg viewBox="0 0 120 160">
+          <line x1="60" y1="5" x2="60" y2="40" stroke="rgba(255,255,255,.2)" stroke-width="1.5"/>
+          <rect x="38" y="40" width="44" height="30" rx="2" fill="#dc3c3c" opacity=".7"/>
+          <line x1="60" y1="70" x2="60" y2="155" stroke="rgba(255,255,255,.2)" stroke-width="1.5"/>
+        </svg>
+      </div>
+      <div class="meaning">
+        實體在上半部、<strong>下影線極長</strong>（至少實體的 2 倍）。<br>
+        開盤後被殺低，但 <strong>強力買盤把價格拉回</strong>，收在近高。
+      </div>
+      <div class="fish-note">
+        🐟 魚過濾中：<strong>+1~2 分</strong> — 低檔出現長下影線 = 法人承接的經典訊號
+      </div>
+    </div>
+
+    <!-- 鎚子（合併鎚子線＋上吊線） -->
+    <div class="card">
+      <div class="name-cn">🟢 鎚子</div>
+      <div class="name-jp">ハンマー</div>
+      <div class="name-en">Hammer</div>
+      <div class="candle-wrap">
+        <svg viewBox="0 0 120 160">
+          <rect x="38" y="10" width="44" height="20" rx="2" fill="#2e9e5e" opacity=".7"/>
+          <line x1="60" y1="30" x2="60" y2="155" stroke="rgba(255,255,255,.2)" stroke-width="1.5"/>
+        </svg>
+      </div>
+      <div class="meaning">
+        實體很小（接近十字）、位於頂端、<strong>下影線極長</strong>，無上影線。<br>
+        <strong>底部出現</strong> = 賣壓衰竭，買方反攻（看多反轉）<br>
+        <strong>頂部出現</strong> = 看似強勢，實則主力正在出貨（看空反轉）
+      </div>
+      <div class="fish-note">
+        🐟 魚過濾中：<strong>底部 +2 分</strong> · 頂部不加分 — 同根 K 線，位置決定多空
+      </div>
+    </div>
+
+    <!-- 十字線 -->
+    <div class="card">
+      <div class="name-cn">⚪ 十字線</div>
+      <div class="name-jp">十字足 / ドージ</div>
+      <div class="name-en">Doji</div>
+      <div class="candle-wrap">
+        <svg viewBox="0 0 120 160">
+          <line x1="60" y1="10" x2="60" y2="70" stroke="rgba(255,255,255,.2)" stroke-width="1.5"/>
+          <line x1="38" y1="42" x2="82" y2="42" stroke="rgba(255,255,255,.25)" stroke-width="1.5"/>
+          <line x1="60" y1="70" x2="60" y2="150" stroke="rgba(255,255,255,.2)" stroke-width="1.5"/>
+        </svg>
+      </div>
+      <div class="meaning">
+        <strong>開盤價 = 收盤價</strong>（或極接近），實體幾乎不存在。<br>
+        多空勢均力敵，市場 <strong>不確定性高</strong>，可能醞釀反轉。
+      </div>
+      <div class="fish-note">
+        🐟 魚過濾中：<strong>+0.5~1 分</strong> — 需搭配低檔位置＋量能放大才加分
+      </div>
+    </div>
+
+    <!-- 倒鎚（原墓碑線） -->
+    <div class="card">
+      <div class="name-cn">🔴 倒鎚</div>
+      <div class="name-jp">逆ハンマー</div>
+      <div class="name-en">Inverted Hammer</div>
+      <div class="candle-wrap">
+        <svg viewBox="0 0 120 160">
+          <line x1="60" y1="8" x2="60" y2="120" stroke="rgba(255,255,255,.2)" stroke-width="1.5"/>
+          <rect x="38" y="120" width="44" height="24" rx="2" fill="#dc3c3c" opacity=".7"/>
+        </svg>
+      </div>
+      <div class="meaning">
+        實體很小位於底部、<strong>上影線極長</strong>，無下影線。<br>
+        開盤後買盤一度拉高，但被 <strong>賣壓打回</strong>，收在近低。<br>
+        頂部出現為 <strong>反轉向下</strong> 訊號。
+      </div>
+      <div class="fish-note">
+        🐟 魚過濾中：<strong>不加分</strong> — 上影線代表賣壓，不符合法人低接吃貨特徵
+      </div>
+    </div>
+
+    <!-- 紡錘 -->
+    <div class="card">
+      <div class="name-cn">🔴 紡錘</div>
+      <div class="name-jp">寄引線 / スピニングトップ</div>
+      <div class="name-en">Spinning Top</div>
+      <div class="candle-wrap">
+        <svg viewBox="0 0 120 160">
+          <line x1="60" y1="12" x2="60" y2="55" stroke="rgba(255,255,255,.2)" stroke-width="1.5"/>
+          <rect x="38" y="55" width="44" height="28" rx="2" fill="#dc3c3c" opacity=".7"/>
+          <line x1="60" y1="83" x2="60" y2="148" stroke="rgba(255,255,255,.2)" stroke-width="1.5"/>
+        </svg>
+      </div>
+      <div class="meaning">
+        實體小、<strong>上下影線長度相當</strong>（可為紅 K 或綠 K）。<br>
+        多空正在 <strong>激烈拉鋸</strong>，沒有明顯勝負，市場在找方向。
+      </div>
+      <div class="fish-note">
+        🐟 魚過濾中：<strong>+0~1 分</strong> — 單純紡錘中性，但低檔 + 量異常放大可視為整理末端
+      </div>
+    </div>
+
+  </div>
+
+  <div style="margin-top:48px; padding:24px; border-radius:12px; background:rgba(255,255,255,.02); border:1px solid rgba(255,255,255,.05); text-align:center; font-size:.9rem; color:rgba(255,255,255,.3);">
+    🐟 魚過濾 K線型態最高 2 分：長下影線／底部鎚子給滿分 2 分，十字線／紡錘給 0.5~1 分，倒鎚／頂部鎚子 0 分
+  </div>
+</div>
+</body>
+</html>
