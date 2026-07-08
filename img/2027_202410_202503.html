@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2027 大成鋼 走勢圖 (2024/10 - 2025/03)</title>
+<script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #1a1a2e; font-family: -apple-system, 'Noto Sans TC', sans-serif; padding: 20px; }
+.container { max-width: 1100px; margin: 0 auto; background: #16213e; border-radius: 16px; padding: 24px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+h1 { color: #e0e0e0; font-size: 22px; margin-bottom: 4px; }
+.sub { color: #8899aa; font-size: 13px; margin-bottom: 20px; }
+#chart { height: 520px; }
+.legend { display: flex; gap: 20px; margin-top: 16px; flex-wrap: wrap; }
+.marker { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 6px 14px; border-radius: 8px; }
+.marker-buy { background: rgba(38, 166, 154, 0.2); color: #26a69a; border: 1px solid #26a69a; }
+.marker-sell { background: rgba(239, 83, 80, 0.2); color: #ef5350; border: 1px solid #ef5350; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.dot-buy { background: #26a69a; }
+.dot-sell { background: #ef5350; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>2027 大成鋼 法人動能策略</h1>
+  <div class="sub">📅 2024/10 ~ 2025/03 ｜ 🟢 買入 1/15 @ 30.99 ｜ 🔴 賣出 3/11 @ 47.39</div>
+  <div id="chart"></div>
+  <div class="legend">
+    <div class="marker marker-buy"><span class="dot dot-buy"></span> 法人動能買入 2025/1/15 ($30.99)</div>
+    <div class="marker marker-sell"><span class="dot dot-sell"></span> 法人動能賣出 2025/3/11 ($47.39)</div>
+  </div>
+</div>
+<script>
+const data = [{"time": 1727712000, "open": 33.41, "high": 34.14, "low": 33.36, "close": 34.14}, {"time": 1727971200, "open": 33.85, "high": 34.72, "low": 33.8, "close": 34.43}, {"time": 1728230400, "open": 34.43, "high": 34.52, "low": 33.9, "close": 34.52}, {"time": 1728316800, "open": 34.33, "high": 34.96, "low": 33.51, "close": 33.51}, {"time": 1728403200, "open": 33.56, "high": 33.65, "low": 32.88, "close": 32.98}, {"time": 1728576000, "open": 32.98, "high": 33.22, "low": 32.01, "close": 32.11}, {"time": 1728835200, "open": 32.15, "high": 32.59, "low": 32.15, "close": 32.59}, {"time": 1728921600, "open": 32.59, "high": 32.59, "low": 32.01, "close": 32.06}, {"time": 1729008000, "open": 32.11, "high": 32.45, "low": 31.04, "close": 31.04}, {"time": 1729094400, "open": 31.48, "high": 33.03, "low": 31.48, "close": 32.78}, {"time": 1729180800, "open": 32.78, "high": 32.88, "low": 32.4, "close": 32.4}, {"time": 1729440000, "open": 32.78, "high": 32.78, "low": 32.11, "close": 32.11}, {"time": 1729526400, "open": 32.4, "high": 32.4, "low": 31.91, "close": 32.25}, {"time": 1729612800, "open": 32.4, "high": 32.49, "low": 31.96, "close": 32.11}, {"time": 1729699200, "open": 32.11, "high": 32.15, "low": 31.62, "close": 31.62}, {"time": 1729785600, "open": 31.72, "high": 31.86, "low": 31.33, "close": 31.33}, {"time": 1730044800, "open": 31.53, "high": 32.2, "low": 31.33, "close": 31.86}, {"time": 1730131200, "open": 31.82, "high": 32.06, "low": 31.43, "close": 31.72}, {"time": 1730217600, "open": 32.06, "high": 32.06, "low": 31.19, "close": 31.38}, {"time": 1730390400, "open": 31.24, "high": 32.01, "low": 30.95, "close": 31.72}, {"time": 1730649600, "open": 31.72, "high": 31.86, "low": 31.33, "close": 31.48}, {"time": 1730736000, "open": 31.48, "high": 31.96, "low": 31.48, "close": 31.57}, {"time": 1730822400, "open": 31.77, "high": 33.65, "low": 31.72, "close": 33.03}, {"time": 1730908800, "open": 35.1, "high": 36.26, "low": 34.33, "close": 34.33}, {"time": 1730995200, "open": 34.43, "high": 34.52, "low": 33.8, "close": 33.9}, {"time": 1731254400, "open": 34.14, "high": 34.67, "low": 33.85, "close": 34.33}, {"time": 1731340800, "open": 34.04, "high": 34.23, "low": 33.56, "close": 33.56}, {"time": 1731427200, "open": 33.27, "high": 33.27, "low": 32.06, "close": 32.2}, {"time": 1731513600, "open": 32.11, "high": 32.2, "low": 31.48, "close": 31.57}, {"time": 1731600000, "open": 31.48, "high": 32.11, "low": 31.48, "close": 31.48}, {"time": 1731859200, "open": 31.86, "high": 33.65, "low": 31.67, "close": 33.32}, {"time": 1731945600, "open": 32.74, "high": 33.22, "low": 32.35, "close": 32.35}, {"time": 1732032000, "open": 32.35, "high": 32.35, "low": 32.35, "close": 32.35}, {"time": 1732118400, "open": 32.49, "high": 32.64, "low": 31.77, "close": 32.35}, {"time": 1732204800, "open": 32.35, "high": 33.46, "low": 32.15, "close": 33.12}, {"time": 1732464000, "open": 33.7, "high": 33.99, "low": 32.88, "close": 33.46}, {"time": 1732550400, "open": 33.7, "high": 35.59, "low": 33.46, "close": 34.14}, {"time": 1732636800, "open": 35.01, "high": 35.01, "low": 34.04, "close": 34.04}, {"time": 1732723200, "open": 34.04, "high": 34.14, "low": 33.41, "close": 33.46}, {"time": 1732809600, "open": 33.36, "high": 33.75, "low": 33.12, "close": 33.56}, {"time": 1733068800, "open": 33.75, "high": 33.99, "low": 33.12, "close": 33.22}, {"time": 1733155200, "open": 33.22, "high": 33.41, "low": 32.74, "close": 33.12}, {"time": 1733241600, "open": 33.22, "high": 33.41, "low": 32.64, "close": 32.74}, {"time": 1733328000, "open": 32.88, "high": 32.98, "low": 32.3, "close": 32.4}, {"time": 1733414400, "open": 32.4, "high": 32.69, "low": 32.25, "close": 32.45}, {"time": 1733673600, "open": 32.25, "high": 32.64, "low": 31.96, "close": 32.49}, {"time": 1733760000, "open": 32.49, "high": 32.88, "low": 32.15, "close": 32.15}, {"time": 1733846400, "open": 32.35, "high": 32.35, "low": 31.91, "close": 31.91}, {"time": 1733932800, "open": 31.82, "high": 32.2, "low": 31.72, "close": 31.72}, {"time": 1734019200, "open": 31.82, "high": 31.82, "low": 30.99, "close": 31.04}, {"time": 1734278400, "open": 31.24, "high": 31.38, "low": 29.79, "close": 29.79}, {"time": 1734364800, "open": 29.79, "high": 29.88, "low": 29.4, "close": 29.4}, {"time": 1734451200, "open": 29.25, "high": 29.79, "low": 29.01, "close": 29.3}, {"time": 1734537600, "open": 28.92, "high": 29.45, "low": 28.58, "close": 29.21}, {"time": 1734624000, "open": 29.21, "high": 29.5, "low": 28.87, "close": 28.87}, {"time": 1734883200, "open": 29.4, "high": 29.4, "low": 28.77, "close": 28.77}, {"time": 1734969600, "open": 29.01, "high": 29.3, "low": 28.82, "close": 28.92}, {"time": 1735056000, "open": 29.11, "high": 29.16, "low": 28.87, "close": 29.16}, {"time": 1735142400, "open": 29.16, "high": 29.35, "low": 29.11, "close": 29.35}, {"time": 1735228800, "open": 29.35, "high": 29.35, "low": 28.92, "close": 29.01}, {"time": 1735488000, "open": 29.01, "high": 29.5, "low": 28.92, "close": 29.3}, {"time": 1735574400, "open": 29.11, "high": 29.25, "low": 28.92, "close": 29.25}, {"time": 1735747200, "open": 29.21, "high": 29.83, "low": 29.16, "close": 29.4}, {"time": 1735833600, "open": 29.3, "high": 29.59, "low": 28.82, "close": 28.82}, {"time": 1736092800, "open": 29.01, "high": 29.25, "low": 28.63, "close": 29.06}, {"time": 1736179200, "open": 29.21, "high": 29.3, "low": 28.63, "close": 28.87}, {"time": 1736265600, "open": 28.82, "high": 28.82, "low": 27.85, "close": 28.14}, {"time": 1736352000, "open": 28.29, "high": 28.92, "low": 28.24, "close": 28.67}, {"time": 1736438400, "open": 28.67, "high": 29.59, "low": 28.34, "close": 29.3}, {"time": 1736697600, "open": 29.35, "high": 30.41, "low": 29.16, "close": 29.4}, {"time": 1736784000, "open": 29.79, "high": 30.7, "low": 29.74, "close": 30.66}, {"time": 1736870400, "open": 30.75, "high": 31.72, "low": 30.66, "close": 30.99}, {"time": 1736956800, "open": 31.09, "high": 31.86, "low": 30.95, "close": 31.72}, {"time": 1737043200, "open": 31.53, "high": 32.4, "low": 31.09, "close": 31.43}, {"time": 1737302400, "open": 31.82, "high": 32.25, "low": 31.33, "close": 32.15}, {"time": 1737388800, "open": 31.86, "high": 33.9, "low": 31.86, "close": 32.78}, {"time": 1737475200, "open": 33.27, "high": 33.56, "low": 32.69, "close": 32.93}, {"time": 1738512000, "open": 33.36, "high": 36.17, "low": 33.27, "close": 35.93}, {"time": 1738598400, "open": 35.01, "high": 37.72, "low": 34.72, "close": 37.18}, {"time": 1738684800, "open": 37.23, "high": 37.52, "low": 36.51, "close": 36.85}, {"time": 1738771200, "open": 36.75, "high": 37.18, "low": 35.88, "close": 36.99}, {"time": 1738857600, "open": 36.99, "high": 37.33, "low": 36.51, "close": 36.85}, {"time": 1739116800, "open": 38.88, "high": 40.52, "low": 38.88, "close": 40.52}, {"time": 1739203200, "open": 41.15, "high": 44.29, "low": 40.86, "close": 42.07}, {"time": 1739289600, "open": 42.94, "high": 43.32, "low": 40.47, "close": 40.62}, {"time": 1739376000, "open": 41.39, "high": 43.42, "low": 40.81, "close": 42.65}, {"time": 1739462400, "open": 42.07, "high": 43.32, "low": 41.92, "close": 42.07}, {"time": 1739721600, "open": 42.26, "high": 42.5, "low": 41.25, "close": 41.68}, {"time": 1739808000, "open": 41.39, "high": 42.36, "low": 41.0, "close": 41.34}, {"time": 1739894400, "open": 41.78, "high": 43.23, "low": 41.34, "close": 42.74}, {"time": 1739980800, "open": 44.05, "high": 45.45, "low": 41.58, "close": 41.83}, {"time": 1740067200, "open": 41.83, "high": 42.74, "low": 41.39, "close": 42.74}, {"time": 1740326400, "open": 42.89, "high": 43.71, "low": 42.65, "close": 43.03}, {"time": 1740412800, "open": 43.23, "high": 47.1, "low": 42.99, "close": 46.66}, {"time": 1740499200, "open": 47.19, "high": 47.63, "low": 45.6, "close": 45.84}, {"time": 1740585600, "open": 45.69, "high": 47.77, "low": 45.16, "close": 47.24}, {"time": 1740931200, "open": 46.42, "high": 47.58, "low": 45.07, "close": 47.0}, {"time": 1741017600, "open": 46.47, "high": 46.9, "low": 45.5, "close": 46.18}, {"time": 1741104000, "open": 46.47, "high": 48.06, "low": 45.79, "close": 47.87}, {"time": 1741190400, "open": 47.63, "high": 49.22, "low": 47.39, "close": 49.03}, {"time": 1741276800, "open": 49.03, "high": 50.48, "low": 48.84, "close": 49.03}, {"time": 1741536000, "open": 49.32, "high": 49.51, "low": 47.72, "close": 48.11}, {"time": 1741622400, "open": 47.48, "high": 47.87, "low": 46.76, "close": 47.39}, {"time": 1741708800, "open": 48.26, "high": 49.13, "low": 45.74, "close": 46.66}, {"time": 1741795200, "open": 46.76, "high": 48.21, "low": 46.42, "close": 47.87}, {"time": 1741881600, "open": 48.01, "high": 50.09, "low": 47.97, "close": 49.42}, {"time": 1742140800, "open": 49.71, "high": 50.0, "low": 48.45, "close": 48.84}, {"time": 1742227200, "open": 49.03, "high": 49.8, "low": 48.11, "close": 49.8}, {"time": 1742313600, "open": 49.71, "high": 51.25, "low": 49.61, "close": 50.58}, {"time": 1742400000, "open": 50.77, "high": 51.25, "low": 50.09, "close": 51.25}, {"time": 1742486400, "open": 51.16, "high": 51.16, "low": 48.74, "close": 49.13}, {"time": 1742745600, "open": 49.22, "high": 50.29, "low": 48.74, "close": 49.61}, {"time": 1742832000, "open": 49.51, "high": 49.51, "low": 47.24, "close": 47.68}, {"time": 1742918400, "open": 48.21, "high": 48.74, "low": 46.66, "close": 48.35}, {"time": 1743004800, "open": 48.35, "high": 50.0, "low": 48.01, "close": 49.32}, {"time": 1743091200, "open": 49.13, "high": 49.71, "low": 48.45, "close": 49.22}, {"time": 1743350400, "open": 48.06, "high": 49.03, "low": 47.29, "close": 47.63}];
+const chart = LightweightCharts.createChart(document.getElementById('chart'), {
+  layout: { textColor: '#8899aa', background: { color: '#16213e' } },
+  grid: { vertLines: { color: '#1a2a4a' }, horzLines: { color: '#1a2a4a' } },
+  crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+  timeScale: { timeVisible: true, borderColor: '#2a3a5a' },
+  rightPriceScale: { borderColor: '#2a3a5a', scaleMargins: { top: 0.1, bottom: 0.25 } }
+});
+const candlestickSeries = chart.addCandlestickSeries({
+  upColor: '#26a69a', downColor: '#ef5350',
+  borderUpColor: '#26a69a', borderDownColor: '#ef5350',
+  wickUpColor: '#26a69a', wickDownColor: '#ef5350'
+});
+candlestickSeries.setData(data);
+
+// Buy marker
+candlestickSeries.createPriceLine({
+  price: 30.99,
+  color: '#26a69a',
+  lineWidth: 1,
+  lineStyle: LightweightCharts.LineStyle.Dashed,
+  axisLabelVisible: true,
+  title: '買入 1/15'
+});
+
+// Sell marker
+candlestickSeries.createPriceLine({
+  price: 47.39,
+  color: '#ef5350',
+  lineWidth: 1,
+  lineStyle: LightweightCharts.LineStyle.Dashed,
+  axisLabelVisible: true,
+  title: '賣出 3/11'
+});
+
+// Markers on candles
+candlestickSeries.setMarkers([
+  {
+    time: data[71].time,
+    position: 'belowBar',
+    color: '#26a69a',
+    shape: 'arrowUp',
+    text: '法人動能買入 1/15 @ 30.99'
+  },
+  {
+    time: data[102].time,
+    position: 'aboveBar',
+    color: '#ef5350',
+    shape: 'arrowDown',
+    text: '法人動能賣出 3/11 @ 47.39'
+  }
+]);
+
+chart.timeScale().fitContent();
+</script>
+</body>
+</html>
