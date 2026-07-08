@@ -67,8 +67,8 @@ gcloud compute ssh tw-autotrader --zone=asia-east1-b \
 🏦 【玉山證券】使用玉山 API 進行行情 + 交易
 🚀 啟動 TW AutoTrader 多股多策略分流系統
 ✅ Telegram 通知已發送
-✅ 0050 初始化成功 -> [BOLLINGER]
-✅ 2330 初始化成功 -> [MA_CROSS]
+✅ 0xx0 初始化成功 -> [BOLLINGER]
+✅ 2xx0 初始化成功 -> [MA_CROSS]
 ...
 ```
 

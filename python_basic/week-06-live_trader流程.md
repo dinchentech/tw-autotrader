@@ -31,10 +31,10 @@
 ### 2. 多股多策略分流
 一次監控多檔股票，每檔搭配不同策略：
 ```
-0050 → BOLLINGER（逆勢）
-2330 → MA_CROSS（順勢）
-2881 → VWAP（逆勢）
-2382 → BREAKOUT（順勢）
+0xx0 → BOLLINGER（逆勢）
+2xx0 → MA_CROSS（順勢）
+2xx1 → VWAP（逆勢）
+2xx2 → BREAKOUT（順勢）
 ```
 投資組合從 `.env` 的 `PORTFOLIO` 變數讀取。
 

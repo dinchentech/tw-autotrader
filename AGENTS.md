@@ -14,7 +14,7 @@ cp .env.example.txt .env  # fill in your API keys
 python backtest.py --strategy ma_cross --fast_period 5 --slow_period 30
 
 # Backtest (FinMind)
-python backtest_finmind.py          # defaults: 2330, 2023-01-01
+python backtest_finmind.py          # defaults: 2xx0, 2023-01-01
 
 # Live trading — multi-symbol (recommended entrypoint)
 python live_trader_multi.py         # reads PORTFOLIO from .env
