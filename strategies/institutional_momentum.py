@@ -54,7 +54,7 @@ class InstitutionalMomentumStrategy:
         self.stop_loss = float(os.getenv("INST_MOM_STOP_LOSS", "0.10"))         # -10%
         self.trailing_period = int(os.getenv("INST_MOM_TRAILING_PERIOD", "10")) # MA10
         self.exclude_etf = os.getenv("INST_MOM_EXCLUDE_ETF", "true").lower() == "true"  # 預設排除 ETF
-        self.daily_screening = os.getenv("INST_MOM_DAILY_SCREENING", "false").lower() == "true"
+        self.daily_screening = os.getenv("INST_MOM_DAILY_SCREENING", "false").lower() == "true"  # 每日篩選
 
         # 內部狀態
         self.state = self._load_state()
@@ -557,6 +557,7 @@ class InstitutionalMomentumStrategy:
         )
         if screen_cond and last_screen != today_str:
             freq = "每日" if self.daily_screening else "週"
+            entry_hint = "明日開盤自動進場" if self.daily_screening else "週一開盤自動進場"
             print(f"📡 [INST_MOM] {freq}盤後篩選法人抬轎標的...")
             candidates = self.get_candidates()
             self.state["candidates"] = [{"stock_id": s, "score": sc} for s, sc in candidates]
@@ -570,7 +571,7 @@ class InstitutionalMomentumStrategy:
                 send_telegram_message(
                     f"📡 *法人抬轎動能策略* {freq}篩選結果\n"
                     f"候選標的: {names}\n"
-                    f"📅 明日開盤自動進場"
+                    f"📅 {entry_hint}"
                 )
             else:
                 print(f"⚠️ [INST_MOM] 本{freq}無符合標的")
