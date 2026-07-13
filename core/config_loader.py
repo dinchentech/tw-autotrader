@@ -15,13 +15,13 @@ STRATEGY_PARAM_KEYS = {
     "breakout": ["lookback", "atr_period", "atr_threshold"],
     "keep_wait": [],
     # 用戶自訂策略
-    "g1_strategy_1": ["fast_period", "slow_period"],
+    "g1_strategy_1": ["buy_price", "sell_price"],
     "g1_strategy_2": ["rsi_period", "oversold", "overbought"],
     "g2_strategy_1": ["lookback", "threshold"],
     "g2_strategy_2": ["ma_period", "volume_ma_period", "volume_mult"],
 }
 
-# keep_wait DCA 參數名稱（用於 backtest_2024_2025.py 等）
+# keep_wait DCA 參數名稱（用於 simulate_portfolio.py 等）
 KEEP_WAIT_PARAM_KEYS = [
     "initial_buy_pct", "initial_shares", "add_drop_pct", "add_shares", "max_additions",
     "tp_trigger_pct", "tp_sell_ratio", "cooldown_days",
