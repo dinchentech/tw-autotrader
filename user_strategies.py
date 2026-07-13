@@ -18,39 +18,34 @@ import pandas as pd
 
 
 # ==========================================
-# Group 1 備用策略 1 (g1_strategy_1)
+# Group 1 備用策略 1 (g1_strategy_1) — 價格區間策略
 # ==========================================
-def my_custom_ma_cross(df: pd.DataFrame, **kwargs) -> pd.DataFrame:
+def price_band(df: pd.DataFrame, **kwargs) -> pd.DataFrame:
     """
-    Group 1 備用策略 1 - 自訂均線策略
+    Group 1 備用策略 1 - 價格區間低接高賣策略
 
-    預設：簡單均線策略 - 當價格高於 5 日均線時買入，低於時賣出
+    當價格低於買入價時發出買進訊號，高於賣出價時發出賣出訊號。
+    適用於基本面看好、設定固定價格區間來回操作的股票（如 十銓 250↓買/280↑賣）。
 
     Parameters:
     - df: 包含 OHLCV 資料的 DataFrame
     - kwargs: 策略參數
-        - fast_period: 快線週期 (預設 5)
-        - slow_period: 慢線週期 (預設 10)
+        - buy_price: 買進觸發價 (預設 250)，現價 ≤ buy_price 時 signal=1
+        - sell_price: 賣出觸發價 (預設 280)，現價 ≥ sell_price 時 signal=-1
 
     Returns:
     - DataFrame with 'signal' column (1=BUY, -1=SELL, 0=HOLD)
     """
-    fast_period = kwargs.get('fast_period', 5)
-    slow_period = kwargs.get('slow_period', 10)
+    buy_price = kwargs.get('buy_price', 250)
+    sell_price = kwargs.get('sell_price', 280)
 
     signals = pd.Series(0, index=df.index)
 
-    if len(df) >= slow_period:
-        ma_fast = df['close'].rolling(window=fast_period, min_periods=1).mean()
-        ma_slow = df['close'].rolling(window=slow_period, min_periods=1).mean()
+    buy_signal = df['close'] <= buy_price
+    sell_signal = df['close'] >= sell_price
 
-        # 快線穿過慢線向上 = 買進訊號
-        buy_signal = (ma_fast > ma_slow) & (ma_fast.shift(1) <= ma_slow.shift(1))
-        # 快線穿過慢線向下 = 賣出訊號
-        sell_signal = (ma_fast < ma_slow) & (ma_fast.shift(1) >= ma_slow.shift(1))
-
-        signals[buy_signal] = 1
-        signals[sell_signal] = -1
+    signals[buy_signal] = 1
+    signals[sell_signal] = -1
 
     return pd.DataFrame({'signal': signals}, index=df.index)
 
@@ -188,7 +183,7 @@ def my_custom_volume_price(df: pd.DataFrame, **kwargs) -> pd.DataFrame:
 # 左邊是你在 .env 中使用的名稱，右邊是上方定義的函式名稱
 USER_STRATEGY_MAP = {
     # Group 1 備用策略
-    'g1_strategy_1': my_custom_ma_cross,
+    'g1_strategy_1': price_band,
     'g1_strategy_2': my_custom_rsi,
 
     # Group 2 備用策略
