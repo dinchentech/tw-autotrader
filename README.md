@@ -43,7 +43,6 @@ python backtest.py --strategy g1_strategy_1 --symbol 2330
 ### 方案一：每月 NT$20,000 DCA + 逐年機械式檢討（Rule 0–3）
 
 > 每年底根據 Rule 0–3 機械化替換弱勢標的與策略，無主觀判斷。
-> 回測腳本：`python backtest_yearly_review.py`
 
 | 指標 | 數值 |
 |:---|:---:|
@@ -57,7 +56,6 @@ python backtest.py --strategy g1_strategy_1 --symbol 2330
 ### 方案二：NT$500,000 一筆資金 + 逐年人工檢討
 
 > 每年底**手動**檢討各標的表現，汰弱留強、調整策略（用當時可得的公開資訊，不能事後諸葛）。
-> 回測腳本：`python backtest_manual_review.py`
 
 | 年份 | 動作 | 該年報酬 |
 |:---|:---|:---:|
@@ -107,7 +105,7 @@ python backtest.py --strategy g1_strategy_1 --symbol 2330
 | **主觀判斷** | ❌ 機械式 Rule 0–3 | ✅ 人工逐年檢討 | ❌ 全自動 |
 | **2022 熊市** | 優於固定池 | -13.1%（防守型配置） | **-6.1%** |
 
-> ⚠️ **過去績效不代表未來獲利**。逐年檢討腳本：`python backtest_yearly_review.py`（DCA）、`python backtest_manual_review.py`（Lumpsum）。方案三：`STOCK_NO=150 python backtest_inst_momentum.py --start 2022-01-01 --end 2025-12-31 --daily --stop-loss 0.10 --fish-days 90 --fish-score 7.0 --max-dist-from-accum 0.15`。
+> ⚠️ **過去績效不代表未來獲利**。逐年檢討已整合至 `simulate_portfolio.py`。方案三：`STOCK_NO=150 python backtest_inst_momentum.py --start 2022-01-01 --end 2025-12-31 --daily --stop-loss 0.10 --fish-days 90 --fish-score 7.0 --max-dist-from-accum 0.15`。
 
 ### 關於回測數據的嚴格性
 
@@ -192,7 +190,7 @@ cp .env.example .env
 
 # 回測驗證
 python backtest.py --strategy vwap
-python backtest_esun.py --symbol 2330 --strategy vwap
+python backtest_finmind.py --symbol 2330
 
 # 實盤模擬
 python live_trader_multi.py
@@ -224,7 +222,7 @@ tw-autotrader/
 ├── core/                 # 策略引擎 + 風險控管
 ├── data/                 # 資料源（Yahoo / 玉山 / KGI）
 ├── backtest.py           # Yahoo Finance 回測
-├── backtest_esun.py      # 玉山 SDK 回測
+├── backtest_finmind.py   # FinMind 多策略比較
 ├── simulate_portfolio.py # 投資組合模擬引擎
 ├── live_trader_multi.py  # 多股多策略實盤（主力程式）,已加密
 ├── 使用手冊.md            # 完整使用教學
