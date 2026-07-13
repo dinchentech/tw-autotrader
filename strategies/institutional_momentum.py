@@ -426,11 +426,15 @@ class InstitutionalMomentumStrategy:
 
         return df
 
-    def get_candidates(self) -> list:
+    def get_candidates(self) -> tuple:
         """
-        篩選出符合條件的候選股票，依法人買超佔比排序，回傳前 N 名。
-        兩階段篩選：① fish 低吃過濾 → ② 動能進場檢查。
-        回傳格式: [(stock_id, score), ...]
+        篩選出符合條件的候選股票，依法人買超佔比排序。
+
+        Returns:
+            (qualified, near_misses)
+            qualified:    [(stock_id, score), ...] — 通過所有篩選條件的標的
+            near_misses:  [(stock_id, score), ...] — 未完全通過但最高分的前 N 名
+                          （只在 qualified 為空時有值，讓使用者知道篩選有正常執行）
         """
         all_ids = self._get_all_stock_ids()
         check_date = date.today()
@@ -456,6 +460,8 @@ class InstitutionalMomentumStrategy:
             fish_qualified = {sid: None for sid in all_data.keys()}
 
         candidates = []
+        all_evaluated = []
+
         for stock_id, accum_price in fish_qualified.items():
             try:
                 df = all_data[stock_id]
@@ -465,13 +471,19 @@ class InstitutionalMomentumStrategy:
                 single = {stock_id: df}
                 ok, score = _core_check_momentum_entry(
                     single, stock_id, check_date, accum_price=accum_price)
+                all_evaluated.append((stock_id, score))
                 if ok:
                     candidates.append((stock_id, score))
             except Exception:
                 continue
 
         candidates.sort(key=lambda x: x[1], reverse=True)
-        return candidates[:self.top_n]
+        all_evaluated.sort(key=lambda x: x[1], reverse=True)
+
+        if not candidates:
+            return [], all_evaluated[:self.top_n]
+
+        return candidates[:self.top_n], []
 
     # ================================================================
     # 停損/停利訊號
@@ -559,7 +571,7 @@ class InstitutionalMomentumStrategy:
             freq = "每日" if self.daily_screening else "週"
             entry_hint = "明日開盤自動進場" if self.daily_screening else "週一開盤自動進場"
             print(f"📡 [INST_MOM] {freq}盤後篩選法人抬轎標的...")
-            candidates = self.get_candidates()
+            candidates, near_misses = self.get_candidates()
             self.state["candidates"] = [{"stock_id": s, "score": sc} for s, sc in candidates]
             self.state["last_screen_date"] = today_str
             self._save_state()
@@ -572,6 +584,16 @@ class InstitutionalMomentumStrategy:
                     f"📡 *法人抬轎動能策略* {freq}篩選結果\n"
                     f"候選標的: {names}\n"
                     f"📅 {entry_hint}"
+                )
+            elif near_misses:
+                names = ", ".join(f"{s}" for s, sc in near_misses)
+                print(f"⚠️ [INST_MOM] 本{freq}無通過標的，前三列舉: {names}")
+                from utils.telegram import send_telegram_message
+                send_telegram_message(
+                    f"📡 *法人抬轎動能策略* {freq}篩選結果\n"
+                    f"⚠️ 無通過篩選條件標的\n"
+                    f"前三候選: {names}\n"
+                    f"（搜尋引擎正常運作，惟所有標的均未滿足全部進場條件）"
                 )
             else:
                 print(f"⚠️ [INST_MOM] 本{freq}無符合標的")
