@@ -157,6 +157,14 @@ opencode providers login OpenRouter
 ```
 
 接著設定自己：.bashrc 中的FinMind憑證, .env檔中的FinMind key/玉山密碼/TG key, esun_sdk中放上玉山.example,.p12檔
+如果使用者已有使用git別忘了清除~/tw-autotrader下的.git目錄=> rm -rf .git
+再init你自己的.git目錄=>
+```bash
+git init
+git add .
+git commit -m "Your Initial commit"
+```
+若想對git有更多了解請參考: https://ukko.life.nctu.edu.tw/~u0417102/final.html
 
 ============================= 以上完成後就能執行本專案程式 =================================
 
