@@ -99,7 +99,7 @@ wsl -d Ubuntu_New
 
 | 項目 | 說明 |
 |------|------|
-| 📄 玉山 `.p12` 憑證及 config.simulation.ini | 放到 `~/tw-autotrader/esun_sdk/` |
+| 📄 玉山 `.p12` 憑證及 config.simulation.ini(或config.ini) | 放到 `~/tw-autotrader/esun_sdk/` |
 | 📄 玉山 帳號/憑證密碼 | 填入.env |
 | 🔑 自己的 `.env` | 參考 `.env.example.lump(dca)` 填寫 |
 | 🤖 Telegram Bot Token | 自己跟 `@BotFather` 申請 填入 .env |
