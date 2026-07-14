@@ -99,7 +99,7 @@ wsl -d Ubuntu_New
 
 | 項目 | 說明 |
 |------|------|
-| 📄 玉山 `.p12` 憑證 | 放到 `~/tw-autotrader/esun_sdk/` |
+| 📄 玉山 `.p12` 憑證及 config.simulation.ini | 放到 `~/tw-autotrader/esun_sdk/` |
 | 📄 玉山 帳號/憑證密碼 | 填入.env |
 | 🔑 自己的 `.env` | 參考 `.env.example.lump(dca)` 填寫 |
 | 🤖 Telegram Bot Token | 自己跟 `@BotFather` 申請 填入 .env |
@@ -173,3 +173,71 @@ git commit -m "Your Initial commit"
 - `--import` 預設以 **root** 登入，要變回一般使用者需執行 `wsl --set-default-user`
 - `wsl --import` 不支援 `--version 2` 以外的選項（預設就是 WSL 2）
 - WSL 1 的發行版無法透過 `--import` 正確還原
+
+
+## 附錄:Telegram bot/token 申請說明
+
+1. 前置條件
+手機安裝 Telegram 並已註冊帳號
+申請 Bot 全程在 Telegram App 內完成，不需要寫任何程式碼
+2. 找到 @BotFather
+在 Telegram 搜尋欄輸入 @BotFather，找到官方機器人（注意認證標記 ✅ 才是官方的）：
+
+![BotFather 官方帳號應有藍勾勾認證]
+
+3. 建立新 Bot
+對 BotFather 發送指令：
+
+/newbot
+BotFather 會依序問你兩個問題：
+
+步驟	問題	範例回答
+1	機器人顯示名稱（可中文，可換）	TW AutoTrader 通知
+2	機器人username（唯一，只能英文+數字，結尾必須是 bot）	tw_autotrader_notify_bot
+⚠️ username 是全域唯一的，若已被佔用需換一個。
+
+完成後 BotFather 會回傳一段訊息，其中包含：
+
+Done! Congratulations on your new bot.
+
+Use this token to access the HTTP API:
+<你的 Token>
+這行 <你的 Token> 就是你要複製保存的 Bot Token。
+
+格式為：1234567890:ABCdefGHIjklMNOpqrsTUVwxyz
+
+4. 取得你的 Telegram Chat ID
+Bot 只會主動推送訊息，若要讓 Bot 知道把通知發給誰，需要取得你的個人 Chat ID：
+
+方法一：用 @userinfobot
+
+搜尋並對 @userinfobot 發送任意訊息（例如 /start）
+它會回傳你的 chat_id（例如 8384117171）
+方法二：用 API 查（適合已有 Bot Token） 先對你的 Bot 隨便發一則訊息（如 hi），然後用瀏覽器或 curl 執行：
+
+https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates
+在回傳 JSON 中找到 "chat":{"id":<數字>} 即為你的 Chat ID。
+
+5. 填入 tw-autotrader 的 .env
+在 .env 檔案中設定：
+
+TELEGRAM_BOT_TOKEN=<你的 Bot Token>
+TELEGRAM_CHAT_ID=<你的 Chat ID>
+例如：
+
+TELEGRAM_BOT_TOKEN=8459224155:AAFL5OaRHUqnuCJBg_yTiJSmIYPcQ5YwS8M
+TELEGRAM_CHAT_ID=8384117171
+6. 驗證
+啟動程式後，Bot 應立即發送第一條通知到你的 Telegram。若沒收到：
+
+確認 Token 複製完整（含冒號前後兩段）
+確認已先對 Bot 發過至少一則訊息（Telegram Bot 不能主動對沒互動過的用戶發訊息）
+確認 Chat ID 是數字格式，不是 username
+7. 常用 BotFather 指令
+指令	用途
+/mybots	列出你所有的 Bot
+/mybots → 選 Bot → API Token	重新取得/撤銷 Token
+/setuserpic	更換 Bot 頭像
+/setdescription	設定 Bot 介紹文字
+/setcommands	設定斜線指令選單
+/deletebot	刪除 Bot（不可逆）
