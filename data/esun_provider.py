@@ -106,6 +106,7 @@ class EsunProvider:
         self._marketdata = None
         self._trade_sdk = None
         self._logged_in = False
+        self._login_failed = False
 
         # Pre-populate keyring from env vars (for headless/Docker usage)
         self._seed_keyring_from_env()
@@ -164,6 +165,9 @@ class EsunProvider:
         """Login to both market-data and trade SDKs."""
         if self._logged_in:
             return
+        if self._login_failed:
+            return
+
         try:
             self._marketdata = EsunMarketdata(self.config)
             self._marketdata.login()
@@ -174,7 +178,6 @@ class EsunProvider:
                 print(f"   錯誤訊息: {error_msg}")
                 print(f"   程式將在 3 分鐘後自動退出，請避開維護時間再重啟")
 
-                # 發送 Telegram 通知
                 bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
                 chat_id = os.getenv("TELEGRAM_CHAT_ID")
                 if bot_token and chat_id:
@@ -192,14 +195,19 @@ class EsunProvider:
                             json={"chat_id": chat_id, "text": msg, "parse_mode": "Markdown"},
                             timeout=10)
                     except Exception:
-                        pass  # 通知失敗不影響主流程
+                        pass
 
-                # 延遲 3 分鐘後退出
                 time.sleep(180)
                 sys.exit(1)
             else:
-                # 其他 ValueError 直接拋出
-                raise
+                print(f"⚠️ E.Sun marketdata login failed: {e}")
+                self._login_failed = True
+                return
+        except Exception as e:
+            print(f"⚠️ E.Sun marketdata login exception: {e}")
+            self._login_failed = True
+            return
+
         try:
             self._trade_sdk = EsunTrade(self.config)
             self._trade_sdk.login()
@@ -228,8 +236,16 @@ class EsunProvider:
 
     # ── market data interface ────────────────────────────────────
 
+    def _ensure_available(self):
+        """確認 API 可用，登入失敗或尚未登入時回傳 False"""
+        if self._login_failed:
+            return False
+        return True
+
     def get_current_price(self, symbol: str) -> float:
         """即時報價（最後成交價）"""
+        if not self._ensure_available():
+            return 0.0
         self.login()
         try:
             q = self._marketdata.rest_client.stock.intraday.quote(symbol=symbol)
@@ -246,6 +262,8 @@ class EsunProvider:
     def get_historical_range(self, symbol: str, start: str = "2023-01-01",
                               end: str = "") -> pd.DataFrame:
         """歷史日 K 起訖日期版 — 用於回測"""
+        if not self._ensure_available():
+            return pd.DataFrame()
         self.login()
         try:
             resp = self._marketdata.rest_client.stock.historical.candles(
@@ -265,6 +283,8 @@ class EsunProvider:
 
     def get_minute_bars(self, symbol: str, minutes: int = 60) -> pd.DataFrame:
         """盤中分鐘 K (OHLCV) — 用於即時訊號計算"""
+        if not self._ensure_available():
+            return pd.DataFrame()
         self.login()
         try:
             resp = self._marketdata.rest_client.stock.intraday.candles(
