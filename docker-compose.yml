@@ -2,7 +2,7 @@ services:
   autotrader:
     image: tw-autotrader:latest
     container_name: tw_autotrader_bot
-    restart: always
+    restart: on-failure
     environment:
       - PYTHONUNBUFFERED=1
     env_file:
