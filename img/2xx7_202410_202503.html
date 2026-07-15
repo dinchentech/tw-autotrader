@@ -29,6 +29,7 @@ h1 { color: #e0e0e0; font-size: 22px; margin-bottom: 4px; }
   <div class="legend">
     <div class="marker marker-buy"><span class="dot dot-buy"></span> 法人動能買入 2025/1/15 ($30.99)</div>
     <div class="marker marker-sell"><span class="dot dot-sell"></span> 法人動能賣出 2025/3/11 ($47.39)</div>
+    <div class="marker" style="background:rgba(255,183,77,0.2);color:#ffb74d;border:1px solid #ffb74d;"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#ffb74d;"></span> 🐟 魚過濾成立 2025/1/06 (score=7.0)</div>
   </div>
 </div>
 <script>
@@ -82,6 +83,13 @@ candlestickSeries.setMarkers([
     color: '#ef5350',
     shape: 'arrowDown',
     text: '法人動能賣出 3/11 @ 47.39'
+  },
+  {
+    time: data[64].time,
+    position: 'aboveBar',
+    color: '#ffb74d',
+    shape: 'circle',
+    text: '🐟 魚過濾成立 1/06 (score=7.0)'
   }
 ]);
 

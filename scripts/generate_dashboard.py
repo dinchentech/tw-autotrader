@@ -15,7 +15,7 @@ GROUP2_PNL_PATH = Path("data/inst_momentum_pnl.json")
 HOLDINGS_PATH = Path("logs/holdings.json")
 STOCK_ALLOC_PATH = Path("logs/stock_allocation.json")
 
-APP_VERSION = "2.03"
+from core.version import APP_VERSION
 CHART_CDN = "https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"
 
 
