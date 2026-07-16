@@ -244,6 +244,25 @@ def send_closing_summary(pd, app_version):
         msg += f"總市值: NT${total_value:,.0f}\n"
         msg += f"未實現損益: {'+' if total_unrealized >= 0 else ''}{total_unrealized:,.0f}\n"
 
+        # 法人抬轎動能篩選結果（僅在策略啟用時存在此檔案）
+        inst_path = Path("logs/inst_momentum_screening.json")
+        if inst_path.exists():
+            try:
+                inst_data = json.loads(inst_path.read_text())
+                if inst_data.get("screen_date") == date_str:
+                    qualified = inst_data.get("qualified", [])
+                    near_misses = inst_data.get("near_misses", [])
+                    if qualified:
+                        names = ", ".join(
+                            f"{s['stock_id']}({s['score']:.2%})" for s in qualified)
+                        msg += f"\n📡 *法人動能篩選*\n✅ 入選: {names}\n"
+                    elif near_misses:
+                        names = ", ".join(
+                            f"{s['stock_id']}(魚{s['fish_score']:.1f})" for s in near_misses)
+                        msg += f"\n📡 *法人動能篩選*\n⚠️ 未達標前三: {names}\n"
+            except Exception:
+                pass
+
         notify_all(msg)
         print("✅ 收盤持倉報告已發送")
     except Exception as e:

@@ -457,6 +457,7 @@ class InstitutionalMomentumStrategy:
             fish_qualified = inst_core.screen_fish_qualified(
                 all_data, check_date, fish_scores, fish_days, fish_min)
         else:
+            fish_scores = {}
             fish_qualified = {sid: None for sid in all_data.keys()}
 
         candidates = []
@@ -480,10 +481,45 @@ class InstitutionalMomentumStrategy:
         candidates.sort(key=lambda x: x[1], reverse=True)
         all_evaluated.sort(key=lambda x: x[1], reverse=True)
 
+        self._save_screening_summary(candidates, all_evaluated, fish_scores, check_date.isoformat())
+
         if not candidates:
             return [], all_evaluated[:self.top_n]
 
         return candidates[:self.top_n], []
+
+    # ================================================================
+    # 篩選摘要（供收盤報告用）
+    # ================================================================
+    def _save_screening_summary(self, candidates, all_evaluated, fish_scores, screen_date):
+        evaluated_list = []
+        seen = set()
+        for stock_id, mom_score in all_evaluated:
+            if stock_id in seen:
+                continue
+            seen.add(stock_id)
+            stock_fish = fish_scores.get(stock_id, {})
+            latest_fish = 0.0
+            if stock_fish:
+                latest_date = max(stock_fish.keys())
+                val = stock_fish[latest_date]
+                latest_fish = val[0] if isinstance(val, tuple) else val
+            evaluated_list.append({
+                "stock_id": stock_id,
+                "momentum_score": round(mom_score, 4),
+                "fish_score": round(latest_fish, 1),
+            })
+
+        summary = {
+            "screen_date": screen_date,
+            "has_qualified": len(candidates) > 0,
+            "qualified": [{"stock_id": s, "score": round(sc, 4)} for s, sc in candidates],
+            "near_misses": evaluated_list[:self.top_n],
+        }
+
+        summary_path = Path("logs/inst_momentum_screening.json")
+        summary_path.parent.mkdir(parents=True, exist_ok=True)
+        summary_path.write_text(json.dumps(summary, indent=2, ensure_ascii=False))
 
     # ================================================================
     # 停損/停利訊號
@@ -586,8 +622,8 @@ class InstitutionalMomentumStrategy:
                     f"📅 {entry_hint}"
                 )
             elif near_misses:
-                names = ", ".join(f"{s}" for s, sc in near_misses)
-                print(f"⚠️ [INST_MOM] 本{freq}無通過標的，前三列舉: {names}")
+                names = ", ".join(f"{s}({sc:.2%})" for s, sc in near_misses)
+                print(f"⚠️ [INST_MOM] 本{freq}無通過標的，前三列舉（法人買超比）: {names}")
                 from utils.telegram import send_telegram_message
                 send_telegram_message(
                     f"📡 *法人抬轎動能策略* {freq}篩選結果\n"
