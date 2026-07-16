@@ -124,7 +124,7 @@ Atlas 靠 **Boulder 系統**（`.omo/boulder.json`）跨 session：
 
 下次開新 session 時，Boulder 自動載入進度 — 不用每次重頭解釋。
 
-> **你用 Sisyphus 就夠了。** Atlas 是給規劃階段就預期要搞好幾天、好幾個 session 的大型任務用的，不需要手動切換。
+> **你用 Sisyphus 就夠了, 不確定要怎麼做時先用Prometheus避免OMO立即開幹。** Atlas 是給規劃階段就預期要搞好幾天、好幾個 session 的大型任務用的，不需要手動切換。
 
 ### 一句話總結
 
