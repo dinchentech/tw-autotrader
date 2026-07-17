@@ -147,14 +147,52 @@ def _build_holdings_message(pd, app_version, title_emoji, title):
     return msg
 
 
+def _build_inst_screening_msg() -> str:
+    """讀取法人動能篩選結果，回傳訊息文字（無結果時回傳空字串）"""
+    import json
+    from pathlib import Path
+
+    inst_path = Path("logs/inst_momentum_screening.json")
+    if not inst_path.exists():
+        return ""
+    try:
+        from datetime import datetime
+        inst_data = json.loads(inst_path.read_text())
+        if inst_data.get("screen_date") != datetime.now().strftime("%Y-%m-%d"):
+            return ""
+        qualified = inst_data.get("qualified", [])
+        near_misses = inst_data.get("near_misses", [])
+        parts = []
+        if qualified:
+            names = ", ".join(f"{s['stock_id']}({s['score']:.2%})" for s in qualified)
+            parts.append(f"✅ 入選: {names}")
+        if near_misses:
+            names = ", ".join(f"{s['stock_id']}(魚{s['fish_score']:.1f})" for s in near_misses)
+            parts.append(f"⚠️ 未達標前三: {names}")
+        if parts:
+            return "\n📡 *法人動能篩選*\n" + "\n".join(parts) + "\n"
+        return "\n📡 *法人動能篩選*\n❌ 今日無符合標的\n"
+    except Exception:
+        return ""
+
+
 def send_sleep_notification(pd, app_version, next_open):
     """發送睡前持倉報告到 Telegram"""
+    import os
     footer = f"💤 休眠到 {next_open.strftime('%m/%d %H:%M')}" if next_open else ""
     msg = _build_holdings_message(pd, app_version, "💤", "睡前持倉報告")
     if msg is None:
-        notify_all("💤 *睡前持倉報告*\n📭 目前無持倉")
-        return
-    if footer:
+        msg = f"💤 *睡前持倉報告 ({datetime.now().strftime('%Y-%m-%d')})* V{app_version}\n"
+        msg += "─" * 20 + "\n📭 目前無持倉\n"
+
+    # 法人動能篩選（獨立於持倉）
+    inst_msg = _build_inst_screening_msg()
+    if inst_msg:
+        msg += inst_msg
+    elif float(os.getenv("INST_MOM_CAPITAL", "0")) > 0:
+        msg += "\n📡 *法人動能篩選*\n⏳ 尚未產出篩選檔案\n"
+
+    if footer and "休眠" not in msg:
         msg += footer
     notify_all(msg)
     print("✅ 睡前持倉報告已發送")
@@ -244,24 +282,12 @@ def send_closing_summary(pd, app_version):
         msg += f"總市值: NT${total_value:,.0f}\n"
         msg += f"未實現損益: {'+' if total_unrealized >= 0 else ''}{total_unrealized:,.0f}\n"
 
-        # 法人抬轎動能篩選結果（僅在策略啟用時存在此檔案）
-        inst_path = Path("logs/inst_momentum_screening.json")
-        if inst_path.exists():
-            try:
-                inst_data = json.loads(inst_path.read_text())
-                if inst_data.get("screen_date") == date_str:
-                    qualified = inst_data.get("qualified", [])
-                    near_misses = inst_data.get("near_misses", [])
-                    if qualified:
-                        names = ", ".join(
-                            f"{s['stock_id']}({s['score']:.2%})" for s in qualified)
-                        msg += f"\n📡 *法人動能篩選*\n✅ 入選: {names}\n"
-                    elif near_misses:
-                        names = ", ".join(
-                            f"{s['stock_id']}(魚{s['fish_score']:.1f})" for s in near_misses)
-                        msg += f"\n📡 *法人動能篩選*\n⚠️ 未達標前三: {names}\n"
-            except Exception:
-                pass
+        # 法人抬轎動能篩選結果
+        inst_msg = _build_inst_screening_msg()
+        if inst_msg:
+            msg += inst_msg
+        elif float(os.getenv("INST_MOM_CAPITAL", "0")) > 0:
+            msg += "\n📡 *法人動能篩選*\n⏳ 尚未產出篩選檔案\n"
 
         notify_all(msg)
         print("✅ 收盤持倉報告已發送")
