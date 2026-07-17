@@ -312,7 +312,7 @@ const BUY_IDX = (() => {
   for (let i = 21; i < N; i++) {
     let mx = -Infinity;
     for (let j = i - 20; j < i; j++) mx = Math.max(mx, PRICE_DATA[j]);
-    if (PRICE_DATA[i] > mx) return i;
+    if (PRICE_DATA[i] > mx && ATR_RATIO[i] !== null && ATR_RATIO[i] >= 0.01) return i;
   }
   return -1;
 })();
@@ -322,7 +322,7 @@ const SELL_IDX = (() => {
   for (let i = SELL_START; i < N; i++) {
     let mn = Infinity;
     for (let j = i - 20; j < i; j++) mn = Math.min(mn, PRICE_DATA[j]);
-    if (PRICE_DATA[i] < mn) return i;
+    if (PRICE_DATA[i] < mn && ATR_RATIO[i] !== null && ATR_RATIO[i] >= 0.01) return i;
   }
   return -1;
 })();
