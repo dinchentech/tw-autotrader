@@ -315,8 +315,8 @@ function calcRSI(data, period) {
 const RSI5 = calcRSI(PRICE_DATA, 5);
 
 // Pre-compute buy/sell indices (yesterday's bands)
-const BUY_IDX = (() => { for (let i = 22; i < N; i++) if (LOWER[i-1] !== null && PRICE_DATA[i] < LOWER[i-1]) return i; return -1; })();
-const SELL_IDX = (() => { for (let i = 22; i < N; i++) if (UPPER[i-1] !== null && PRICE_DATA[i] > UPPER[i-1]) return i; return -1; })();
+const BUY_IDX = (() => { for (let i = 22; i < N; i++) if (LOWER[i-1] !== null && PRICE_DATA[i] < LOWER[i-1] && RSI5[i] < 30) return i; return -1; })();
+const SELL_IDX = (() => { for (let i = 22; i < N; i++) if (UPPER[i-1] !== null && PRICE_DATA[i] > UPPER[i-1] && RSI5[i] > 70) return i; return -1; })();
 
 // Scaling
 const allVals = [].concat(PRICE_DATA, VWAP);
