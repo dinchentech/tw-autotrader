@@ -306,28 +306,7 @@ function donchian(data, period) {
 }
 const DC = donchian(PRICE_DATA, 20);
 
-// Pre-compute breakout/breakdown indices using direct rolling max/min of close
-// (excludes today's price — matches real strategy's iloc[-2] behavior)
-const BUY_IDX = (() => {
-  for (let i = 21; i < N; i++) {
-    let mx = -Infinity;
-    for (let j = i - 20; j < i; j++) mx = Math.max(mx, PRICE_DATA[j]);
-    if (PRICE_DATA[i] > mx && ATR_RATIO[i] !== null && ATR_RATIO[i] >= 0.01) return i;
-  }
-  return -1;
-})();
-// Search sell from after the breakout zone, so random consolidation noise doesn't trigger early
-const SELL_START = Math.max(BUY_IDX + 20, Math.floor(N * 0.65));
-const SELL_IDX = (() => {
-  for (let i = SELL_START; i < N; i++) {
-    let mn = Infinity;
-    for (let j = i - 20; j < i; j++) mn = Math.min(mn, PRICE_DATA[j]);
-    if (PRICE_DATA[i] < mn && ATR_RATIO[i] !== null && ATR_RATIO[i] >= 0.01) return i;
-  }
-  return -1;
-})();
-
-// ATR(14)
+// ATR(14) — must be computed before BUY_IDX/SELL_IDX which reference ATR_RATIO
 function calcATR(high, low, close, period) {
   const result = [];
   for (let i = 0; i < high.length; i++) {
@@ -350,6 +329,27 @@ function calcATR(high, low, close, period) {
 }
 const ATR_DATA = calcATR(HIGH_DATA, LOW_DATA, PRICE_DATA, 14);
 const ATR_RATIO = ATR_DATA.map((a, i) => a !== null ? a / PRICE_DATA[i] : null);
+
+// Pre-compute breakout/breakdown indices using direct rolling max/min of close
+// (excludes today's price — matches real strategy's iloc[-2] behavior)
+const BUY_IDX = (() => {
+  for (let i = 21; i < N; i++) {
+    let mx = -Infinity;
+    for (let j = i - 20; j < i; j++) mx = Math.max(mx, PRICE_DATA[j]);
+    if (PRICE_DATA[i] > mx && ATR_RATIO[i] !== null && ATR_RATIO[i] >= 0.01) return i;
+  }
+  return -1;
+})();
+// Search sell from after the breakout zone, so random consolidation noise doesn't trigger early
+const SELL_START = Math.max(BUY_IDX + 20, Math.floor(N * 0.65));
+const SELL_IDX = (() => {
+  for (let i = SELL_START; i < N; i++) {
+    let mn = Infinity;
+    for (let j = i - 20; j < i; j++) mn = Math.min(mn, PRICE_DATA[j]);
+    if (PRICE_DATA[i] < mn && ATR_RATIO[i] !== null && ATR_RATIO[i] >= 0.01) return i;
+  }
+  return -1;
+})();
 
 // Scaling
 const allVals = [...PRICE_DATA, ...HIGH_DATA, ...LOW_DATA].filter(v => v !== null);
