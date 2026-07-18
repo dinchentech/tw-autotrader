@@ -50,7 +50,7 @@ STRATEGY_CONFIG = {
     },
     "g1_strategy_2": {
         "func": USER_STRATEGY_MAP.get("g1_strategy_2"),
-        "params": {"rsi_period": 14, "oversold": 30, "overbought": 70}
+        "params": {"k_period": 9, "k_threshold": 30}
     },
     "g2_strategy_1": {
         "func": USER_STRATEGY_MAP.get("g2_strategy_1"),
@@ -94,9 +94,8 @@ STRATEGY_PARAMS = {
         "slow_period": {"default": 10, "type": int,   "help": "G1_S1: 慢線週期"},
     },
     "g1_strategy_2": {
-        "rsi_period":  {"default": 14, "type": int,   "help": "G1_S2: RSI 計算週期"},
-        "oversold":    {"default": 30, "type": int,   "help": "G1_S2: 超賣門檻"},
-        "overbought":  {"default": 70, "type": int,   "help": "G1_S2: 超買門檻"},
+        "k_period":  {"default": 9, "type": int,   "help": "G1_S2: KD 週期"},
+        "k_threshold": {"default": 30,"type": int,   "help": "G1_S2: K 值低檔門檻"},
     },
     "g2_strategy_1": {
         "lookback":    {"default": 5,  "type": int,   "help": "G2_S1: 回看天數"},
@@ -121,7 +120,7 @@ def get_strategy_from_env_or_args():
              "  bollinger:     --window, --std_dev, --rsi_period\n"
              "  breakout:      --lookback, --atr_period\n"
              "  g1_strategy_1: --fast_period, --slow_period (用戶自訂)\n"
-             "  g1_strategy_2: --rsi_period, --oversold, --overbought (用戶自訂)\n"
+             "  g1_strategy_2: --k_period, --k_threshold (週KD黃金交叉)\n"
              "  g2_strategy_1: --lookback, --threshold (用戶自訂)\n"
              "  g2_strategy_2: --ma_period, --volume_ma_period, --volume_mult (用戶自訂)\n"
              "\n"
@@ -207,10 +206,10 @@ def calculate_performance(df: pd.DataFrame) -> dict:
     if buy_mask.any():
         df.loc[buy_mask, 'trade_return'] = (df.loc[buy_mask, 'next_close'] - df.loc[buy_mask, 'close']) / df.loc[buy_mask, 'close']
     
-    # 賣出訊號：下一根K的跌跌幅（做空報酬）
+    # 賣出訊號：出場（台股實務不做空，報酬為0）
     sell_mask = df['signal'] == -1
     if sell_mask.any():
-        df.loc[sell_mask, 'trade_return'] = (df.loc[sell_mask, 'close'] - df.loc[sell_mask, 'next_close']) / df.loc[sell_mask, 'close']
+        df.loc[sell_mask, 'trade_return'] = 0.0
     
     trades = df[df['signal'] != 0]
     if trades.empty:
