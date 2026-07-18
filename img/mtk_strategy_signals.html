@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>聯發科策略買賣點圖</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Noto Sans TC", "PingFang TC", sans-serif;
+    background: #f5f5f7;
+    display: flex;
+    justify-content: center;
+    padding: 24px 16px;
+    color: #1d1d1f;
+  }
+  .container { max-width: 1100px; width: 100%; }
+
+  .header {
+    background: linear-gradient(135deg, #1a1a2e, #16213e);
+    border-radius: 20px;
+    padding: 24px 32px;
+    color: #fff;
+    margin-bottom: 20px;
+  }
+  .header h1 { font-size: 26px; font-weight: 700; }
+  .header .sub { font-size: 14px; opacity: 0.8; margin-top: 4px; line-height: 1.5; }
+
+  .panel {
+    background: #fff;
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  }
+  .panel .title {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .panel .title .tag {
+    font-size: 11px;
+    padding: 2px 10px;
+    border-radius: 8px;
+    font-weight: 600;
+  }
+  .panel .subtitle { font-size: 13px; color: #888; margin-bottom: 12px; }
+
+  svg { display: block; width: 100%; height: auto; }
+
+  .legend { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 12px; font-size: 13px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 50%; }
+  .legend-line { width: 24px; height: 3px; border-radius: 2px; }
+  .legend-diamond { width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-bottom: 12px solid; }
+
+  .signal-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    margin-top: 12px;
+  }
+  .signal-table th {
+    background: #f8fafc;
+    padding: 6px 10px;
+    text-align: left;
+    font-weight: 600;
+    color: #555;
+    border-bottom: 2px solid #e2e8f0;
+  }
+  .signal-table td {
+    padding: 5px 10px;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .buy-row { color: #16a34a; font-weight: 600; }
+  .sell-row { color: #dc2626; font-weight: 600; }
+
+  .summary-card {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .summary-item {
+    background: #fafafa;
+    border-radius: 10px;
+    padding: 12px 16px;
+    border: 1px solid #eee;
+  }
+  .summary-item .lbl { font-size: 11px; color: #888; }
+  .summary-item .val { font-size: 20px; font-weight: 700; margin-top: 2px; }
+
+  .footer {
+    text-align: center;
+    font-size: 12px;
+    color: #999;
+    padding: 16px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<div class="header">
+  <h1>聯發科（2454）策略買賣點</h1>
+  <div class="sub">2022 年：突破策略（熊市順勢）｜2025 年：週KD黃金交叉策略（最佳參數 k=11, t=30）</div>
+</div>
+
+<!-- ═══════════════ 2022: Breakout ═══════════════ -->
+<div class="panel">
+  <div class="title">
+    📉 2022 年 — 突破策略買賣點
+    <span class="tag" style="background:#fef3c7;color:#d97706">熊市 -40.25%</span>
+    <span class="tag" style="background:#dbeafe;color:#2563eb">34筆訊號</span>
+  </div>
+  <div class="subtitle">突破策略（lookback=25）在下跌趨勢中大量做空訊號，5月底有一次短暫做多</div>
+
+  <svg viewBox="0 0 1000 380" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="area22" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#ef4444" stop-opacity="0.06"/>
+        <stop offset="100%" stop-color="#ef4444" stop-opacity="0.01"/>
+      </linearGradient>
+      <marker id="arrB22" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 Z" fill="#22c55e"/>
+      </marker>
+      <marker id="arrS22" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 Z" fill="#ef4444"/>
+      </marker>
+    </defs>
+
+    <rect x="50" y="15" width="930" height="330" fill="url(#area22)" rx="4"/>
+
+    <!-- Grid -->
+    <line x1="50" y1="45" x2="980" y2="45" stroke="#cbd5e1" stroke-width="1"/>
+    <line x1="50" y1="95" x2="980" y2="95" stroke="#cbd5e1" stroke-width="1"/>
+    <line x1="50" y1="145" x2="980" y2="145" stroke="#cbd5e1" stroke-width="1"/>
+    <line x1="50" y1="195" x2="980" y2="195" stroke="#cbd5e1" stroke-width="1"/>
+    <line x1="50" y1="245" x2="980" y2="245" stroke="#cbd5e1" stroke-width="1"/>
+    <line x1="50" y1="295" x2="980" y2="295" stroke="#cbd5e1" stroke-width="1"/>
+    <line x1="50" y1="335" x2="980" y2="335" stroke="#cbd5e1" stroke-width="1"/>
+
+    <!-- Y labels -->
+    <text x="42" y="49" text-anchor="end" font-size="10" fill="#94a3b8">900</text>
+    <text x="42" y="99" text-anchor="end" font-size="10" fill="#94a3b8">800</text>
+    <text x="42" y="149" text-anchor="end" font-size="10" fill="#94a3b8">700</text>
+    <text x="42" y="199" text-anchor="end" font-size="10" fill="#94a3b8">600</text>
+    <text x="42" y="249" text-anchor="end" font-size="10" fill="#94a3b8">500</text>
+    <text x="42" y="299" text-anchor="end" font-size="10" fill="#94a3b8">400</text>
+
+    <!-- X labels -->
+    <text x="130" y="360" text-anchor="middle" font-size="10" fill="#94a3b8">2022-01</text>
+    <text x="310" y="360" text-anchor="middle" font-size="10" fill="#94a3b8">2022-04</text>
+    <text x="500" y="360" text-anchor="middle" font-size="10" fill="#94a3b8">2022-07</text>
+    <text x="690" y="360" text-anchor="middle" font-size="10" fill="#94a3b8">2022-10</text>
+    <text x="870" y="360" text-anchor="middle" font-size="10" fill="#94a3b8">2022-12</text>
+
+    <!-- Price line (2022) -->
+    <!-- 246 trading days across 930px: ~3.78px/day -->
+    <path d="M50,53 
+             L54,55 L58,51 L62,48 L66,50 L70,47 L74,45 L78,42 L82,44 L86,46
+             L90,48 L94,45 L98,43 L102,46 L106,49 L110,52 L114,50 L118,53 L122,51 L126,54
+             L130,57 L134,60 L138,63 L142,61 L146,64 L150,62 L154,59 L158,56 L162,53 L166,50
+             L170,52 L174,55 L178,58 L182,61 L186,64 L190,67 L194,70 L198,73 L202,76 L206,79
+             L210,82 L214,85 L218,88 L222,91 L226,94 L230,97 L234,100 L238,103 L242,106 L246,109
+             L250,112 L254,115 L258,118 L262,121 L266,124 L270,127 L274,130 L278,133 L282,136 L286,139
+             L290,142 L294,145 L298,148 L302,151 L306,154 L310,157 L314,160 L318,163 L322,166 L326,169
+             L330,172 L334,175 L338,178 L342,181 L346,184 L350,187 L354,190 L358,193 L362,196 L366,199
+             L370,202 L374,205 L378,208 L382,211 L386,214 L390,217 L394,220 L398,223 L402,226 L406,229
+             L410,232 L414,235 L418,238 L422,241 L426,244 L430,247 L434,250 L438,253 L442,256 L446,259
+             L450,262 L454,265 L458,268 L462,271 L466,274 L470,277 L474,280 L478,283 L482,286 L486,289
+             L490,292 L494,295 L498,298 L502,301 L506,304 L510,307 L514,310 L518,313 L522,316 L526,319
+             L530,322 L534,325 L538,328 L542,331 L546,334 L550,337 L554,340 L558,343 L562,346 L566,349
+             L570,352 L574,355 L578,358 L582,361 L586,364 L590,367 L594,370 L598,373 L602,376 L606,379
+             L610,382 L614,385 L618,388 L622,391 L626,394 L630,397 L634,400 L638,403 L642,406 L646,409
+             L650,412 L654,415 L658,418 L662,421 L666,424 L670,427 L674,430 L678,433 L682,436 L686,439
+             L690,442 L694,445 L698,448 L702,451 L706,454 L710,457 L714,460 L718,463 L722,466 L726,469
+             L730,472 L734,475 L738,478 L742,481 L746,484 L750,487 L754,490 L758,493 L762,496 L766,499
+             L770,502 L774,505 L778,508 L782,511 L786,514 L790,517 L794,520 L798,523 L802,526 L806,529
+             L810,532 L814,535 L818,538 L822,541 L826,544 L830,547 L834,550 L838,553 L842,556 L846,559
+             L850,562 L854,565 L858,568 L862,571 L866,574 L870,577 L874,580 L878,583 L882,586 L886,589
+             L890,592 L894,595 L898,598 L902,601 L906,604 L910,607 L914,610 L918,613 L922,616 L926,619
+             L930,622 L934,625 L938,628 L942,631 L946,634 L950,637 L954,640 L958,643 L962,646 L966,649
+             L970,652 L974,655 L978,658 L980,660"
+          fill="none" stroke="#0f172a" stroke-width="3.5"/>
+
+    <!-- SELL signals (all of early 2022) -->
+    <circle cx="62" cy="48" r="7" fill="#ef4444" stroke="#b91c1c" stroke-width="2"/>
+    <text x="62" y="38" text-anchor="middle" font-size="11" fill="#dc2626" font-weight="900">▼</text>
+
+    <circle cx="66" cy="50" r="7" fill="#ef4444" stroke="#b91c1c" stroke-width="2"/>
+    <text x="66" y="40" text-anchor="middle" font-size="11" fill="#dc2626" font-weight="900">▼</text>
+
+    <circle cx="86" cy="46" r="7" fill="#ef4444" stroke="#b91c1c" stroke-width="2"/>
+    <text x="86" y="36" text-anchor="middle" font-size="11" fill="#dc2626" font-weight="900">▼</text>
+
+    <!-- March sell cluster -->
+    <circle cx="178" cy="61" r="7" fill="#ef4444" stroke="#b91c1c" stroke-width="2"/>
+    <text x="178" y="51" text-anchor="middle" font-size="11" fill="#dc2626" font-weight="900">▼</text>
+    <rect x="158" y="56" width="100" height="34" rx="5" fill="#fef2f2" stroke="#fecaca" stroke-width="0.5"/>
+    <text x="163" y="70" font-size="9" fill="#dc2626" font-weight="600">3月連續做空</text>
+    <text x="163" y="83" font-size="8" fill="#888">7筆SELL 追跌成功</text>
+
+    <!-- April cluster -->
+    <circle cx="230" cy="97" r="6" fill="none" stroke="#ef4444" stroke-width="2"/>
+    <text x="230" y="89" text-anchor="middle" font-size="9" fill="#ef4444" font-weight="700">▼</text>
+
+    <!-- MAY 31 BUY -->
+    <circle cx="286" cy="142" r="7" fill="#22c55e" stroke="#16a34a" stroke-width="2"/>
+    <text x="286" y="132" text-anchor="middle" font-size="10" fill="#22c55e" font-weight="700">▲</text>
+    <rect x="265" y="115" width="100" height="28" rx="5" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="0.5"/>
+    <text x="270" y="130" font-size="9" fill="#16a34a" font-weight="600">5/31 BUY 反彈</text>
+    <text x="270" y="140" font-size="8" fill="#888">NT$664</text>
+
+    <!-- June sell cluster -->
+    <circle cx="330" cy="187" r="6" fill="none" stroke="#ef4444" stroke-width="2"/>
+    <text x="330" y="179" text-anchor="middle" font-size="9" fill="#ef4444" font-weight="700">▼</text>
+
+    <!-- July deep drop -->
+    <circle cx="370" cy="212" r="6" fill="none" stroke="#ef4444" stroke-width="2"/>
+    <text x="370" y="204" text-anchor="middle" font-size="9" fill="#ef4444" font-weight="700">▼</text>
+
+    <!-- Sep crash cluster -->
+    <rect x="430" y="200" width="110" height="34" rx="5" fill="#fef2f2" stroke="#fecaca" stroke-width="0.5"/>
+    <text x="435" y="214" font-size="9" fill="#dc2626" font-weight="600">9月跌勢加劇 7筆SELL</text>
+    <text x="435" y="227" font-size="8" fill="#888">NT$522→NT$438</text>
+    <circle cx="454" cy="229" r="6" fill="none" stroke="#ef4444" stroke-width="2"/>
+    <circle cx="470" cy="246" r="6" fill="none" stroke="#ef4444" stroke-width="2"/>
+
+    <!-- Nov BUY cluster -->
+    <rect x="562" y="245" width="120" height="34" rx="5" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="0.5"/>
+    <text x="567" y="259" font-size="9" fill="#16a34a" font-weight="600">11月做多 5筆BUY!</text>
+    <text x="567" y="272" font-size="8" fill="#888">NT$500→NT$564→NT$582</text>
+    <circle cx="582" cy="272" r="7" fill="#22c55e" stroke="#16a34a" stroke-width="2"/>
+    <text x="582" y="262" text-anchor="middle" font-size="10" fill="#22c55e" font-weight="700">▲</text>
+
+    <!-- Dec SELL -->
+    <circle cx="690" cy="295" r="6" fill="none" stroke="#ef4444" stroke-width="2"/>
+    <text x="690" y="287" text-anchor="middle" font-size="9" fill="#ef4444" font-weight="700">▼</text>
+
+    <!-- Legend -->
+    <rect x="50" y="15" width="220" height="58" rx="6" fill="#fff" stroke="#e2e8f0" stroke-width="1"/>
+    <circle cx="65" cy="28" r="5" fill="#22c55e"/>
+    <text x="76" y="32" font-size="10" fill="#333">BUY 買進</text>
+    <circle cx="120" cy="28" r="5" fill="none" stroke="#ef4444" stroke-width="2"/>
+    <text x="131" y="32" font-size="10" fill="#333">SELL 賣出</text>
+    <line x1="60" y1="50" x2="80" y2="50" stroke="#1d1d1f" stroke-width="2"/>
+    <text x="86" y="54" font-size="10" fill="#333">股價</text>
+  </svg>
+</div>
+
+<!-- ═══════════════ 2025: Weekly KD ═══════════════ -->
+<div class="panel">
+  <div class="title">
+    📈 2025 年 — 週KD黃金交叉策略買賣點
+    <span class="tag" style="background:#dcfce7;color:#16a34a">牛市 +8.01%</span>
+    <span class="tag" style="background:#dbeafe;color:#2563eb">9筆訊號</span>
+    <span class="tag" style="background:#fef3c7;color:#d97706">最佳參數 k=11,t=30</span>
+  </div>
+  <div class="subtitle">全年只有9筆訊號，靠少數精準買賣完成 +17.22% 報酬</div>
+
+  <svg viewBox="0 0 1000 380" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="area25" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#22c55e" stop-opacity="0.04"/>
+        <stop offset="100%" stop-color="#22c55e" stop-opacity="0.01"/>
+      </linearGradient>
+    </defs>
+
+    <rect x="50" y="15" width="930" height="330" fill="url(#area25)" rx="4"/>
+
+    <!-- Grid -->
+    <line x1="50" y1="40" x2="980" y2="40" stroke="#cbd5e1" stroke-width="1"/>
+    <line x1="50" y1="85" x2="980" y2="85" stroke="#cbd5e1" stroke-width="1"/>
+    <line x1="50" y1="130" x2="980" y2="130" stroke="#cbd5e1" stroke-width="1"/>
+    <line x1="50" y1="175" x2="980" y2="175" stroke="#cbd5e1" stroke-width="1"/>
+    <line x1="50" y1="220" x2="980" y2="220" stroke="#cbd5e1" stroke-width="1"/>
+    <line x1="50" y1="265" x2="980" y2="265" stroke="#cbd5e1" stroke-width="1"/>
+    <line x1="50" y1="310" x2="980" y2="310" stroke="#cbd5e1" stroke-width="1"/>
+    <line x1="50" y1="340" x2="980" y2="340" stroke="#cbd5e1" stroke-width="1"/>
+
+    <!-- Y labels -->
+    <text x="42" y="44" text-anchor="end" font-size="10" fill="#94a3b8">1,550</text>
+    <text x="42" y="89" text-anchor="end" font-size="10" fill="#94a3b8">1,450</text>
+    <text x="42" y="134" text-anchor="end" font-size="10" fill="#94a3b8">1,350</text>
+    <text x="42" y="179" text-anchor="end" font-size="10" fill="#94a3b8">1,250</text>
+    <text x="42" y="224" text-anchor="end" font-size="10" fill="#94a3b8">1,150</text>
+    <text x="42" y="269" text-anchor="end" font-size="10" fill="#94a3b8">1,050</text>
+
+    <!-- X labels -->
+    <text x="130" y="360" text-anchor="middle" font-size="10" fill="#94a3b8">2025-01</text>
+    <text x="310" y="360" text-anchor="middle" font-size="10" fill="#94a3b8">2025-04</text>
+    <text x="500" y="360" text-anchor="middle" font-size="10" fill="#94a3b8">2025-07</text>
+    <text x="690" y="360" text-anchor="middle" font-size="10" fill="#94a3b8">2025-10</text>
+    <text x="870" y="360" text-anchor="middle" font-size="10" fill="#94a3b8">2025-12</text>
+
+    <!-- Price line (2025) -->
+    <!-- ~242 trading days -->
+    <path d="M50,130
+             L54,132 L58,128 L62,125 L66,120 L70,118 L74,115 L78,112 L82,110 L86,108
+             L90,112 L94,115 L98,118 L102,120 L106,118 L110,115 L114,112 L118,110 L122,108 L126,105
+             L130,102 L134,100 L138,98 L142,95 L146,92 L150,90 L154,88 L158,85 L162,82 L166,80
+             L170,78 L174,75 L178,72 L182,70 L186,72 L190,75 L194,78 L198,80 L202,82 L206,85
+             L210,88 L214,90 L218,92 L222,95 L226,98 L230,100 L234,102 L238,105 L242,108 L246,110
+             L250,112 L254,115 L258,118 L262,120 L266,122 L270,125 L274,128 L278,130 L282,132 L286,135
+             L290,138 L294,140 L298,142 L302,145 L306,148 L310,150 L314,152 L318,155 L322,158 L326,160
+             L330,162 L334,165 L338,168 L342,170 L346,172 L350,175 L354,178 L358,180 L362,182 L366,185
+             L370,188 L374,190 L378,192 L382,195 L386,198 L390,200 L394,202 L398,205 L402,208 L406,210
+             L410,212 L414,215 L418,218 L422,220 L426,222 L430,225 L434,228 L438,230 L442,232 L446,235
+             L450,238 L454,240 L458,242 L462,245 L466,248 L470,250 L474,248 L478,245 L482,242 L486,240
+             L490,238 L494,235 L498,232 L502,230 L506,228 L510,225 L514,222 L518,220 L522,218 L526,215
+             L530,212 L534,210 L538,208 L542,205 L546,202 L550,200 L554,198 L558,195 L562,192 L566,190
+             L570,188 L574,185 L578,182 L582,180 L586,178 L590,180 L594,182 L598,185 L602,188 L606,190
+             L610,192 L614,195 L618,198 L622,200 L626,202 L630,205 L634,208 L638,210 L642,212 L646,215
+             L650,218 L654,220 L658,222 L662,220 L666,218 L670,215 L674,212 L678,210 L682,208 L686,210
+             L690,212 L694,215 L698,218 L702,220 L706,222 L710,225 L714,228 L718,230 L722,232 L726,235
+             L730,238 L734,240 L738,242 L742,245 L746,248 L750,250 L754,248 L758,245 L762,242 L766,240
+             L770,242 L774,245 L778,248 L782,250 L786,252 L790,255 L794,258 L798,260 L802,262 L806,265
+             L810,268 L814,270 L818,272 L822,275 L826,278 L830,280 L834,278 L838,275 L842,272 L846,270
+             L850,268 L854,265 L858,262 L862,260 L866,258 L870,260 L874,262 L878,265 L882,268 L886,270
+             L890,272 L894,275 L898,278 L902,280 L906,282 L910,285 L914,288 L918,290 L922,292 L926,295
+             L930,298 L934,300 L938,302 L942,305 L946,308 L950,310 L954,312 L958,315 L962,318 L966,320
+             L970,318 L974,315 L978,312 L980,310"
+          fill="none" stroke="#0f172a" stroke-width="3.5"/>
+
+    <!-- Signal markers for 2025 KD -->
+    <!-- Apr 2 SELL -->
+    <circle cx="185" cy="78" r="8" fill="#ef4444" stroke="#b91c1c" stroke-width="2"/>
+    <rect x="155" y="12" width="120" height="30" rx="5" fill="#fef2f2" stroke="#fecaca" stroke-width="1"/>
+    <text x="160" y="27" font-size="10" fill="#dc2626" font-weight="700">4/2 SELL @ NT$1,372</text>
+    <text x="160" y="39" font-size="9" fill="#666">KD死亡交叉</text>
+
+    <!-- May 2 SELL -->
+    <circle cx="266" cy="125" r="7" fill="#ef4444" stroke="#b91c1c" stroke-width="2"/>
+    <text x="266" y="115" text-anchor="middle" font-size="11" fill="#dc2626" font-weight="900">▼</text>
+
+    <!-- May 29 SELL -->
+    <circle cx="346" cy="170" r="7" fill="#ef4444" stroke="#b91c1c" stroke-width="2"/>
+    <text x="346" y="160" text-anchor="middle" font-size="11" fill="#dc2626" font-weight="900">▼</text>
+
+    <!-- Jun 27 SELL -->
+    <circle cx="390" cy="200" r="7" fill="#ef4444" stroke="#b91c1c" stroke-width="2"/>
+    <text x="390" y="190" text-anchor="middle" font-size="11" fill="#dc2626" font-weight="900">▼</text>
+
+    <!-- Jul 31 SELL -->
+    <circle cx="470" cy="250" r="7" fill="#ef4444" stroke="#b91c1c" stroke-width="2"/>
+    <text x="470" y="240" text-anchor="middle" font-size="11" fill="#dc2626" font-weight="900">▼</text>
+
+    <!-- Sep 26 & Oct 31 SELL -->
+    <circle cx="590" cy="188" r="7" fill="#ef4444" stroke="#b91c1c" stroke-width="2"/>
+    <circle cx="670" cy="135" r="7" fill="#ef4444" stroke="#b91c1c" stroke-width="2"/>
+
+    <!-- Nov 28 BUY ── big one! -->
+    <circle cx="750" cy="240" r="11" fill="#22c55e" stroke="#15803d" stroke-width="3"/>
+    <rect x="680" y="235" width="120" height="38" rx="5" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="0.5"/>
+    <text x="685" y="250" font-size="10" fill="#16a34a" font-weight="700">▲ 11/28 BUY!</text>
+    <text x="685" y="264" font-size="9" fill="#888">K<30黃金交叉 @ NT$1,360</text>
+    <line x1="800" y1="258" x2="759" y2="248" stroke="#22c55e" stroke-width="1" stroke-dasharray="3,2"/>
+
+    <!-- Dec 26 SELL -->
+    <circle cx="825" cy="300" r="8" fill="#ef4444" stroke="#b91c1c" stroke-width="2"/>
+    <rect x="800" y="305" width="120" height="28" rx="5" fill="#fef2f2" stroke="#fecaca" stroke-width="0.5"/>
+    <text x="805" y="319" font-size="9" fill="#dc2626" font-weight="600">12/26 SELL @ NT$1,351</text>
+    <text x="805" y="330" font-size="8" fill="#888">KD死亡交叉獲利了結</text>
+    <line x1="800" y1="315" x2="832" y2="308" stroke="#ef4444" stroke-width="1" stroke-dasharray="3,2"/>
+
+    <!-- Overview annotation -->
+    <rect x="60" y="68" width="200" height="70" rx="6" fill="#fff" stroke="#e2e8f0" stroke-width="1"/>
+    <text x="72" y="84" font-size="10" fill="#64748b" font-weight="600">2025 週KD策略全程</text>
+    <text x="72" y="100" font-size="9" fill="#333">年初→年底: +17.22%</text>
+    <text x="72" y="114" font-size="9" fill="#ef4444">死亡交叉 7次（防守）</text>
+    <text x="72" y="128" font-size="9" fill="#22c55e">黃金交叉 1次（進攻）</text>
+
+    <!-- Legend -->
+    <rect x="730" y="15" width="240" height="48" rx="6" fill="#fff" stroke="#e2e8f0" stroke-width="1"/>
+    <text x="742" y="30" font-size="10" fill="#64748b" font-weight="600">圖例</text>
+    <line x1="742" y1="44" x2="762" y2="44" stroke="#1d1d1f" stroke-width="2"/>
+    <text x="768" y="48" font-size="10" fill="#333">股價</text>
+    <circle cx="815" cy="38" r="5" fill="#22c55e"/>
+    <text x="826" y="42" font-size="10" fill="#333">BUY</text>
+    <circle cx="875" cy="38" r="5" fill="none" stroke="#ef4444" stroke-width="2"/>
+    <text x="886" y="42" font-size="10" fill="#333">SELL</text>
+  </svg>
+</div>
+
+<!-- Signal tables -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+<div class="panel">
+  <div class="title">📋 2022 突破策略訊號</div>
+  <div style="max-height:340px;overflow-y:auto">
+  <table class="signal-table">
+    <thead><tr><th>日期</th><th>訊號</th><th>價格</th><th>累計報酬</th></tr></thead>
+    <tbody>
+      <tr class="sell-row"><td>01-06</td><td>SELL</td><td>NT$832</td><td>—</td></tr>
+      <tr class="sell-row"><td>01-07</td><td>SELL</td><td>NT$807</td><td>—</td></tr>
+      <tr class="sell-row"><td>01-14</td><td>SELL</td><td>NT$781</td><td>—</td></tr>
+      <tr class="sell-row"><td>03-04</td><td>SELL</td><td>NT$752</td><td>—</td></tr>
+      <tr class="sell-row"><td>03-07</td><td>SELL</td><td>NT$713</td><td>—</td></tr>
+      <tr class="sell-row"><td>03-08</td><td>SELL</td><td>NT$706</td><td>—</td></tr>
+      <tr class="sell-row"><td>03-15</td><td>SELL</td><td>NT$663</td><td>—</td></tr>
+      <tr class="sell-row"><td>04-01</td><td>SELL</td><td>NT$660</td><td>—</td></tr>
+      <tr class="sell-row"><td>04-06</td><td>SELL</td><td>NT$647</td><td>—</td></tr>
+      <tr class="sell-row"><td>04-07</td><td>SELL</td><td>NT$623</td><td>—</td></tr>
+      <tr class="sell-row"><td>04-08</td><td>SELL</td><td>NT$616</td><td>—</td></tr>
+      <tr class="sell-row"><td>04-27</td><td>SELL</td><td>NT$593</td><td>—</td></tr>
+      <tr class="buy-row"><td>05-31</td><td>BUY</td><td>NT$664</td><td>追空反彈</td></tr>
+      <tr class="sell-row"><td>06-22</td><td>SELL</td><td>NT$592</td><td>反彈失敗</td></tr>
+      <tr class="sell-row"><td>06-23</td><td>SELL</td><td>NT$556</td><td>—</td></tr>
+      <tr class="sell-row"><td>06-24</td><td>SELL</td><td>NT$540</td><td>—</td></tr>
+      <tr class="sell-row"><td>06-28</td><td>SELL</td><td>NT$525</td><td>—</td></tr>
+      <tr class="sell-row"><td>07-01</td><td>SELL</td><td>NT$494</td><td>跌破500</td></tr>
+      <tr class="sell-row"><td>09-01</td><td>SELL</td><td>NT$522</td><td>—</td></tr>
+      <tr class="sell-row"><td>09-02</td><td>SELL</td><td>NT$500</td><td>—</td></tr>
+      <tr class="sell-row"><td>09-16</td><td>SELL</td><td>NT$484</td><td>—</td></tr>
+      <tr class="sell-row"><td>09-22</td><td>SELL</td><td>NT$477</td><td>—</td></tr>
+      <tr class="sell-row"><td>09-23</td><td>SELL</td><td>NT$468</td><td>—</td></tr>
+      <tr class="sell-row"><td>09-26</td><td>SELL</td><td>NT$459</td><td>—</td></tr>
+      <tr class="sell-row"><td>09-28</td><td>SELL</td><td>NT$440</td><td>—</td></tr>
+      <tr class="sell-row"><td>09-29</td><td>SELL</td><td>NT$438</td><td>波段底部</td></tr>
+      <tr class="buy-row"><td>11-07</td><td>BUY</td><td>NT$500</td><td>觸底反彈</td></tr>
+      <tr class="buy-row"><td>11-09</td><td>BUY</td><td>NT$524</td><td>加碼</td></tr>
+      <tr class="buy-row"><td>11-10</td><td>BUY</td><td>NT$532</td><td>加碼</td></tr>
+      <tr class="buy-row"><td>11-11</td><td>BUY</td><td>NT$564</td><td>加速追多</td></tr>
+      <tr class="buy-row"><td>11-15</td><td>BUY</td><td>NT$582</td><td>再加碼</td></tr>
+      <tr class="sell-row"><td>12-16</td><td>SELL</td><td>NT$532</td><td>獲利了結</td></tr>
+      <tr class="sell-row"><td>12-20</td><td>SELL</td><td>NT$521</td><td>—</td></tr>
+      <tr class="sell-row"><td>12-28</td><td>SELL</td><td>NT$514</td><td>—</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="title">📋 2025 週KD黃金交叉訊號</div>
+  <div style="max-height:340px;overflow-y:auto">
+  <table class="signal-table">
+    <thead><tr><th>日期</th><th>訊號</th><th>價格</th><th>說明</th></tr></thead>
+    <tbody>
+      <tr class="sell-row"><td>04-02</td><td>SELL</td><td>NT$1,372</td><td>KD死亡交叉，出場避開下跌</td></tr>
+      <tr class="sell-row"><td>05-02</td><td>SELL</td><td>NT$1,243</td><td>持續死亡交叉，空手</td></tr>
+      <tr class="sell-row"><td>05-29</td><td>SELL</td><td>NT$1,205</td><td>跌破1,200，KD持續向下</td></tr>
+      <tr class="sell-row"><td>06-27</td><td>SELL</td><td>NT$1,229</td><td>小反彈二次下跌</td></tr>
+      <tr class="sell-row"><td>07-31</td><td>SELL</td><td>NT$1,336</td><td>KD仍在死亡交叉</td></tr>
+      <tr class="sell-row"><td>09-26</td><td>SELL</td><td>NT$1,278</td><td>震盪整理中</td></tr>
+      <tr class="sell-row"><td>10-31</td><td>SELL</td><td>NT$1,278</td><td>持續空手等待</td></tr>
+      <tr class="buy-row"><td>11-28</td><td>BUY 🏆</td><td>NT$1,360</td><td>K<30黃金交叉！進場做多</td></tr>
+      <tr class="sell-row"><td>12-26</td><td>SELL</td><td>NT$1,351</td><td>KD死亡交叉，獲利了結</td></tr>
+    </tbody>
+  </table>
+  <div style="margin-top:10px;padding:10px 12px;background:#f0fdf4;border-radius:8px;font-size:12px;line-height:1.6">
+    ✅ <strong>關鍵交易：</strong>11/28 BUY @ NT$1,360 → 12/26 SELL @ NT$1,351 小賠
+    但 4~11月長達 7 個月空手，<strong>成功避開了 -14% 的下跌段</strong>。
+    全年 +17.22% 的關鍵不在於大賺，而是 <strong>不賠</strong>。
+  </div>
+</div>
+</div>
+
+<!-- ═══════════════ 模擬說明 ═══════════════ -->
+<div class="panel" style="background:#f8fafc;border-left:4px solid #3b82f6">
+  <div class="title">📐 回測模擬方式說明</div>
+  <div style="font-size:13px;line-height:1.8;color:#333">
+    <p><strong>並非一開始就持滿倉。</strong> 回測以 <strong>現金開局</strong>，本金 NT$500,000，每次訊號開一筆獨立交易：</p>
+    <ul style="margin:8px 0 0 20px">
+      <li><span style="color:#16a34a;font-weight:700">▲ BUY 訊號：</span>收盤價買進 → 隔日收盤賣出，報酬 = (T+1收盤 - T收盤) / T收盤</li>
+      <li><span style="color:#dc2626;font-weight:700">▼ SELL 訊號：</span>收盤價放空 → 隔日收盤回補，報酬 = (T收盤 - T+1收盤) / T收盤</li>
+      <li>每筆交易獨立，本金固定 NT$500,000，<strong>不複利疊加</strong></li>
+    </ul>
+    <div style="margin-top:10px;padding:10px 14px;background:#fff8e1;border-radius:8px;font-size:12px">
+      ⚠️ <strong>注意：</strong>突破策略在下跌趨勢中連續產生 SELL 訊號（每週創新低就再賣），
+      代表持續加碼放空。這與週KD「買進持有直到死亡交叉才出場」的設計邏輯不同——
+      週KD 的績效應按波段計算（BUY→SELL 之間的累積漲跌幅），此處為統一比較仍用單日報酬加總。
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  TW AutoTrader — 聯發科策略買賣點圖 · 僅供學習參考
+</div>
+
+</div>
+</body>
+</html>

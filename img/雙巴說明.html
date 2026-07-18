@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>雙巴（Whipsaw）說明</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Noto Sans TC", "PingFang TC", sans-serif;
+    background: #f5f5f7;
+    display: flex;
+    justify-content: center;
+    padding: 32px 16px;
+    color: #1d1d1f;
+  }
+  .container {
+    max-width: 960px;
+    width: 100%;
+  }
+
+  /* Header */
+  .header {
+    background: linear-gradient(135deg, #1a1a2e, #16213e);
+    border-radius: 20px;
+    padding: 32px 40px;
+    color: #fff;
+    margin-bottom: 24px;
+    position: relative;
+    overflow: hidden;
+  }
+  .header h1 {
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    position: relative;
+    z-index: 1;
+  }
+  .header h1 span {
+    color: #ff6b6b;
+  }
+  .header .sub {
+    font-size: 16px;
+    opacity: 0.85;
+    margin-top: 8px;
+    position: relative;
+    z-index: 1;
+    line-height: 1.6;
+  }
+  .header .en {
+    font-size: 14px;
+    opacity: 0.5;
+    margin-top: 4px;
+    position: relative;
+    z-index: 1;
+  }
+  .header::after {
+    content: "×2";
+    position: absolute;
+    right: 32px;
+    bottom: -10px;
+    font-size: 120px;
+    font-weight: 900;
+    opacity: 0.08;
+    color: #ff6b6b;
+    line-height: 1;
+  }
+
+  /* Chart Card */
+  .chart-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  }
+  .chart-card .title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #666;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .chart-card .title .tag {
+    font-size: 11px;
+    background: #f0f0f0;
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-weight: 400;
+    color: #888;
+  }
+
+  svg { display: block; width: 100%; height: auto; }
+
+  /* Explanation sections */
+  .explain {
+    background: #fff;
+    border-radius: 16px;
+    padding: 28px 32px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  }
+  .explain h2 {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .explain h2 .icon { font-size: 24px; }
+  .explain p {
+    font-size: 15px;
+    line-height: 1.8;
+    color: #333;
+  }
+  .explain p + p { margin-top: 12px; }
+
+  .highlight-box {
+    background: #fff8e1;
+    border-left: 4px solid #f59e0b;
+    padding: 16px 20px;
+    border-radius: 0 8px 8px 0;
+    margin: 16px 0;
+    font-size: 14px;
+    line-height: 1.7;
+    color: #333;
+  }
+  .highlight-box strong { color: #d97706; }
+
+  .bad {
+    background: #fef2f2;
+    border-left: 4px solid #ef4444;
+    padding: 16px 20px;
+    border-radius: 0 8px 8px 0;
+    margin: 16px 0;
+    font-size: 14px;
+    line-height: 1.7;
+    color: #333;
+  }
+  .bad strong { color: #dc2626; }
+
+  .good {
+    background: #f0fdf4;
+    border-left: 4px solid #22c55e;
+    padding: 16px 20px;
+    border-radius: 0 8px 8px 0;
+    margin: 16px 0;
+    font-size: 14px;
+    line-height: 1.7;
+    color: #333;
+  }
+  .good strong { color: #16a34a; }
+
+  .steps {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .step {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 14px 18px;
+    background: #fafafa;
+    border-radius: 10px;
+    border: 1px solid #eee;
+  }
+  .step .num {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+    color: #fff;
+  }
+  .step .text { font-size: 14px; line-height: 1.6; }
+  .step .text strong { display: block; margin-bottom: 2px; font-size: 15px; }
+
+  .num-red { background: #ef4444; }
+  .num-green { background: #22c55e; }
+  .num-gray { background: #6b7280; }
+  .num-blue { background: #3b82f6; }
+
+  .footer {
+    text-align: center;
+    font-size: 13px;
+    color: #999;
+    margin-top: 24px;
+    padding: 16px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <h1>什麼是「<span>雙巴</span>」？</h1>
+    <div class="sub">在盤整盤中，順勢策略被假訊號反覆打臉的現象</div>
+    <div class="en">Whipsaw — Getting slapped on both sides in a sideways market</div>
+  </div>
+
+  <!-- Chart -->
+  <div class="chart-card">
+    <div class="title">
+      📉 均線交叉策略在盤整盤中的典型困境
+      <span class="tag">MA9 / MA21</span>
+    </div>
+    <svg viewBox="0 0 820 380" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrowRed" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 Z" fill="#ef4444"/>
+        </marker>
+        <marker id="arrowGreen" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 Z" fill="#22c55e"/>
+        </marker>
+        <marker id="arrowGray" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 Z" fill="#9ca3af"/>
+        </marker>
+        <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#f8fafc"/>
+          <stop offset="100%" stop-color="#f1f5f9"/>
+        </linearGradient>
+      </defs>
+
+      <!-- Background -->
+      <rect x="0" y="0" width="820" height="380" fill="url(#bgGrad)" rx="8"/>
+
+      <!-- Y axis labels -->
+      <text x="30" y="42" font-size="11" fill="#94a3b8" font-family="sans-serif">高</text>
+      <text x="30" y="210" font-size="11" fill="#94a3b8" font-family="sans-serif">中</text>
+      <text x="30" y="365" font-size="11" fill="#94a3b8" font-family="sans-serif">低</text>
+
+      <!-- Grid lines -->
+      <line x1="50" y1="40" x2="800" y2="40" stroke="#e2e8f0" stroke-width="0.5"/>
+      <line x1="50" y1="210" x2="800" y2="210" stroke="#e2e8f0" stroke-width="0.5"/>
+      <line x1="50" y1="350" x2="800" y2="350" stroke="#e2e8f0" stroke-width="0.5"/>
+
+      <!-- Price line (oscillating sideways) -->
+      <path d="M50,210 
+               L80,195 L110,175 L140,190 L170,210 
+               L200,195 L230,170 L260,190 L290,215 
+               L320,200 L350,175 L380,195 L410,220
+               L440,200 L470,170 L500,195 L530,220
+               L560,205 L590,180 L620,200 L650,225
+               L680,210 L710,190 L740,210 L770,230
+               L800,215"
+            fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+
+      <!-- MA9 (fast) - blue, more volatile -->
+      <path d="M50,200 L80,190 L110,185 L140,195 L170,205 
+               L200,190 L230,175 L260,195 L290,210 
+               L320,195 L350,180 L380,200 L410,215
+               L440,195 L470,178 L500,200 L530,215
+               L560,200 L590,185 L620,205 L650,218
+               L680,205 L710,192 L740,208 L770,225"
+            fill="none" stroke="#3b82f6" stroke-width="2" stroke-dasharray="6,3" opacity="0.7"/>
+
+      <!-- MA21 (slow) - orange, smoother -->
+      <path d="M50,205 L80,200 L110,198 L140,202 L170,208 
+               L200,200 L230,192 L260,200 L290,210 
+               L320,205 L350,195 L380,205 L410,215
+               L440,205 L470,195 L500,205 L530,215
+               L560,208 L590,198 L620,208 L650,218
+               L680,210 L710,200 L740,210 L770,222"
+            fill="none" stroke="#f59e0b" stroke-width="2.5" opacity="0.7"/>
+
+      <!-- === REGION 1: Golden cross → loss === -->
+      <!-- GC marker -->
+      <circle cx="125" cy="188" r="20" fill="none" stroke="#22c55e" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.6"/>
+      <text x="125" y="192" text-anchor="middle" font-size="9" fill="#22c55e" font-weight="700" font-family="sans-serif">黃金</text>
+      <text x="125" y="168" text-anchor="middle" font-size="12" fill="#22c55e" font-weight="700" font-family="sans-serif">▲ 買進</text>
+
+      <!-- Price drops after golden cross -->
+      <path d="M140,190 L170,210 L200,195" fill="none" stroke="#ef4444" stroke-width="2" stroke-dasharray="4,3"/>
+      <text x="185" y="218" text-anchor="middle" font-size="10" fill="#ef4444" font-weight="600" font-family="sans-serif">↘ 不漲反跌</text>
+      <!-- X mark -->
+      <text x="215" y="190" font-size="16" fill="#ef4444" font-weight="900" font-family="sans-serif">✕ 停損</text>
+
+      <!-- Arrow from buy to loss -->
+      <path d="M125,208 Q160,230 200,220" fill="none" stroke="#ef4444" stroke-width="1" marker-end="url(#arrowRed)" stroke-dasharray="3,2" opacity="0.5"/>
+
+      <!-- === REGION 2: Death cross → buy back higher === -->
+      <!-- DC marker -->
+      <circle cx="275" cy="212" r="20" fill="none" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.6"/>
+      <text x="275" y="216" text-anchor="middle" font-size="9" fill="#ef4444" font-weight="700" font-family="sans-serif">死亡</text>
+      <text x="275" y="238" text-anchor="middle" font-size="12" fill="#ef4444" font-weight="700" font-family="sans-serif">▼ 賣出</text>
+
+      <!-- Price rises after death cross -->
+      <path d="M290,210 L320,200 L350,175" fill="none" stroke="#22c55e" stroke-width="2" stroke-dasharray="4,3"/>
+      <text x="320" y="168" text-anchor="middle" font-size="10" fill="#22c55e" font-weight="600" font-family="sans-serif">↗ 不跌反漲</text>
+      <text x="350" y="195" font-size="16" fill="#ef4444" font-weight="900" font-family="sans-serif">✕ 被軋</text>
+
+      <!-- Arrow from sell to loss -->
+      <path d="M295,195 Q320,170 340,180" fill="none" stroke="#ef4444" stroke-width="1" marker-end="url(#arrowRed)" stroke-dasharray="3,2" opacity="0.5"/>
+
+      <!-- === REGION 3: Second golden cross → drops again === -->
+      <circle cx="455" cy="190" r="20" fill="none" stroke="#22c55e" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.6"/>
+      <text x="455" y="194" text-anchor="middle" font-size="9" fill="#22c55e" font-weight="700" font-family="sans-serif">黃金</text>
+      <text x="455" y="168" text-anchor="middle" font-size="12" fill="#22c55e" font-weight="700" font-family="sans-serif">▲ 又買</text>
+
+      <!-- Drops again -->
+      <path d="M470,178 L500,200 L530,220" fill="none" stroke="#ef4444" stroke-width="2" stroke-dasharray="4,3"/>
+      <text x="500" y="228" text-anchor="middle" font-size="10" fill="#ef4444" font-weight="600" font-family="sans-serif">↘ 又跌</text>
+      <text x="530" y="210" font-size="16" fill="#ef4444" font-weight="900" font-family="sans-serif">✕ 又停損</text>
+
+      <!-- Region brackets -->
+      <rect x="60" y="20" width="190" height="345" fill="#ef4444" opacity="0.03" rx="4"/>
+      <text x="155" y="350" text-anchor="middle" font-size="11" fill="#ef4444" font-weight="700" font-family="sans-serif">① 第一次雙巴</text>
+
+      <rect x="250" y="20" width="150" height="345" fill="#ef4444" opacity="0.03" rx="4"/>
+      <text x="325" y="350" text-anchor="middle" font-size="11" fill="#ef4444" font-weight="700" font-family="sans-serif">② 第二次雙巴</text>
+
+      <rect x="400" y="20" width="180" height="345" fill="#ef4444" opacity="0.03" rx="4"/>
+      <text x="490" y="350" text-anchor="middle" font-size="11" fill="#ef4444" font-weight="700" font-family="sans-serif">③ 第三次雙巴</text>
+
+      <!-- Area label -->
+      <rect x="610" y="28" width="195" height="52" rx="8" fill="#fff" stroke="#e2e8f0" stroke-width="1"/>
+      <line x1="50" y1="130" x2="800" y2="130" stroke="#94a3b8" stroke-width="1" stroke-dasharray="8,4" opacity="0.3"/>
+      <text x="660" y="48" text-anchor="middle" font-size="11" fill="#64748b" font-weight="600" font-family="sans-serif">盤整區間（沒有明顯趨勢）</text>
+      <text x="660" y="65" text-anchor="middle" font-size="10" fill="#94a3b8" font-family="sans-serif">價格一直在高 / 低之間來回震盪</text>
+
+      <!-- Legend -->
+      <rect x="610" y="90" width="195" height="66" rx="8" fill="#fff" stroke="#e2e8f0" stroke-width="1"/>
+      <text x="625" y="108" font-size="11" fill="#64748b" font-weight="600" font-family="sans-serif">圖例</text>
+      <line x1="625" y1="122" x2="650" y2="122" stroke="#1d1d1f" stroke-width="2.5"/>
+      <text x="655" y="126" font-size="10" fill="#555" font-family="sans-serif">股價</text>
+      <line x1="625" y1="138" x2="650" y2="138" stroke="#3b82f6" stroke-width="2" stroke-dasharray="4,3" opacity="0.7"/>
+      <text x="655" y="142" font-size="10" fill="#555" font-family="sans-serif">MA9 快線</text>
+      <line x1="716" y1="122" x2="741" y2="122" stroke="#f59e0b" stroke-width="2.5" opacity="0.7"/>
+      <text x="746" y="126" font-size="10" fill="#555" font-family="sans-serif">MA21 慢線</text>
+      <text x="716" y="146" font-size="10" fill="#22c55e" font-weight="600" font-family="sans-serif">▲ 買進</text>
+      <text x="770" y="146" font-size="10" fill="#ef4444" font-weight="600" font-family="sans-serif">▼ 賣出</text>
+    </svg>
+  </div>
+
+  <!-- What is 雙巴 -->
+  <div class="explain">
+    <h2><span class="icon">😫</span> 什麼是雙巴？</h2>
+    <p>
+      <strong>雙巴（Whipsaw）</strong>是指在盤整盤或震盪盤的市場中，交易策略被反覆打臉的現象。
+      你用技術指標（如均線交叉）進場，結果一買就跌、一賣就漲，左右各被甩一巴掌，故稱「雙巴」。
+    </p>
+    <p>
+      上圖展示了均線交叉策略在盤整盤中的典型困境：<strong>價格在一個區間內反覆震盪</strong>，
+      快線（MA9）與慢線（MA21）頻繁交叉，產生大量假訊號。
+    </p>
+  </div>
+
+  <!-- Three rounds of whipsaw -->
+  <div class="explain">
+    <h2><span class="icon">👋</span> 雙巴循環（如上圖）</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="num num-green">①</div>
+        <div class="text">
+          <strong>黃金交叉出現 → 進場做多</strong>
+          快線向上突破慢線，看起來多頭要走浪了，買進！
+        </div>
+      </div>
+      <div class="step">
+        <div class="num num-red">①'</div>
+        <div class="text">
+          <strong>不漲反跌 → 停損出場</strong>
+          結果價格馬上反轉向下，跌到停損點，虧錢出場。
+        </div>
+      </div>
+      <div class="step">
+        <div class="num num-red">②</div>
+        <div class="text">
+          <strong>死亡交叉出現 → 反手做空／賣出</strong>
+          快線跌破慢線，看來空頭要來了，趕快賣！
+        </div>
+      </div>
+      <div class="step">
+        <div class="num num-green">②'</div>
+        <div class="text">
+          <strong>不跌反漲 → 被軋空／追高</strong>
+          結果價格又反轉向上，空單被軋，只好高價補回。
+        </div>
+      </div>
+      <div class="step">
+        <div class="num num-green">③</div>
+        <div class="text">
+          <strong>又出現黃金交叉 → 再進場</strong>
+          心想「這次是真的了」，再次買進⋯⋯
+        </div>
+      </div>
+      <div class="step">
+        <div class="num num-red">③'</div>
+        <div class="text">
+          <strong>又跌 → 又停損 → 雙巴完成</strong>
+          價格又跌回去。來回幾次，本金就被磨掉大半。
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Why it happens -->
+  <div class="explain">
+    <h2><span class="icon">🔍</span> 為什麼盤整盤容易雙巴？</h2>
+    <div class="highlight-box">
+      <strong>核心原因：順勢策略的天敵就是盤整盤。</strong> 均線交叉、突破交易等順勢策略的設計邏輯是「追隨趨勢」——當趨勢明確時很好用，但當市場沒有方向時，每次進場都是追高殺低。
+    </div>
+    <p>
+      盤整盤的特性是<strong>價格在一個區間內規律來回</strong>，沒有明確的多頭或空頭方向。
+      順勢策略在這種環境下，每一筆交易正好買在相對高點、賣在相對低點，持續虧損。
+    </p>
+  </div>
+
+  <!-- How to avoid -->
+  <div class="explain">
+    <h2><span class="icon">🛡️</span> 如何避免雙巴？</h2>
+    
+    <div class="bad">
+      <strong>❌ 不要做的：</strong>
+      在盤整盤中死抱均線交叉策略，不加入任何過濾條件。上圖已經證明了——在沒有趨勢的行情中，單純的均線交叉就是送錢。
+    </div>
+
+    <div class="good">
+      <strong>✅ 可以做的：</strong>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="num num-blue">1</div>
+        <div class="text">
+          <strong>加入大盤趨勢過濾（Market Filter）</strong>
+          當大盤（如加權指數）在 MA200 之上才做多，之下 keep_wait 空手。
+          系統中的 <code>MARKET_TREND_FILTER</code> 就是做這件事。
+        </div>
+      </div>
+      <div class="step">
+        <div class="num num-blue">2</div>
+        <div class="text">
+          <strong>加入 ATR 波動度過濾</strong>
+          ATR 太低代表市場正在盤整，不進場。系統中的 <code>atr_threshold</code> 參數就是為了避開這種環境。
+        </div>
+      </div>
+      <div class="step">
+        <div class="num num-blue">3</div>
+        <div class="text">
+          <strong>改用逆勢策略（布林通道、VWAP 偏離）</strong>
+          盤整盤中逆勢策略反而表現較好——在區間下緣買、上緣賣。
+        </div>
+      </div>
+      <div class="step">
+        <div class="num num-blue">4</div>
+        <div class="text">
+          <strong>搭配大盤過濾，只做順風方向</strong>
+          用 MARKET_TREND_FILTER（TAIEX > MA200）確保只在多頭市場做多，
+          盤整盤時 keep_wait 空手，自然不會被雙巴。
+        </div>
+      </div>
+      <div class="step">
+        <div class="num num-blue">5</div>
+        <div class="text">
+          <strong>認清市場狀態，空手也是一種操作</strong>
+          盤整盤最好的策略就是 keep_wait——不做單就不會被雙巴。等趨勢明確再進場。
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Check your backtest -->
+  <div class="explain">
+    <h2><span class="icon">📊</span> 剛剛的回測結果印證了雙巴</h2>
+    <p>
+      看看台積電 2026 上半年各策略的表現：<strong>均線交叉半年虧 -NT$8,943，突破交易半年虧 -NT$21,273</strong>。
+      兩者都是順勢策略，在今年上半年震盪偏空的盤勢中，被雙巴得最慘。
+    </p>
+    <p>
+      反觀 VWAP 偏離（逆勢策略）半年賺 +NT$28,489——在盤整盤中，
+      逆勢操作的表現反而更好，因為它在價格跌深時買、反彈時賣，正好與順勢策略相反。
+    </p>
+    <div class="highlight-box">
+      💡 <strong>沒有最好的策略，只有最適合當前市場的策略。</strong>
+      這也是為什麼 TW AutoTrader 同時提供多種策略，讓你可以根據市場狀態切換或組合使用。
+    </div>
+  </div>
+
+  <div class="footer">
+    TW AutoTrader — 回測說明附圖 · 僅供學習參考，非投資建議
+  </div>
+
+</div>
+</body>
+</html>

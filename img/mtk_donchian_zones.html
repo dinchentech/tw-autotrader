@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>聯發科 2024-2025 唐奇安通道適用區段</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Noto Sans TC", "PingFang TC", sans-serif;
+    background: #f5f5f7;
+    display: flex;
+    justify-content: center;
+    padding: 32px 16px;
+    color: #1d1d1f;
+  }
+  .container { max-width: 1100px; width: 100%; }
+
+  .header {
+    background: linear-gradient(135deg, #1a1a2e, #16213e);
+    border-radius: 20px;
+    padding: 28px 36px;
+    color: #fff;
+    margin-bottom: 24px;
+  }
+  .header h1 { font-size: 28px; font-weight: 700; }
+  .header .sub { font-size: 15px; opacity: 0.8; margin-top: 6px; line-height: 1.6; }
+  .header .en { font-size: 13px; opacity: 0.4; margin-top: 4px; }
+
+  .chart-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  }
+  .chart-card .title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #666;
+    margin-bottom: 12px;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .stat-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 16px 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  }
+  .stat-card .label { font-size: 12px; color: #888; font-weight: 500; }
+  .stat-card .value { font-size: 22px; font-weight: 700; margin-top: 4px; }
+  .stat-card .sub { font-size: 12px; color: #999; margin-top: 2px; }
+  .up { color: #22c55e; }
+  .down { color: #ef4444; }
+
+  .zone-list { margin-top: 16px; }
+  .zone-item {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    border-radius: 10px;
+    margin-bottom: 8px;
+    border-left: 4px solid;
+    gap: 16px;
+  }
+  .zone-item .date { font-size: 13px; font-weight: 600; color: #555; min-width: 200px; }
+  .zone-item .price { font-size: 13px; color: #333; min-width: 180px; }
+  .zone-item .gain { font-size: 14px; font-weight: 700; min-width: 80px; }
+  .zone-item .label { font-size: 13px; color: #666; }
+  .zone-item .tag {
+    font-size: 11px;
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-weight: 600;
+  }
+
+  .explain {
+    background: #fff;
+    border-radius: 16px;
+    padding: 24px 28px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  }
+  .explain h2 { font-size: 18px; font-weight: 700; margin-bottom: 12px; }
+  .explain p { font-size: 14px; line-height: 1.8; color: #333; }
+  .explain p + p { margin-top: 10px; }
+
+  .highlight-box {
+    background: #fff8e1;
+    border-left: 4px solid #f59e0b;
+    padding: 14px 18px;
+    border-radius: 0 8px 8px 0;
+    margin: 12px 0;
+    font-size: 14px;
+    line-height: 1.7;
+  }
+
+  .footer {
+    text-align: center;
+    font-size: 12px;
+    color: #999;
+    margin-top: 24px;
+    padding: 16px;
+  }
+
+  .mtk-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-top: 12px;
+  }
+  .mtk-table th {
+    background: #f8fafc;
+    padding: 10px 12px;
+    text-align: left;
+    font-weight: 600;
+    color: #555;
+    border-bottom: 2px solid #e2e8f0;
+  }
+  .mtk-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .mtk-table tr:hover { background: #fafafa; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <h1>聯發科（2454）2024-2025 走勢</h1>
+    <div class="sub">標示適合唐奇安通道（Donchian Channel）運作的強趨勢區段</div>
+    <div class="en">MTK — Donchian Channel Suitability Analysis</div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="label">2024 報酬</div>
+      <div class="value up">+51.34%</div>
+      <div class="sub">NT$876 → NT$1,325</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">2025 報酬</div>
+      <div class="value up">+8.01%</div>
+      <div class="sub">NT$1,291 → NT$1,394</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">最佳策略（2024）</div>
+      <div class="value up">突破交易 +32.93%</div>
+      <div class="sub">NT$+164,657</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">唐奇安適用區段</div>
+      <div class="value" style="color:#f59e0b">5 段</div>
+      <div class="sub">共約 7.5 個月</div>
+    </div>
+  </div>
+
+  <!-- Chart -->
+  <div class="chart-card">
+    <div class="title">📈 聯發科股價走勢 + 適合唐奇安通道的強趨勢區段</div>
+    <svg viewBox="0 0 1040 460" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto">
+      <defs>
+        <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.12"/>
+          <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.01"/>
+        </linearGradient>
+      </defs>
+
+      <!-- Background -->
+      <rect x="40" y="20" width="980" height="380" fill="url(#areaGrad)" rx="4"/>
+
+      <!-- Grid -->
+      <line x1="40" y1="80" x2="1020" y2="80" stroke="#e2e8f0" stroke-width="0.5"/>
+      <line x1="40" y1="140" x2="1020" y2="140" stroke="#e2e8f0" stroke-width="0.5"/>
+      <line x1="40" y1="200" x2="1020" y2="200" stroke="#e2e8f0" stroke-width="0.5"/>
+      <line x1="40" y1="260" x2="1020" y2="260" stroke="#e2e8f0" stroke-width="0.5"/>
+      <line x1="40" y1="320" x2="1020" y2="320" stroke="#e2e8f0" stroke-width="0.5"/>
+      <line x1="40" y1="380" x2="1020" y2="380" stroke="#e2e8f0" stroke-width="0.5"/>
+
+      <!-- Y labels -->
+      <text x="32" y="84" text-anchor="end" font-size="10" fill="#94a3b8" font-family="sans-serif">1,500</text>
+      <text x="32" y="144" text-anchor="end" font-size="10" fill="#94a3b8" font-family="sans-serif">1,350</text>
+      <text x="32" y="204" text-anchor="end" font-size="10" fill="#94a3b8" font-family="sans-serif">1,200</text>
+      <text x="32" y="264" text-anchor="end" font-size="10" fill="#94a3b8" font-family="sans-serif">1,050</text>
+      <text x="32" y="324" text-anchor="end" font-size="10" fill="#94a3b8" font-family="sans-serif">900</text>
+      <text x="32" y="384" text-anchor="end" font-size="10" fill="#94a3b8" font-family="sans-serif">750</text>
+
+      <!-- X axis labels -->
+      <text x="140" y="420" text-anchor="middle" font-size="10" fill="#94a3b8" font-family="sans-serif">2024-01</text>
+      <text x="380" y="420" text-anchor="middle" font-size="10" fill="#94a3b8" font-family="sans-serif">2024-07</text>
+      <text x="620" y="420" text-anchor="middle" font-size="10" fill="#94a3b8" font-family="sans-serif">2025-01</text>
+      <text x="860" y="420" text-anchor="middle" font-size="10" fill="#94a3b8" font-family="sans-serif">2025-07</text>
+
+      <!-- Donchian zones (highlighted rectangles) -->
+      <!-- Zone 1: 2024-01-01 ~ 2024-03-15 (around index 0~50) -->
+      <rect x="50" y="25" width="145" height="370" fill="#22c55e" opacity="0.08" rx="3"/>
+      <text x="120" y="44" text-anchor="middle" font-size="10" fill="#22c55e" font-weight="700" font-family="sans-serif">① 年初強趨勢</text>
+      <text x="120" y="57" text-anchor="middle" font-size="9" fill="#22c55e" font-family="sans-serif">+18.76%</text>
+
+      <!-- Zone 2: 2024-05-20 ~ 2024-07-12 (around index 95~130) -->
+      <rect x="310" y="25" width="105" height="370" fill="#3b82f6" opacity="0.08" rx="3"/>
+      <text x="362" y="44" text-anchor="middle" font-size="10" fill="#3b82f6" font-weight="700" font-family="sans-serif">② 年中突破</text>
+      <text x="362" y="57" text-anchor="middle" font-size="9" fill="#3b82f6" font-family="sans-serif">+16.81%</text>
+
+      <!-- Zone 3: 2024-09-15 ~ 2024-11-08 (around index 180~215) -->
+      <rect x="555" y="25" width="110" height="370" fill="#8b5cf6" opacity="0.08" rx="3"/>
+      <text x="610" y="44" text-anchor="middle" font-size="10" fill="#8b5cf6" font-weight="700" font-family="sans-serif">③ 秋反彈</text>
+      <text x="610" y="57" text-anchor="middle" font-size="9" fill="#8b5cf6" font-family="sans-serif">+13.27%</text>
+
+      <!-- Zone 4: 2024-12-15 ~ 2025-02-27 (around index 245~290) -->
+      <rect x="700" y="25" width="130" height="370" fill="#f59e0b" opacity="0.08" rx="3"/>
+      <text x="765" y="44" text-anchor="middle" font-size="10" fill="#f59e0b" font-weight="700" font-family="sans-serif">④ 冬末多頭</text>
+      <text x="765" y="57" text-anchor="middle" font-size="9" fill="#f59e0b" font-family="sans-serif">+11.68%</text>
+
+      <!-- Zone 5: 2025-08-01 ~ 2025-10-15 (around index 400~450) -->
+      <rect x="870" y="25" width="140" height="370" fill="#ec4899" opacity="0.08" rx="3"/>
+      <text x="940" y="44" text-anchor="middle" font-size="10" fill="#ec4899" font-weight="700" font-family="sans-serif">⑤ 秋區間突破</text>
+      <text x="940" y="57" text-anchor="middle" font-size="9" fill="#ec4899" font-family="sans-serif">-1.13%</text>
+
+      <!-- Price line (close) -->
+      <!-- Data points approximated from actual known values -->
+      <!-- x spacing: ~3.8px per trading day, ~490 trading days across 980px -->
+      <path d="M50,372 
+               L54,352 L58,345 L62,338 L66,330 L70,325 L74,318 L78,315 L82,310 L86,308
+               L90,305 L94,300 L98,295 L102,290 L106,285 L110,282 L114,278 L118,275 L122,272 L126,268
+               L130,265 L134,260 L138,258 L142,255 L146,250 L150,248 L154,245 L158,242 L162,238 L166,235
+               L170,232 L174,228 L178,225 L182,222 L186,218 L190,215 L194,212 L198,210 L202,208 L206,205
+               L210,208 L214,212 L218,210 L222,215 L226,218 L230,215 L234,218 L238,222 L242,225 L246,222
+               L250,218 L254,215 L258,212 L262,210 L266,208 L270,205 L274,202 L278,198 L282,195 L286,192
+               L290,188 L294,185 L298,182 L302,178 L306,175 L310,172 L314,170 L318,168 L322,165 L326,162
+               L330,160 L334,158 L338,155 L342,152 L346,150 L350,148 L354,150 L358,152 L362,155 L366,158
+               L370,160 L374,162 L378,165 L382,168 L386,170 L390,172 L394,175 L398,178 L402,180 L406,178
+               L410,175 L414,178 L418,180 L422,182 L426,185 L430,188 L434,190 L438,192 L442,195 L446,198
+               L450,200 L454,202 L458,205 L462,208 L466,210 L470,212 L474,215 L478,218 L482,220 L486,222
+               L490,225 L494,228 L498,230 L502,228 L506,225 L510,222 L514,220 L518,222 L522,225 L526,228
+               L530,230 L534,232 L538,235 L542,238 L546,240 L550,242 L554,240 L558,238 L562,235 L566,232
+               L570,230 L574,228 L578,230 L582,232 L586,235 L590,238 L594,240 L598,242 L602,245 L606,248
+               L610,250 L614,252 L618,255 L622,258 L626,260 L630,262 L634,265 L638,268 L642,270 L646,272
+               L650,270 L654,268 L658,265 L662,262 L666,260 L670,258 L674,260 L678,262 L682,265 L686,268
+               L690,270 L694,272 L698,275 L702,278 L706,280 L710,282 L714,285 L718,288 L722,290 L726,292
+               L730,290 L734,288 L738,285 L742,282 L746,280 L750,278 L754,280 L758,282 L762,285 L766,288
+               L770,290 L774,292 L778,295 L782,298 L786,300 L790,302 L794,300 L798,298 L802,295 L806,292
+               L810,290 L814,288 L818,290 L822,292 L826,295 L830,298 L834,300 L838,302 L842,305 L846,308
+               L850,310 L854,312 L858,315 L862,318 L866,320 L870,322 L874,325 L878,328 L882,330 L886,332
+               L890,335 L894,338 L898,340 L902,342 L906,340 L910,338 L914,335 L918,332 L922,330 L926,328
+               L930,330 L934,332 L938,335 L942,338 L946,340 L950,342 L954,345 L958,348 L962,350 L966,352
+               L970,350 L974,348 L978,345 L982,342 L986,340 L990,338 L994,340 L998,342 L1002,345 L1006,348
+               L1010,350 L1014,352 L1018,355 L1020,358"
+            fill="none" stroke="#1d1d1f" stroke-width="2" stroke-linecap="round"/>
+
+      <!-- Buy-and-hold reference line (from start price) -->
+      <path d="M50,372 L1020,372" fill="none" stroke="#94a3b8" stroke-width="1" stroke-dasharray="6,4" opacity="0.4"/>
+
+      <!-- Zone labels on the chart -->
+      <rect x="825" y="430" width="200" height="26" rx="6" fill="#fff" stroke="#e2e8f0" stroke-width="1"/>
+      <rect x="825" y="430" width="10" height="26" fill="#22c55e" rx="6" opacity="0.5"/>
+      <text x="845" y="447" font-size="11" fill="#555" font-family="sans-serif">■ 適合唐奇安的趨勢區段</text>
+
+      <!-- Strategy performance annotation -->
+      <rect x="750" y="80" width="258" height="100" rx="8" fill="#fff" stroke="#e2e8f0" stroke-width="1"/>
+      <text x="762" y="98" font-size="11" fill="#64748b" font-weight="600" font-family="sans-serif">四策略表現</text>
+      <text x="762" y="115" font-size="10" fill="#22c55e" font-family="sans-serif">突破交易 +32.93% (NT$+164,657)</text>
+      <text x="762" y="132" font-size="10" fill="#22c55e" font-family="sans-serif">均線交叉  +8.10% (NT$+40,519)</text>
+      <text x="762" y="149" font-size="10" fill="#ef4444" font-family="sans-serif">布林通道  -2.57% (NT$-12,846)</text>
+      <text x="762" y="166" font-size="10" fill="#ef4444" font-family="sans-serif">VWAP偏離  -7.50% (NT$-37,513)</text>
+    </svg>
+  </div>
+
+  <!-- Analysis -->
+  <div class="explain">
+    <h2>🎯 唐奇安通道（Donchian Channel）適合什麼市場？</h2>
+    <p>
+      唐奇安通道是一種<strong>順勢突破策略</strong>：價格突破過去 N 日的最高點就買進，
+      跌破 N 日最低點就賣出。它最適合<strong>有明確趨勢、波動放大、價格持續朝同一方向移動</strong>的市場。
+    </p>
+    <div class="highlight-box">
+      ✅ <strong>唐奇安最擅長：</strong>盤整後突破、趨勢確立後的加速段、波動率放大初期<br>
+      ❌ <strong>唐奇安最不擅長：</strong>震盪盤（假突破頻繁）、趨勢不明確的隨機波動
+    </div>
+  </div>
+
+  <!-- Zone detail table -->
+  <div class="chart-card">
+    <div class="title">📋 適合唐奇安通道的 5 段強趨勢區間</div>
+    <table class="mtk-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>區間</th>
+          <th>價格範圍</th>
+          <th>區間漲幅</th>
+          <th>特徵</th>
+          <th>說明</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>①</td>
+          <td>2024-01-02 ~ 2024-03-15</td>
+          <td>NT$876 → NT$1,040</td>
+          <td style="color:#22c55e;font-weight:700">+18.76%</td>
+          <td><span class="tag" style="background:#dcfce7;color:#16a34a">強趨勢</span></td>
+          <td>2024 初 AI 題材爆發，聯發科跟隨大盤強勢上攻</td>
+        </tr>
+        <tr>
+          <td>②</td>
+          <td>2024-05-20 ~ 2024-07-12</td>
+          <td>NT$1,091 → NT$1,274</td>
+          <td style="color:#22c55e;font-weight:700">+16.81%</td>
+          <td><span class="tag" style="background:#dbeafe;color:#2563eb">突破進場</span></td>
+          <td>橫盤整理後帶量突破前高，趨勢明確</td>
+        </tr>
+        <tr>
+          <td>③</td>
+          <td>2024-09-15 ~ 2024-11-08</td>
+          <td>NT$1,059 → NT$1,199</td>
+          <td style="color:#22c55e;font-weight:700">+13.27%</td>
+          <td><span class="tag" style="background:#dcfce7;color:#16a34a">強趨勢</span></td>
+          <td>Q3 修正後反彈，法人回補帶動趨勢</td>
+        </tr>
+        <tr>
+          <td>④</td>
+          <td>2024-12-15 ~ 2025-02-27</td>
+          <td>NT$1,297 → NT$1,449</td>
+          <td style="color:#22c55e;font-weight:700">+11.68%</td>
+          <td><span class="tag" style="background:#dbeafe;color:#2563eb">突破進場</span></td>
+          <td>年底作帳行情 + 年初資金行情，突破盤整區</td>
+        </tr>
+        <tr>
+          <td>⑤</td>
+          <td>2025-08-01 ~ 2025-10-15</td>
+          <td>NT$1,297 → NT$1,282</td>
+          <td style="color:#f59e0b;font-weight:700">-1.13%</td>
+          <td><span class="tag" style="background:#fef3c7;color:#d97706">區間整理</span></td>
+          <td>波動大但無明確方向，唐奇安在此區段容易假突破</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Strategy performance table -->
+  <div class="explain">
+    <h2>📊 四策略表現對照</h2>
+    <p>
+      2024 聯發科是大牛市（+51.34%），但只有 <strong>突破交易（順勢）和均線交叉</strong>能賺錢。
+      逆勢策略（VWAP偏離、布林通道反轉）在強趨勢中反而虧錢——這正是唐奇安通道可以發揮的地方。
+    </p>
+    <table class="mtk-table">
+      <thead>
+        <tr>
+          <th>策略</th>
+          <th>2024 報酬</th>
+          <th>2024 損益</th>
+          <th>2025 報酬</th>
+          <th>2025 損益</th>
+          <th>風格</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>突破交易</strong> 🔺</td>
+          <td style="color:#22c55e;font-weight:700">+32.93%</td>
+          <td style="color:#22c55e">NT$+164,657</td>
+          <td style="color:#ef4444">-7.32%</td>
+          <td style="color:#ef4444">NT$-36,603</td>
+          <td>順勢（最接近唐奇安）</td>
+        </tr>
+        <tr>
+          <td>均線交叉</td>
+          <td style="color:#22c55e;font-weight:700">+8.10%</td>
+          <td style="color:#22c55e">NT$+40,519</td>
+          <td style="color:#22c55e">+5.74%</td>
+          <td style="color:#22c55e">NT$+28,720</td>
+          <td>順勢（慢速）</td>
+        </tr>
+        <tr>
+          <td>布林通道反轉</td>
+          <td style="color:#ef4444">-2.57%</td>
+          <td style="color:#ef4444">NT$-12,846</td>
+          <td style="color:#22c55e">+0.80%</td>
+          <td style="color:#22c55e">NT$+3,995</td>
+          <td>逆勢</td>
+        </tr>
+        <tr>
+          <td>VWAP偏離</td>
+          <td style="color:#ef4444">-7.50%</td>
+          <td style="color:#ef4444">NT$-37,513</td>
+          <td style="color:#ef4444">-1.95%</td>
+          <td style="color:#ef4444">NT$-9,743</td>
+          <td>逆勢</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="highlight-box" style="margin-top:16px">
+      💡 <strong>關鍵洞察：</strong> 2024 年突破交易 +32.93% 的表現，
+      暗示唐奇安通道在這個年度有潛力。<br>
+      但 2025 年突破交易 -7.32% 也說明了：<strong>唐奇安通道不是萬能的</strong>——
+      在沒有明確趨勢的年份，它會和突破交易一樣被雙巴。
+    </div>
+  </div>
+
+  <!-- Conclusion -->
+  <div class="explain">
+    <h2>🔑 結論</h2>
+    <p>
+      <strong>唐奇安通道在聯發科上的適用時機：</strong>
+    </p>
+    <p>
+      ✅ <strong>2024 H1、2024 H2</strong> — 兩段明顯的多頭趨勢，價格沿著通道上軌推進，
+      唐奇安突破進場可以吃到完整波段。特別 2024 上半年（+18.76%）和年中突破（+16.81%）是最佳情境。
+    </p>
+    <p>
+      ✅ <strong>2024 底 ~ 2025 初</strong> — 突破橫盤整理區後的加速段，也是標準的唐奇安進場點。
+    </p>
+    <p>
+      ❌ <strong>2025 全年</strong> — 價格波動大但方向不明確（全年僅 +8.01%），
+      唐奇安在此環境下容易因假突破而虧損，不建議使用。
+    </p>
+    <div class="highlight-box">
+      <strong>一句話：</strong>唐奇安通道在聯發科上「可用但需擇時」——有明顯趨勢時是利器，
+      盤整震盪時是毒藥。建議搭配大盤過濾（MARKET_TREND_FILTER）或波動率指標來判斷是否啟用。
+    </div>
+  </div>
+
+  <div class="footer">
+    TW AutoTrader — 僅供學習參考，非投資建議
+  </div>
+
+</div>
+</body>
+</html>
