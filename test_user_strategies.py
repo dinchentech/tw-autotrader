@@ -99,7 +99,7 @@ def test_live_trader_integration():
         # 更新 config_loader 中的參數鍵
         new_keys = {
             'g1_strategy_1': ['fast_period', 'slow_period'],
-            'g1_strategy_2': ['rsi_period', 'oversold', 'overbought'],
+            'g1_strategy_2': ['k_period', 'k_threshold'],
             'g2_strategy_1': ['lookback', 'threshold'],
             'g2_strategy_2': ['ma_period', 'volume_ma_period', 'volume_mult'],
         }

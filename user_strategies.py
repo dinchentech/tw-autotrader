@@ -51,49 +51,94 @@ def price_band(df: pd.DataFrame, **kwargs) -> pd.DataFrame:
 
 
 # ==========================================
-# Group 1 備用策略 2 (g1_strategy_2)
+# Group 1 備用策略 2 (g1_strategy_2) — 週 KD 黃金交叉策略
 # ==========================================
-def my_custom_rsi(df: pd.DataFrame, **kwargs) -> pd.DataFrame:
+def weekly_kd_golden_cross(df: pd.DataFrame, **kwargs) -> pd.DataFrame:
     """
-    Group 1 備用策略 2 - 自訂 RSI 策略
+    Group 1 備用策略 2 - 週 KD 黃金交叉策略
 
-    預設：RSI 超買超賣策略
-    - RSI < 30 = 超賣，買進
-    - RSI > 70 = 超買，賣出
+    將日線資料重新採樣為週線，計算週 KD(9,3,3)，在低檔黃金交叉時買進，
+    死亡交叉時賣出。一年約 1~2 次訊號，適合中長期波段操作。
 
     Parameters:
-    - df: 包含 OHLCV 資料的 DataFrame
+    - df: 包含 OHLCV 資料的 DataFrame（日線）
     - kwargs: 策略參數
-        - rsi_period: RSI 週期 (預設 14)
-        - oversold: 超賣門檻 (預設 30)
-        - overbought: 超買門檻 (預設 70)
+        - k_period: KD 週期 (預設 9)
+        - k_threshold: K 值低檔門檻，低於此值才考慮買進 (預設 30)
+        - d_period: K/D 平滑期數 (預設 3)
 
     Returns:
     - DataFrame with 'signal' column (1=BUY, -1=SELL, 0=HOLD)
     """
-    rsi_period = kwargs.get('rsi_period', 14)
-    oversold = kwargs.get('oversold', 30)
-    overbought = kwargs.get('overbought', 70)
+    import numpy as np
+
+    k_period = kwargs.get('k_period', 9)
+    k_threshold = kwargs.get('k_threshold', 30)
+    d_period = kwargs.get('d_period', 3)
 
     signals = pd.Series(0, index=df.index)
 
-    if len(df) >= rsi_period + 1:
-        # 計算 RSI
-        delta = df['close'].diff()
-        gain = delta.where(delta > 0, 0)
-        loss = -delta.where(delta < 0, 0)
+    if len(df) < 60:
+        return pd.DataFrame({'signal': signals}, index=df.index)
 
-        avg_gain = gain.rolling(window=rsi_period, min_periods=1).mean()
-        avg_loss = loss.rolling(window=rsi_period, min_periods=1).mean()
+    # ── 日線 → 週線聚合（以最後交易日為週索引） ──
+    df_copy = df.copy()
+    df_copy['week_label'] = df_copy.index.to_period('W')
 
-        rs = avg_gain / avg_loss.replace(0, 1e-10)
-        rsi = 100 - (100 / (1 + rs))
+    weekly_records = []
+    for week_label, group in df_copy.groupby('week_label'):
+        if len(group) == 0:
+            continue
+        weekly_records.append({
+            'last_day': group.index[-1],
+            'open': group['open'].iloc[0],
+            'high': group['high'].max(),
+            'low': group['low'].min(),
+            'close': group['close'].iloc[-1],
+            'volume': group['volume'].sum(),
+        })
 
-        # RSI 策略訊號
-        signals[(rsi < oversold) & (rsi.shift(1) >= oversold)] = 1  # 從超賣回升
-        signals[(rsi > overbought) & (rsi.shift(1) <= overbought)] = -1  # 從超買回落
+    weekly = pd.DataFrame(weekly_records).set_index('last_day')
 
-    return pd.DataFrame({'signal': signals}, index=df.index)
+    if len(weekly) < k_period + d_period + 5:
+        return pd.DataFrame({'signal': signals}, index=df.index)
+
+    # ── 計算週 KD(9,3,3) ──
+    low_n = weekly['low'].rolling(k_period).min()
+    high_n = weekly['high'].rolling(k_period).max()
+
+    rsv = pd.Series(50.0, index=weekly.index)
+    mask = (high_n - low_n).abs() > 1e-8
+    rsv[mask] = 100.0 * (weekly.loc[mask, 'close'] - low_n[mask]) / (high_n[mask] - low_n[mask])
+    rsv = rsv.clip(0, 100)
+
+    # K = SMA(RSV, d_period), D = SMA(K, d_period)
+    k = rsv.rolling(d_period).mean()
+    d = k.rolling(d_period).mean()
+
+    # ── 週線訊號 ──
+    buy_signal = (
+        (k > d) &
+        (k.shift(1) <= d.shift(1)) &
+        (k < k_threshold)
+    )
+    sell_signal = (
+        (k < d) &
+        (k.shift(1) >= d.shift(1))
+    )
+
+    # ── 週線訊號映射回日線（放在該週最後一個交易日） ──
+    for idx in weekly.index[buy_signal]:
+        if idx in signals.index:
+            signals.loc[idx] = 1
+
+    for idx in weekly.index[sell_signal]:
+        if idx in signals.index:
+            signals.loc[idx] = -1
+
+    df['signal'] = signals
+    df.drop(columns=['week_label'], inplace=True, errors='ignore')
+    return df
 
 
 # ==========================================
@@ -184,7 +229,7 @@ def my_custom_volume_price(df: pd.DataFrame, **kwargs) -> pd.DataFrame:
 USER_STRATEGY_MAP = {
     # Group 1 備用策略
     'g1_strategy_1': price_band,
-    'g1_strategy_2': my_custom_rsi,
+    'g1_strategy_2': weekly_kd_golden_cross,
 
     # Group 2 備用策略
     'g2_strategy_1': my_custom_momentum,

@@ -16,7 +16,7 @@ STRATEGY_PARAM_KEYS = {
     "keep_wait": [],
     # 用戶自訂策略
     "g1_strategy_1": ["buy_price", "sell_price"],
-    "g1_strategy_2": ["rsi_period", "oversold", "overbought"],
+    "g1_strategy_2": ["k_period", "k_threshold"],
     "g2_strategy_1": ["lookback", "threshold"],
     "g2_strategy_2": ["ma_period", "volume_ma_period", "volume_mult"],
 }
