@@ -41,6 +41,28 @@ CANDIDATE_POOL = [
     "0050","006208","00878",  # ETF
 ]
 
+# find_catalyst_stocks.py 掃描用的大池（市值前 150 大 + 各產業代表）
+EXTENDED_UNIVERSE = [
+    "2330","2454","2317","2382","2376","2345","2357","2356","2308","2303",
+    "2408","2409","2412","2474","2489","3008","3017","3022","3034","3037",
+    "3045","3050","3189","3229","3231","3296","3406","3443","3454","3481",
+    "3532","3533","3545","3576","3583","3596","3617","3653","3661","3673",
+    "3702","3706","3711","3715","4904","4915","4927","4938","4943","4958",
+    "4961","4976","4977","4989","5007","5215","5234","5288","5434","5469",
+    "5534","5607","5608","5880","6005","6116","6155","6166","6176","6189",
+    "6191","6202","6206","6213","6239","6257","6269","6271","6278","6285",
+    "6405","6409","6412","6415","6431","6446","6456","6477","6491","6505",
+    "6515","6525","6531","6533","6541","6552","6573","6585","6645","6655",
+    "6669","6706","6719","6742","6754","6756","6768","6770","6789","6799",
+    "6805","6806","6830","6854","6861","6895","6901","6914","6928","6933",
+    "6937","8028","8046","8105","8112","8114","8131","8150","8163","8210",
+    "8215","8341","8443","8454","8464","8473","8476","8499","8926","8996",
+    "9904","9907","9910","9914","9917","9921","9924","9925","9927","9940",
+    "9941","9943","9945","9958",
+    "2881","2882","2884","2885","2886","2887","2890","2891","2892",
+    "0050","0056","006208","00878","00632R","00646",
+]
+
 POOL_LABELS = {
     "2330":"台積電","2454":"聯發科","2317":"鴻海",
     "2382":"廣達","2376":"技嘉","2345":"智邦",
@@ -338,11 +360,15 @@ def _snap_date(df, target):
     return df.index[0] if len(df.index) > 0 else None
 
 
-def backtest_selector(data, params, top_n=4, verbose=False):
+def backtest_selector(data, params, top_n=4, verbose=False, extended_data=None):
     """
     回測每季選股績效。
     每季末用 params 選股 → 持有到下季末 → 計算報酬。
     最後一季只評價不買賣。
+    
+    extended_data: 較大股票池的資料 dict，若 params 中 catalyst_expand=1，
+                   則每季先用 catalyst_score 掃 extended_data，
+                   將高分標的加入候選池後再跑動能選股。
     """
     import math
     quarter_dates = quarter_end_dates()
@@ -351,9 +377,8 @@ def backtest_selector(data, params, top_n=4, verbose=False):
     holdings_list = []
     year_vals = {}
     last_val = capital
-
-    # 記錄目前持有的股票（用於最後一季評價）
     current_holdings = []
+    catalyst_threshold = 0.4
 
     for qi, qd in enumerate(quarter_dates):
         is_last = (qi == len(quarter_dates) - 1)
@@ -389,7 +414,32 @@ def backtest_selector(data, params, top_n=4, verbose=False):
 
         # 選股日對齊到實際交易日
         buy_date_q = _snap_date(list(data.values())[0], qd) if data else qd
-        selected = pick_top_stocks(data, buy_date_q, params, top_n)
+        
+        # ── catalyst_expand：用 catalyst 掃 extended_data，擴充候選池 ──
+        working_data = dict(data)
+        if params.get("catalyst_expand") and extended_data and buy_date_q:
+            new_finds = []
+            for sym, df in extended_data.items():
+                if sym in working_data:
+                    continue
+                if buy_date_q not in df.index:
+                    continue
+                px = float(df.loc[buy_date_q, "close"])
+                if px < 30:
+                    continue
+                cs = catalyst_score(df, buy_date_q)
+                if cs and cs["cat_total"] >= catalyst_threshold:
+                    new_finds.append((sym, cs["cat_total"]))
+            if verbose and new_finds:
+                top5 = sorted(new_finds, key=lambda x: x[1], reverse=True)[:5]
+                print(f"    🔍 催化劑擴池 {len(new_finds)} 檔 ({', '.join(f'{s}({sc:.1f})' for s,sc in top5)})")
+            # 最多加 5 檔，且只加得分最高的
+            new_finds.sort(key=lambda x: x[1], reverse=True)
+            for sym, _ in new_finds[:5]:
+                if sym in extended_data:
+                    working_data[sym] = extended_data[sym]
+        
+        selected = pick_top_stocks(working_data, buy_date_q, params, top_n)
         if not selected:
             continue
 
@@ -478,22 +528,24 @@ GRID_PARAMS = {
     "technical_weight": [0.0, 0.3, 0.5, 1.0],
     "stability_weight": [0.0, 0.3, 0.5],
     "catalyst_weight": [0.0, 0.3, 0.5, 1.0],
+    "catalyst_expand": [0, 1],
     "use_ma_filter": [False, True],
     "min_price": [5, 10],
 }
 
 DEFAULT_PARAMS = {
-    "momentum_days": 63,
-    "momentum_weight": 1.0,
-    "technical_weight": 0.5,
-    "stability_weight": 0.3,
+    "momentum_days": 21,
+    "momentum_weight": 2.0,
+    "technical_weight": 0.3,
+    "stability_weight": 0.0,
     "catalyst_weight": 0.0,
+    "catalyst_expand": 0,
     "use_ma_filter": False,
     "min_price": 5,
 }
 
 
-def run_grid_search(data, top_n=4):
+def run_grid_search(data, top_n=4, extended_data=None):
     """Grid Search 所有參數組合"""
     keys = list(GRID_PARAMS.keys())
     values = list(GRID_PARAMS.values())
@@ -510,7 +562,7 @@ def run_grid_search(data, top_n=4):
 
     for ci, combo in enumerate(combinations):
         params = dict(zip(keys, combo))
-        bt = backtest_selector(data, params, top_n, verbose=False)
+        bt = backtest_selector(data, params, top_n, verbose=False, extended_data=extended_data)
         results.append({
             "params": params,
             "final_value": bt["final_value"],
@@ -718,37 +770,43 @@ def main():
     parser.add_argument("--backtest", action="store_true", help="用預設參數回測")
     parser.add_argument("--recommend", action="store_true", help="輸出下一季推薦持股")
     parser.add_argument("--report", action="store_true", help="產出 HTML 報告")
+    parser.add_argument("--integrate", action="store_true", help="整合催化劑掃瞄，動態擴充候選池再選股")
     parser.add_argument("--top-n", type=int, default=4, help="每季選股數 (default: 4)")
     args = parser.parse_args()
 
     print("=" * 60)
     print("📊 每季選股神器 — Stock Selector Grid")
     print("=" * 60)
+    if args.integrate:
+        print("   🔗 模式: 整合催化劑掃瞄（動態擴充候選池）")
+    print()
 
-    # 載入資料
-    print(f"\n📥 載入 {len(CANDIDATE_POOL)} 檔候選股票資料...")
+    # 載入核心候選資料
+    print(f"📥 載入 {len(CANDIDATE_POOL)} 檔核心股票資料...")
     data = load_all_stocks()
     print(f"✅ 成功載入 {len(data)} 檔")
+    
+    extended_data = None
+    if args.integrate:
+        print(f"\n📥 載入 EXTENDED_UNIVERSE {len(EXTENDED_UNIVERSE)} 檔供催化劑掃瞄...")
+        extended_data = load_all_stocks(EXTENDED_UNIVERSE)
+        print(f"✅ 成功載入 {len(extended_data)} 檔")
 
     if args.report or (not args.grid and not args.backtest and not args.recommend and not args.report):
-        # 先跑 Grid Search
         print("\n🔍 預設執行 Grid Search...")
-        results = run_grid_search(data, top_n=args.top_n)
+        results = run_grid_search(data, top_n=args.top_n, extended_data=extended_data)
         print_top_results(results, n=10)
 
         best_params = results[0]["params"]
         print(f"\n🏆 最佳參數: {best_params}")
         print(f"   終值: NT${results[0]['final_value']:,.0f} ({results[0]['total_return']:+.1%})")
 
-        # 產出 HTML 報告
         out = os.path.join(os.path.dirname(__file__), "..", "img", "stock_selector_grid_report.html")
         generate_html_report(results, data, best_params, out)
-
-        # 推薦
         recommend_next_quarter(data, best_params, top_n=args.top_n)
 
     if args.grid:
-        results = run_grid_search(data, top_n=args.top_n)
+        results = run_grid_search(data, top_n=args.top_n, extended_data=extended_data)
         print_top_results(results, n=10)
 
         best_params = results[0]["params"]
@@ -757,7 +815,7 @@ def main():
         recommend_next_quarter(data, best_params, top_n=args.top_n)
 
     if args.backtest:
-        bt = backtest_selector(data, DEFAULT_PARAMS, top_n=args.top_n, verbose=True)
+        bt = backtest_selector(data, DEFAULT_PARAMS, top_n=args.top_n, verbose=True, extended_data=extended_data)
         print(f"\n📊 預設參數回測結果:")
         print(f"   終值: NT${bt['final_value']:,.0f} ({bt['total_return']:+.1%})")
         for yr, yd in bt["yearly"].items():
