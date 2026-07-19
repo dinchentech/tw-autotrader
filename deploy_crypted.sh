@@ -24,6 +24,20 @@ PYARMOR_RUNTIME_DIR="pyarmor_runtime_000000"
 TMP_DIR="./TMP"
 TMP_FILE="${TMP_DIR}/tw-autotrader.tar.gz"
 
+if [ -n "$SUDO_USER" ]; then
+  GCLOUD_USER="$SUDO_USER"
+else
+  GCLOUD_USER=""
+fi
+
+gcloud_as_user() {
+  if [ -n "$GCLOUD_USER" ]; then
+    sudo -u "$GCLOUD_USER" gcloud "$@"
+  else
+    gcloud "$@"
+  fi
+}
+
 # ════════════════════════════════════════════════════════
 # 前置檢查
 # ════════════════════════════════════════════════════════
