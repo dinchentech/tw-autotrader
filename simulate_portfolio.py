@@ -1371,5 +1371,759 @@ def main():
         # 長榮替代版不再需要（已移除 breakout 策略）
 
 
+# ═══════════════════════════════════════════════════════════════
+# 方案二：每季檢討 + 持股清算換股（回測版）
+# ═══════════════════════════════════════════════════════════════
+
+# 可選的候選股票池（系統支援的 stocks + ETF）
+CANDIDATE_POOL = [
+    "0050", "006208", "00878",  # ETF
+    "2330", "2454", "2317",     # 大型電子
+    "2382", "2376", "2345",     # 電子
+    "2881", "2882", "2886",     # 金融
+    "2412",                     # 電信防禦
+    "2408",                     # 記憶體
+    "4967",                     # 記憶體模組
+    "6446",                     # 生技
+]
+
+
+def trailing_return(df: pd.DataFrame, end_date, lookback_days=63) -> float:
+    """計算 trailing N 個交易日的報酬率（約一季）"""
+    if end_date not in df.index:
+        return 0.0
+    idx = df.index.get_loc(end_date)
+    start_idx = max(0, idx - lookback_days)
+    start_date = df.index[start_idx]
+    start_px = float(df.loc[start_date, "close"])
+    end_px = float(df.loc[end_date, "close"])
+    if start_px <= 0:
+        return 0.0
+    return (end_px - start_px) / start_px
+
+
+def rolling_max_drawdown(df, end_date, lookback_days=252):
+    """計算近 N 日的最大回撤（截至 end_date，僅用當時數據）"""
+    if end_date not in df.index:
+        return 0.0
+    idx = df.index.get_loc(end_date)
+    start_idx = max(0, idx - lookback_days)
+    sub = df.iloc[start_idx:idx+1]["close"].values
+    if len(sub) < 2:
+        return 0.0
+    peak = np.maximum.accumulate(sub)
+    dd = (sub - peak) / peak
+    return float(np.min(dd))
+
+
+def market_regime_at_date(market_df, end_date):
+    """
+    判斷截至 end_date 的市場狀態（僅用當時資訊）。
+    lookback_days 為回看交易天數。
+    """
+    lookback = 250
+    if end_date not in market_df.index:
+        return "neutral"
+    idx = market_df.index.get_loc(end_date)
+    start_idx = max(0, idx - lookback)
+    sub = market_df.iloc[start_idx:idx+1]
+    if len(sub) < 60:
+        return "neutral"
+    prices = sub["close"].values
+    current_px = prices[-1]
+    start_px_w = prices[0]
+    year_ret = (current_px - start_px_w) / start_px_w if start_px_w > 0 else 0
+    
+    # MA200 位置
+    ma200 = np.mean(prices[-200:]) if len(prices) >= 200 else np.mean(prices)
+    above_ma200 = current_px > ma200
+    
+    # 近 3 月報酬
+    q3_start = max(0, len(prices) - 63)
+    q3_ret = (prices[-1] - prices[q3_start]) / prices[q3_start] if prices[q3_start] > 0 else 0
+    
+    # 判斷邏輯（僅用截至 end_date 的資訊）
+    if year_ret > 0.15 and above_ma200 and q3_ret > -0.05:
+        return "bull"
+    elif year_ret < -0.10 or (not above_ma200 and q3_ret < -0.08):
+        return "bear"
+    elif year_ret > 0.05 and above_ma200:
+        return "mild_bull"
+    elif q3_ret < -0.05:
+        return "caution"
+    else:
+        return "neutral"
+
+
+def quarterly_review_dates(all_dates, start_date, end_date):
+    """回傳季度末交易日清單（3/31, 6/30, 9/30, 12/31 前後）」"""
+    start = pd.Timestamp(start_date)
+    end = pd.Timestamp(end_date) if end_date else all_dates[-1]
+    dates_in_range = [d for d in sorted(all_dates) if start <= d <= end]
+    
+    quarters = set()
+    for d in dates_in_range:
+        if d.month in (3, 6, 9, 12):
+            quarters.add((d.year, d.month))
+    
+    result = []
+    for yr, mo in sorted(quarters):
+        candidates = [d for d in dates_in_range if d.year == yr and d.month == mo]
+        if candidates:
+            result.append(candidates[-1])
+    return result
+
+
+def pick_preferred_stocks(market_regime, current_holdings, candidate_pool, signal_data, current_date):
+    """
+    依市場狀態（截至當天資訊）篩選優先持有的股票。
+    僅用 current_date 前的資料打分，不使用未來資訊。
+    
+    牛市 → 動能股優先
+    熊市 → 防禦股優先
+    中性 → 平衡配置
+    """
+    holdings_set = set(current_holdings)
+    
+    # 各股打分（僅用截至 current_date 的資訊）
+    scores = []
+    for sym in candidate_pool:
+        if sym not in signal_data:
+            continue
+        df = signal_data[sym]
+        if current_date not in df.index:
+            continue
+        
+        idx = df.index.get_loc(current_date)
+        
+        # 近 3 月報酬（動能訊號）
+        q3_ret = trailing_return(df, current_date, 63)
+        # 近 1 月報酬（短期動能）
+        m1_ret = trailing_return(df, current_date, 21)
+        # 近 6 月報酬
+        m6_ret = trailing_return(df, current_date, 125)
+        
+        # 波動率（近季）
+        prices = df.iloc[max(0, idx-63):idx+1]["close"].values
+        vol = np.std(prices / np.mean(prices)) if len(prices) > 5 else 0.1
+        
+        # MA 位置
+        close = float(df.loc[current_date, "close"])
+        ma20 = float(df.iloc[max(0, idx-20):idx+1]["close"].mean())
+        ma60 = float(df.iloc[max(0, idx-60):idx+1]["close"].mean()) if idx >= 60 else close
+        above_ma20 = 1.0 if close > ma20 else 0.0
+        above_ma60 = 1.0 if close > ma60 else 0.0
+        
+        # 依市場狀態決定加分項
+        if market_regime in ("bull", "mild_bull"):
+            # 牛市：偏好動能強 + 站上均線的股
+            momentum_score = (max(0, q3_ret) * 2 + max(0, m1_ret) * 3 + max(0, m6_ret))
+            technical_score = (above_ma20 + above_ma60) * 0.5
+            total = momentum_score + technical_score
+        elif market_regime == "bear":
+            # 熊市：偏好跌幅小 + 低波動 + 防禦型
+            defense_score = (max(0, -q3_ret) + max(0, -m1_ret)) * 0.5
+            low_vol_score = 1.0 / (vol + 0.01)
+            technical_score = (above_ma20 + above_ma60) * 0.3
+            total = defense_score + low_vol_score * 0.1 + technical_score
+        elif market_regime == "caution":
+            # 警戒：偏好還站在均線上方的
+            technical_score = (above_ma20 + above_ma60) * 1.0
+            momentum_score = max(0, q3_ret) + max(0, m1_ret)
+            total = technical_score + momentum_score
+        else:
+            # 中性：綜合
+            total = (max(0, q3_ret) + max(0, m1_ret)) + (above_ma20 + above_ma60) * 0.5
+        
+        scores.append((sym, total, q3_ret, m1_ret))
+    
+    scores.sort(key=lambda x: x[1], reverse=True)
+    return scores
+
+
+def simulate_plan2_quarterly(
+    initial_stocks: list,
+    start_date="2022-01-01",
+    end_date="2025-12-31",
+    initial_capital=500000,
+    profit_roll_months=3.0,
+    profit_roll_percentage=1.0,
+    candidate_pool=None,
+    verbose=True,
+):
+    """
+    方案二：每季檢討 + 清算換股
+    每季末使用「截至當天」的市場資訊判斷多空，
+    並選出當下最有利的持股。
+    """
+    if candidate_pool is None:
+        candidate_pool = CANDIDATE_POOL
+    
+    all_potential = list(set(
+        [s for s, _ in initial_stocks] + candidate_pool
+    ))
+    
+    # ── 載入所有股票資料 ──
+    signal_data = {}
+    for sym in all_potential:
+        df = run_strategy(sym, "ma_cross", start=start_date)
+        if df.empty:
+            if verbose:
+                print(f"  ⚠️ {sym} 無資料")
+            continue
+        if end_date:
+            df = df[df.index <= end_date]
+        signal_data[sym] = df
+    
+    # 0050 當市場指標
+    market_df = signal_data.get("0050", None)
+    if market_df is None:
+        market_df = run_strategy("0050", "ma_cross", start=start_date)
+        if end_date:
+            market_df = market_df[market_df.index <= end_date]
+    
+    if verbose:
+        print(f"✅ 載入 {len(signal_data)} 檔股票資料，使用 0050 為市場指標")
+    
+    # ── 初始化持倉（使用合理策略配置）──
+    positions = {}
+    cash_buckets = {}
+    for sym, alloc in initial_stocks:
+        if sym in signal_data:
+            positions[sym] = Position(sym, "ma_cross")
+            cash_buckets[sym] = float(alloc)
+    
+    init_total = sum(a for _, a in initial_stocks if _[0] in signal_data)
+    general_cash = float(initial_capital) - init_total
+    
+    strategy_for_sym = {}
+    for sym, _ in initial_stocks:
+        if sym in ("2412", "2382"):
+            strategy_for_sym[sym] = "keep_wait"
+        elif sym in ("0050", "006208", "00878"):
+            strategy_for_sym[sym] = "bollinger"
+        elif sym in ("2881", "2882"):
+            strategy_for_sym[sym] = "vwap"
+        else:
+            strategy_for_sym[sym] = "ma_cross"
+    
+    kw_initialized = set()
+    
+    all_dates = pd.DatetimeIndex(sorted(set(
+        d for df in signal_data.values() for d in df.index
+    )))
+    
+    transaction_log = []
+    monthly_records = []
+    review_log = []
+    
+    capital_injection_log = [
+        {"date": start_date, "amount": float(initial_capital), "source": "initial",
+         "running_total": float(initial_capital), "description": "初始資金"}
+    ]
+    
+    quarter_dates = quarterly_review_dates(all_dates, start_date, end_date)
+    
+    target_holdings_count = max(len(initial_stocks) // 2, 4)
+    
+    # ── 逐日模擬 ──
+    sorted_dates = sorted(all_dates)
+    first_trading_date = sorted_dates[0] if sorted_dates else None
+    
+    for current_date in sorted_dates:
+        # 第一天強制建所有初始倉位（不論訊號，Plan 2 人工選股直接持有）
+        if first_trading_date is not None and current_date == first_trading_date:
+            if verbose:
+                print(f"\n🏗️  第一天強制建倉 ({current_date.strftime('%Y-%m-%d')})...")
+            for sym in list(positions.keys()):
+                if sym not in signal_data or current_date not in signal_data[sym].index:
+                    continue
+                price = float(signal_data[sym].loc[current_date, "close"])
+                if pd.isna(price) or price <= 0:
+                    continue
+                available = cash_buckets.get(sym, 0)
+                if available <= 5:
+                    continue
+                pos = positions[sym]
+                strat = strategy_for_sym.get(sym, "ma_cross")
+                if strat == "keep_wait":
+                    spent = pos.buy(current_date, price, available * 0.7)
+                    kw_initialized.add(sym)
+                else:
+                    spent = pos.buy(current_date, price, available)
+                cash_buckets[sym] -= spent
+                if spent > 0:
+                    transaction_log.append(pos.trades[-1].copy())
+                    if verbose:
+                        print(f"   {sym}: 買入 NT${spent:,.0f} @ {price}")
+            continue
+        
+        for sym in list(positions.keys()):
+            if sym not in signal_data:
+                continue
+            if current_date not in signal_data[sym].index:
+                continue
+            
+            df = signal_data[sym]
+            row = df.loc[current_date]
+            price = row.get("close", 0)
+            if pd.isna(price) or price <= 0:
+                continue
+            
+            pos = positions[sym]
+            
+            # Plan 2 僅在每季檢討時賣出，季中不依訊號停利
+            # 季中僅執行加碼訊號（逢低加倉）
+            sig = row.get("signal", 0)
+            if pd.isna(sig):
+                continue
+            sig = int(sig)
+            
+            if sig == 1 and pos.shares == 0:
+                available = cash_buckets.get(sym, 0)
+                if available > 5:
+                    spent = pos.buy(current_date, price, available)
+                    cash_buckets[sym] -= spent
+                    if spent > 0:
+                        transaction_log.append(pos.trades[-1].copy())
+        
+        # ── 每季末檢討 ──
+        if current_date in quarter_dates:
+            holdings = [(sym, pos) for sym, pos in positions.items() if pos.shares > 0]
+            n_hold = len(holdings)
+            
+            if verbose:
+                regime = market_regime_at_date(market_df, current_date)
+                print(f"\n📋 季度檢討 {current_date.strftime('%Y-%m-%d')} — 持有 {n_hold} 檔 [市場: {regime}]")
+            
+            if n_hold < 1:
+                continue
+            
+            # 評估市場狀態（僅看截至當天的資訊）
+            regime = market_regime_at_date(market_df, current_date)
+            
+            # 計算各持股近季報酬
+            perf = {}
+            for sym, pos in holdings:
+                ret = trailing_return(signal_data[sym], current_date)
+                perf[sym] = ret
+            
+            # 找出需要汰換的持股
+            worst_sym = min(perf, key=perf.get)
+            worst_ret = perf[worst_sym]
+            best_ret = max(perf.values())
+            avg_ret = sum(perf.values()) / len(perf)
+            
+            if verbose:
+                for sym, ret in sorted(perf.items(), key=lambda x: x[1]):
+                    print(f"   {sym}: {ret:+.2%}")
+                print(f"   平均: {avg_ret:+.2%} | 最差: {worst_sym}({worst_ret:+.2%})")
+            
+            # ── 決定是否換股 ──
+            needs_swap = False
+            swap_reason = ""
+            
+            if n_hold >= target_holdings_count and best_ret - worst_ret > 0.15:
+                needs_swap = True
+                swap_reason = f"落後最佳 {(best_ret-worst_ret):.1%}"
+            elif worst_ret < -0.10 and avg_ret > -0.03:
+                needs_swap = True
+                swap_reason = f"大幅下跌 {worst_ret:.1%} 而盤勢尚可"
+            elif n_hold < target_holdings_count:
+                needs_swap = True
+                swap_reason = f"持股偏低({n_hold}<{target_holdings_count})，補倉"
+            
+            if needs_swap:
+                pos = positions[worst_sym]
+                px = float(signal_data[worst_sym].loc[current_date, "close"])
+                
+                if pos.shares > 0 and px > 0:
+                    proceeds = pos.sell(current_date, px)
+                    cash_buckets[worst_sym] += proceeds
+                    if proceeds > 0:
+                        transaction_log.append(pos.trades[-1].copy())
+                    if verbose:
+                        print(f"  🔴 清算 {worst_sym} ({swap_reason})，得款 NT${proceeds:,.0f}")
+                    
+                    del positions[worst_sym]
+                    if worst_sym in kw_initialized:
+                        kw_initialized.discard(worst_sym)
+                    if worst_sym in strategy_for_sym:
+                        del strategy_for_sym[worst_sym]
+                    
+                    freed_cash = cash_buckets.pop(worst_sym, 0)
+                    
+                    # 用市場資訊挑選新標的
+                    current_holdings = [s for s, p in positions.items() if p.shares > 0]
+                    scored = pick_preferred_stocks(
+                        regime, current_holdings, candidate_pool, signal_data, current_date
+                    )
+                    
+                    added_count = 0
+                    for new_sym, score, q3_ret, m1_ret in scored:
+                        if new_sym in current_holdings or new_sym in positions:
+                            continue
+                        if added_count >= 1:
+                            break
+                        
+                        if verbose:
+                            print(f"  🟢 新增 {new_sym} (市場{regime}偏好, score={score:.1f}, 近季{q3_ret:+.2%})")
+                        
+                        new_px = float(signal_data[new_sym].loc[current_date, "close"])
+                        
+                        # 清算所得資金全數投入新標的
+                        cash_buckets[new_sym] = cash_buckets.get(new_sym, 0) + freed_cash
+                        
+                        positions[new_sym] = Position(new_sym, "ma_cross")
+                        
+                        if new_sym in ("2412", "2382"):
+                            strategy_for_sym[new_sym] = "keep_wait"
+                        elif new_sym in ("0050", "006208", "00878"):
+                            strategy_for_sym[new_sym] = "bollinger"
+                        elif new_sym in ("2881", "2882"):
+                            strategy_for_sym[new_sym] = "vwap"
+                        else:
+                            strategy_for_sym[new_sym] = "ma_cross"
+                        
+                        strat = strategy_for_sym[new_sym]
+                        npos = positions[new_sym]
+                        avail = cash_buckets.get(new_sym, 0)
+                        spent = 0
+                        if avail > max(5, new_px):
+                            if strat == "keep_wait":
+                                spent = npos.buy(current_date, new_px, avail * 0.7)
+                            else:
+                                spent = npos.buy(current_date, new_px, avail)
+                            cash_buckets[new_sym] -= spent
+                            if spent > 0:
+                                kw_initialized.add(new_sym)
+                                transaction_log.append(npos.trades[-1].copy())
+                                if verbose:
+                                    print(f"  ✅ 以 NT${new_px:,.0f} 買入 {new_sym}")
+                        
+                        added_count += 1
+                        review_log.append({
+                            "date": current_date,
+                            "removed": worst_sym,
+                            "removed_ret": worst_ret,
+                            "added": new_sym,
+                            "added_ret": q3_ret,
+                            "reason": swap_reason,
+                            "market_regime": regime,
+                        })
+                    
+                    # 剩餘現金回一般池
+                    if freed_cash > 0:
+                        general_cash += freed_cash
+                else:
+                    if verbose:
+                        print(f"  — {worst_sym} 無持股，跳過")
+            else:
+                if verbose:
+                    print(f"  ✅ 持股表現正常，不調整")
+        
+        # 月底記錄
+        month_end_dates = _month_ends(all_dates, start_date, end_date)
+        for med in month_end_dates:
+            if current_date == med:
+                total_val = general_cash
+                for sym, pos in positions.items():
+                    if sym in signal_data and current_date in signal_data[sym].index:
+                        px = float(signal_data[sym].loc[current_date, "close"])
+                        total_val += pos.value(px)
+                    total_val += cash_buckets.get(sym, 0)
+                monthly_records.append({
+                    "date": current_date,
+                    "value": round(total_val, 2),
+                })
+                break
+    
+    return {
+        "initial_capital": initial_capital,
+        "positions": positions,
+        "cash_buckets": cash_buckets,
+        "general_cash": general_cash,
+        "transaction_log": transaction_log,
+        "monthly_records": monthly_records,
+        "signal_data": signal_data,
+        "review_log": review_log,
+        "strategy_for_sym": strategy_for_sym,
+        "initial_stocks": initial_stocks,
+        "capital_injection_log": capital_injection_log,
+        "profit_roll_months": profit_roll_months,
+        "profit_roll_percentage": profit_roll_percentage,
+    }
+
+
+def generate_plan2_report(result: dict) -> str:
+    """方案二每季檢討報告"""
+    import calendar
+    
+    positions = result["positions"]
+    cash_buckets = result["cash_buckets"]
+    general_cash = result.get("general_cash", 0)
+    initial_capital = result["initial_capital"]
+    tx_log = result["transaction_log"]
+    monthly = result["monthly_records"]
+    review_log = result.get("review_log", [])
+    strategy_for_sym = result.get("strategy_for_sym", {})
+    initial_stocks = result.get("initial_stocks", [])
+    profit_roll_months = result.get("profit_roll_months", 3.0)
+    profit_roll_percentage = result.get("profit_roll_percentage", 1.0)
+    
+    lines = []
+    start_yr = monthly[0]["date"].year if monthly else 2022
+    end_yr = monthly[-1]["date"].year if monthly else 2025
+    
+    lines.append(f"# 方案二：NT$500,000 一筆資金 + 每季檢討換股（{start_yr}~{end_yr}）")
+    lines.append("")
+    lines.append(f"> 📅 模擬日期：{datetime.now().strftime('%Y-%m-%d')}")
+    lines.append(f"> ⚠️ **過去績效不代表未來獲利，僅供參考。**")
+    lines.append(f"> 💡 每季末檢討各持股近季報酬，最差者若低於門檻則清算換股。")
+    lines.append("")
+    
+    # ── 起始配置 ──
+    lines.append("## 📋 起始配置")
+    lines.append("")
+    lines.append("| 標的 | 策略 | 初始資金 | 佔比 |")
+    lines.append("|------|------|---------|------|")
+    for sym, alloc in initial_stocks:
+        if sym in strategy_for_sym:
+            lines.append(f"| {sym} | {strategy_for_sym.get(sym, 'ma_cross')} | NT${alloc:,.0f} | {alloc/initial_capital*100:.0f}% |")
+    lines.append(f"| **總計** | — | **NT${initial_capital:,.0f}** | **100%** |")
+    lines.append("")
+    
+    # ── 每季檢討記錄 ──
+    if review_log:
+        lines.append("## 🔄 每季檢討換股記錄")
+        lines.append("")
+        lines.append("| 日期 | 清算 | 該季報酬 | 新增 | 新增近季報酬 | 原因 |")
+        lines.append("|------|------|---------|------|-------------|------|")
+        for r in review_log:
+            reason = f"表現落後 {(r['removed_ret'] - r['added_ret']):+.2%}"
+            lines.append(f"| {r['date'].strftime('%Y-%m-%d')} | {r['removed']} | {r['removed_ret']:+.2%} | {r['added']} | {r['added_ret']:+.2%} | {reason} |")
+        lines.append(f"")
+        lines.append(f"> 🔄 共 **{len(review_log)}** 次季度換股")
+        lines.append("")
+    
+    # ── 總績效 ──
+    final_value = monthly[-1]["value"] if monthly else initial_capital
+    capital_injection_log = result.get("capital_injection_log", [])
+    total_injected = sum(inj["amount"] for inj in capital_injection_log if inj["source"] in ("initial", "external"))
+    if total_injected == 0:
+        total_injected = initial_capital
+    total_pnl = final_value - total_injected
+    total_return = total_pnl / total_injected
+    days = (monthly[-1]["date"] - monthly[0]["date"]).days if len(monthly) >= 2 else 1095
+    years = max(days / 365.25, 0.001)
+    cagr = (final_value / total_injected) ** (1 / years) - 1 if years > 0 else 0
+    total_commission = sum(t.get("commission", 0) for t in tx_log)
+    total_tax = sum(t.get("tax", 0) for t in tx_log)
+    
+    profit_roll_transactions = [t for t in tx_log if t.get("type") == "profit_roll"]
+    total_profit_roll = sum(t.get("amount", 0) for t in profit_roll_transactions)
+    
+    lines.append("## 📊 總績效")
+    lines.append("")
+    lines.append("| 指標 | 數值 |")
+    lines.append("|------|------|")
+    lines.append(f"| 初始資本 | {fmt_ntd(initial_capital)} |")
+    lines.append(f"| 組合終值 ({monthly[-1]['date'].strftime('%Y-%m-%d')}) | {fmt_ntd(final_value)} |")
+    lines.append(f"| **總損益** | **{fmt_ntd(total_pnl)} ({fmt_pct(total_return)})** |")
+    lines.append(f"| **年化報酬率 (CAGR)** | **{fmt_pct(cagr)}** |")
+    start_str = monthly[0]["date"].strftime('%Y-%m-%d') if monthly else "?"
+    end_str = monthly[-1]["date"].strftime('%Y-%m-%d') if monthly else "?"
+    lines.append(f"| 模擬期間 | {start_str} ~ {end_str} ({days} 天) |")
+    lines.append(f"| 總手續費 | {fmt_ntd(total_commission)} |")
+    lines.append(f"| 總交易稅 | {fmt_ntd(total_tax)} |")
+    lines.append(f"| **季檢討換股次數** | **{len(review_log)}** |")
+    lines.append("")
+    
+    # ── 年度績效 ──
+    lines.append("## 📅 年度績效")
+    lines.append("")
+    
+    years_in_data = sorted(set(r["date"].year for r in monthly))
+    for year in years_in_data:
+        yr_records = [r for r in monthly if r["date"].year == year]
+        if not yr_records:
+            continue
+        prev_yr_records = [r for r in monthly if r["date"].year == year - 1]
+        if prev_yr_records:
+            yr_start_val = prev_yr_records[-1]["value"]
+        else:
+            yr_start_val = initial_capital if year == years_in_data[0] else yr_records[0]["value"]
+        yr_end_val = yr_records[-1]["value"]
+        yr_pnl = yr_end_val - yr_start_val
+        yr_ret = yr_pnl / yr_start_val if yr_start_val > 0 else 0
+        
+        # 該年換股數
+        yr_swaps = len([r for r in review_log if r["date"].year == year])
+        
+        lines.append(f"### {year}年")
+        lines.append("")
+        lines.append("| 指標 | 數值 |")
+        lines.append("|------|------|")
+        lines.append(f"| 年初組合價值 | {fmt_ntd(yr_start_val)} |")
+        lines.append(f"| 年底組合價值 | {fmt_ntd(yr_end_val)} |")
+        lines.append(f"| **年度損益** | **{fmt_ntd(yr_pnl)} ({fmt_pct(yr_ret)})** |")
+        if yr_swaps > 0:
+            lines.append(f"| 換股次數 | {yr_swaps} 次 |")
+        lines.append("")
+    
+    # ── 與原方案二比較 ──
+    lines.append("## 📊 與原方案二（逐年檢討）比較")
+    lines.append("")
+    
+    # 原方案二資料（取自 README）
+    original_years = {
+        2022: {"start": 500000, "ret": -0.131},
+        2023: {"ret": 0.339},
+        2024: {"ret": 0.498},
+        2025: {"ret": 0.474},
+    }
+    original_final = 1285995  # NT$500,000 → NT$1,285,995
+    
+    # 逐年計算原方案二價值
+    orig_vals = {2022: 500000}
+    for yr in [2022, 2023, 2024, 2025]:
+        if yr > 2022:
+            orig_vals[yr] = orig_vals[yr-1] * (1 + original_years[yr]["ret"])
+        elif yr == 2022:
+            orig_vals[yr] = 500000 * (1 + original_years[yr]["ret"])
+    
+    lines.append("| 年份 | 原方案二（逐年） | 本方案（每季） | 差異 |")
+    lines.append("|------|----------------|---------------|------|")
+    
+    for year in years_in_data:
+        yr_records = [r for r in monthly if r["date"].year == year]
+        if not yr_records:
+            continue
+        prev_yr_records = [r for r in monthly if r["date"].year == year - 1]
+        if prev_yr_records:
+            q_start = prev_yr_records[-1]["value"]
+        else:
+            q_start = initial_capital if year == years_in_data[0] else yr_records[0]["value"]
+        q_end = yr_records[-1]["value"]
+        q_ret = (q_end - q_start) / q_start if q_start > 0 else 0
+        
+        o_ret = original_years.get(year, {}).get("ret", 0)
+        diff = q_ret - o_ret
+        lines.append(f"| {year} | {fmt_pct(o_ret)} | {fmt_pct(q_ret)} | {fmt_pct(diff)} |")
+    
+    lines.append(f"| **總報酬** | **{fmt_pct((original_final - 500000) / 500000)}** | **{fmt_pct(total_return)}** | **{fmt_pct(total_return - (original_final - 500000) / 500000)}** |")
+    lines.append(f"| **終值** | **{fmt_ntd(original_final)}** | **{fmt_ntd(final_value)}** | **{fmt_ntd(final_value - original_final)}** |")
+    lines.append("")
+    
+    if total_return > (original_final - 500000) / 500000:
+        lines.append(f"> ✅ **每季檢討勝出**：多換股 + 更快汰弱留強，在牛市中捕捉更多動能。")
+    elif total_return < (original_final - 500000) / 500000:
+        lines.append(f"> ⚠️ **原方案二勝出**：人工檢討的判斷力與靈活性優於機械式規則。")
+    else:
+        lines.append(f"> 📊 **兩者相當**。")
+    lines.append("")
+    
+    # ── 與買入持有比較 ──
+    lines.append("## 📈 與買入持有比較")
+    lines.append("")
+    lines.append("同額資金（NT$500,000）在第一天按相同比例買入各起始標的且持有至期末（不換股）：")
+    lines.append("")
+    
+    # 估算買入持有（簡化：用起始配置的加權報酬）
+    bh_val = 0
+    for sym, alloc in initial_stocks:
+        if sym not in result["signal_data"]:
+            continue
+        df = result["signal_data"][sym]
+        rec = monthly[0]["date"] if monthly else None
+        end_ts = monthly[-1]["date"] if monthly else None
+        if rec is not None and rec in df.index and end_ts in df.index:
+            start_px = float(df.loc[rec, "close"])
+            end_px = float(df.loc[end_ts, "close"])
+            if start_px > 0:
+                ret = (end_px - start_px) / start_px
+                bh_val += alloc * (1 + ret)
+    
+    lines.append(f"| 比較項目 | 每季檢討 | 買入持有 | 差異 |")
+    lines.append(f"|----------|---------|---------|------|")
+    lines.append(f"| 初始資金 | {fmt_ntd(initial_capital)} | {fmt_ntd(initial_capital)} | - |")
+    lines.append(f"| 終值 | {fmt_ntd(final_value)} | {fmt_ntd(bh_val)} | {fmt_ntd(final_value - bh_val)} |")
+    lines.append(f"| 報酬率 | {fmt_pct(total_return)} | {fmt_pct((bh_val - initial_capital) / initial_capital)} | {fmt_pct(total_return - (bh_val - initial_capital) / initial_capital)} |")
+    lines.append("")
+    
+    lines.append("---")
+    lines.append("")
+    lines.append("## ⚠️ 免責聲明")
+    lines.append("")
+    lines.append("1. 過去績效不代表未來獲利，本模擬基於歷史資料不保證未來表現")
+    lines.append("2. 已計入交易成本：手續費0.1425% + 證交稅（ETF 0.1%/股票 0.3%）")
+    lines.append("3. 未計入：滑價、金字塔加碼、大盤年線過濾、股利收入")
+    lines.append("4. 每季檢討規則為機械式，未必優於人工判斷")
+    lines.append("5. 資料來源：Yahoo Finance (auto_adjust=True)")
+    lines.append("")
+    lines.append(f"*報告產生：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*")
+    
+    return "\n".join(lines)
+
+
+# ── CLI entry for Plan 2 quarterly ──────────────────────────
+def run_plan2_quarterly():
+    """CLI：執行方案二每季檢討"""
+    
+    # 起始配置（模擬原方案二 2022 防禦型）
+    initial_stocks = [
+        ("2412", 100000),   # 中華電信 — keep_wait 防禦
+        ("0050", 100000),   # 元大台灣50 — bollinger
+        ("2330",  80000),   # 台積電 — ma_cross
+        ("2881",  70000),   # 富邦金 — vwap
+        ("2882",  70000),   # 國泰金 — vwap
+        ("2382",  40000),   # 廣達 — keep_wait
+        ("2345",  40000),   # 智邦 — ma_cross
+    ]
+    initial_capital = sum(a for _, a in initial_stocks)
+    
+    print("=" * 60)
+    print("📊 方案二：NT$500,000 一筆資金 + 每季檢討換股")
+    print("=" * 60)
+    print(f"\n📋 起始配置 ({len(initial_stocks)} 檔):")
+    for sym, alloc in initial_stocks:
+        print(f"   {sym}: NT${alloc:,}")
+    print(f"   合計: NT${initial_capital:,}")
+    print(f"\n🚀 模擬中 (2022-01-01 ~ 2025-12-31)...")
+    
+    result = simulate_plan2_quarterly(
+        initial_stocks=initial_stocks,
+        start_date="2022-01-01",
+        end_date="2025-12-31",
+        initial_capital=500000,
+        profit_roll_months=3.0,
+        profit_roll_percentage=1.0,
+        candidate_pool=CANDIDATE_POOL,
+        verbose=True,
+    )
+    
+    report = generate_plan2_report(result)
+    
+    output_path = os.path.expanduser("~/tw-autotrader/回溯_方案二_每季檢討.md")
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(report)
+    print(f"\n✅ 報告已寫入: {output_path}")
+    
+    # 終值摘要
+    final_val = result["monthly_records"][-1]["value"]
+    total_pnl = final_val - 500000
+    total_ret = total_pnl / 500000
+    print(f"\n📊 結果摘要:")
+    print(f"   起始: NT$500,000")
+    print(f"   終值: NT${final_val:,.0f}")
+    print(f"   總損益: {fmt_ntd(total_pnl)} ({fmt_pct(total_ret)})")
+    print(f"   原方案二: NT$1,285,995 (+157.2%)")
+    print(f"   差異: {fmt_pct(total_ret - 1.572)}")
+
+
 if __name__ == "__main__":
-    main()
+    import sys
+    if "--plan2-quarterly" in sys.argv:
+        run_plan2_quarterly()
+    else:
+        main()
