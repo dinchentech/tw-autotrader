@@ -5,6 +5,7 @@ __pycache__/
 
 # C extensions
 *.so
+!pyarmor_runtime_000000/pyarmor_runtime.so
 
 # Windows NTFS alternate data streams (Zone.Identifier)
 *:Zone.Identifier
