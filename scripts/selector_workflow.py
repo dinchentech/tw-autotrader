@@ -226,6 +226,11 @@ def workflow_D_core_satellite(data, qd, params, core_pct=0.8, top_n=4):
 # 回測引擎
 # ══════════════════════════════════════════════════════════════
 
+ETF_SYMBOLS = {"0050", "0056", "00632R", "00646", "006208", "00878"}
+STOCK_TAX = 0.003      # 證交稅 股票 0.3%
+ETF_TAX = 0.001        # 證交稅 ETF 0.1%
+COMMISSION = 1         # 零股手續費 NT$1（整股 0.1425%，但模擬中 shares 為零股）
+
 def backtest_workflow(workflow_name, data, params, top_n=4, verbose=False):
     """通用回測框架，可帶入不同的 work function"""
     qds = quarter_end_dates()
@@ -246,7 +251,7 @@ def backtest_workflow(workflow_name, data, params, top_n=4, verbose=False):
         is_last = (qi == len(qds) - 1)
 
         if is_last:
-            # 最後一季：評價現有持股
+            # 最後一季：評價現有持股（不賣出，不扣稅）
             nxt_val = 0.0
             for label in current_labels:
                 sym = label.split(":")[0]
@@ -304,10 +309,17 @@ def backtest_workflow(workflow_name, data, params, top_n=4, verbose=False):
             bp = float(df.loc[bd, "close"])
             if bp <= 0:
                 continue
-            shares = alloc / bp
+            # 買入：NT$1 零股手續費
+            available = alloc - COMMISSION
+            shares = available / bp if bp > 0 else 0
             last_shares[sym] = shares
             sp = float(df.loc[sd, "close"])
-            nxt_val += shares * sp
+            # 賣出：證交稅（股票0.3%/ETF 0.1%）+ NT$1 零股手續費
+            gross = shares * sp
+            tax_rate = ETF_TAX if sym in ETF_SYMBOLS else STOCK_TAX
+            tax = gross * tax_rate
+            net = gross - tax - COMMISSION
+            nxt_val += net
 
         q_ret = (nxt_val - capital) / capital if capital > 0 else 0
         if verbose:
