@@ -30,7 +30,7 @@ import yfinance as yf
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-# ── 候選股票池 ──────────────────────────────────────────────
+# ── 候選股票池（預設） ─────────────────────────────────────
 CANDIDATE_POOL = [
     "2330","2454","2317",     # 大型電子
     "2382","2376","2345",     # 電子
@@ -48,6 +48,18 @@ POOL_LABELS = {
     "2412":"中華電","2408":"南亞科","4967":"十銓","6446":"藥華藥",
     "0050":"元大台灣50","006208":"富邦台50","00878":"國泰永續高股息",
 }
+
+# 從 custom_pool.txt 讀取自訂候選股（無此檔或為空則略過）
+_custom_pool_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "custom_pool.txt")
+if os.path.exists(_custom_pool_file):
+    with open(_custom_pool_file) as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if not _line or _line.startswith("#"):
+                continue
+            _sid = _line.split("#")[0].strip()
+            if _sid.isdigit() and len(_sid) == 4 and _sid not in CANDIDATE_POOL:
+                CANDIDATE_POOL.append(_sid)
 
 START_DATE = "2022-01-01"
 END_DATE = "2025-12-31"
