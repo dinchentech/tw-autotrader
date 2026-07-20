@@ -43,6 +43,17 @@ if not CANDIDATE_POOL:
     CANDIDATE_POOL = [str(i) for i in range(1101, 9999)]
 
 POOL_LABELS = {}
+# 從 FinMind 載入股票名稱
+try:
+    from FinMind.data import DataLoader as _DL
+    _dl = _DL()
+    _info = _dl.taiwan_stock_info()
+    for _, _r in _info.iterrows():
+        _sid = str(_r["stock_id"]).strip()
+        if _sid.isdigit() and len(_sid) == 4:
+            POOL_LABELS[_sid] = _r["stock_name"]
+except Exception:
+    pass
 
 START_DATE = "2022-01-01"
 END_DATE = "2025-12-31"
