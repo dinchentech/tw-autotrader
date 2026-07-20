@@ -15,11 +15,18 @@ import os
 import math
 import json
 import time
+import pickle
 import requests
 import numpy as np
 import pandas as pd
 from datetime import datetime, date, timedelta
 from pathlib import Path
+
+from loguru import logger as _loguru_logger
+# FinMind 使用 loguru，不是 Python 的 logging 模組
+# loguru.logger.add(sys.stderr, level="INFO") 在模組載入時就會設好，
+# 必須用 disable() 來關閉所有 FinMind 模組的 loguru 輸出
+_loguru_logger.disable("FinMind")
 
 from FinMind.data import DataLoader
 from FinMind.schema.data import Dataset
@@ -64,6 +71,12 @@ class InstitutionalMomentumStrategy:
         self._twse_cache = {}           # { date_str: { stock_id: { name: {buy, sell} } } }
         self._twse_cache_built = False
         self._data_fail_notified = {}   # { source_key: date_str } 同一來源一天只通知一次
+
+        # 磁碟快取（避免重複呼叫 FinMind API，免費版每小時 600 次上限）
+        self._price_cache_dir = Path("cache/inst_momentum/price")
+        self._price_cache_dir.mkdir(parents=True, exist_ok=True)
+        self._inst_cache_dir = Path("cache/inst_momentum/inst")
+        self._inst_cache_dir.mkdir(parents=True, exist_ok=True)
 
     # ================================================================
     # 狀態持久化
@@ -207,6 +220,18 @@ class InstitutionalMomentumStrategy:
         return df
 
     def _fetch_price_finmind(self, stock_id: str, start: date, end: date) -> pd.DataFrame:
+        # 磁碟快取：同一股票同一天不重複下載
+        cache_file = self._price_cache_dir / f"{stock_id}.pkl"
+        if cache_file.exists():
+            try:
+                df = pickle.loads(cache_file.read_bytes())
+                if isinstance(df, pd.DataFrame) and not df.empty and len(df) >= 30:
+                    # 確認快取夠新（latest date 在 5 天內），否則重抓
+                    latest_date = pd.Timestamp(df["date"].max())
+                    if (date.today() - latest_date.date()).days <= 5:
+                        return df
+            except Exception:
+                pass
         dl = self._get_dataloader()
         try:
             df = dl.taiwan_stock_daily(
@@ -222,8 +247,12 @@ class InstitutionalMomentumStrategy:
             "Trading_Volume": "volume",
             "Trading_money": "amount",
             "Trading_turnover": "turnover",
+            "max": "high",
+            "min": "low",
         }
         df = df.rename(columns={k: v for k, v in rename.items() if k in df.columns})
+        # 寫入快取
+        cache_file.write_bytes(pickle.dumps(df))
         return df
 
     def _fetch_price_twse(self, stock_id: str, start: date, end: date) -> pd.DataFrame:
@@ -251,8 +280,8 @@ class InstitutionalMomentumStrategy:
                         "date": d,
                         "stock_id": stock_id,
                         "open": float(row[3].replace(",", "")),
-                        "max": float(row[4].replace(",", "")),
-                        "min": float(row[5].replace(",", "")),
+                        "high": float(row[4].replace(",", "")),
+                        "low": float(row[5].replace(",", "")),
                         "close": float(row[6].replace(",", "")),
                         "volume": int(row[1].replace(",", "")),
                     })
@@ -267,6 +296,14 @@ class InstitutionalMomentumStrategy:
 
     def _get_institutional_data(self, stock_id: str, days: int = 10) -> pd.DataFrame:
         """取得個股法人買賣資料，FinMind → TWSE 備援"""
+        cache_file = self._inst_cache_dir / f"{stock_id}.pkl"
+        if cache_file.exists():
+            try:
+                df = pickle.loads(cache_file.read_bytes())
+                if isinstance(df, pd.DataFrame) and not df.empty:
+                    return df
+            except Exception:
+                pass
         dl = self._get_dataloader()
         end = date.today()
         start = end - timedelta(days=days)
@@ -277,6 +314,7 @@ class InstitutionalMomentumStrategy:
                 end_date=end.isoformat(),
             )
             if not df.empty:
+                cache_file.write_bytes(pickle.dumps(df))
                 return df
         except Exception:
             pass
@@ -399,12 +437,18 @@ class InstitutionalMomentumStrategy:
         回傳 DataFrame 含 columns: date, close, volume, ma20, inst_buy, inst_sell
         """
         # 1. 價格資料
-        df_price = self._get_price_data(stock_id, days=self.lookback + 10)
+        #   ⚠️  fish 評分需要至少 30 個交易日（~42 日曆天）
+        #       lookback + 10 僅 30 日曆天（~22 交易日），會讓 fish 分數全部被跳過
+        min_days = max(self.lookback + 10, 60)
+        df_price = self._get_price_data(stock_id, days=min_days)
         if df_price.empty or len(df_price) < self.lookback:
             return pd.DataFrame()
 
-        # 計算 MA20
+        # 統一 date 為 datetime（FinMind 回傳字串，check_momentum_entry 需要 datetime 比對）
         df_price = df_price.copy()
+        df_price["date"] = pd.to_datetime(df_price["date"])
+
+        # 計算 MA20
         df_price["ma20"] = pd.Series(df_price["close"].values).rolling(self.lookback).mean().values
 
         # 2. 法人資料
@@ -413,11 +457,18 @@ class InstitutionalMomentumStrategy:
             return pd.DataFrame()
 
         # 聚合法人資料為每日 inst_buy / inst_sell（投信+外資）
+        # FinMind 回傳英文名（Foreign_Investor/Investment_Trust），TWSE 備援回傳中文名（外資/投信）
+        name_map = {
+            "Foreign_Investor": "外資", "Investment_Trust": "投信",
+            "Foreign_Dealer_Self": "外資自營商", "Dealer_self": "自營商", "Dealer_Hedging": "自營商",
+        }
+        df_inst["name"] = df_inst["name"].replace(name_map)
         mask = df_inst["name"].isin(["投信", "外資"])
         inst_agg = df_inst[mask].groupby("date").agg(
             inst_buy=("buy", "sum"),
             inst_sell=("sell", "sum"),
         ).reset_index()
+        inst_agg["date"] = pd.to_datetime(inst_agg["date"])
 
         # 3. 合併
         df = pd.merge(df_price, inst_agg, on="date", how="left")
@@ -465,11 +516,7 @@ class InstitutionalMomentumStrategy:
 
         for stock_id, accum_price in fish_qualified.items():
             try:
-                df = all_data[stock_id]
-                vol_5 = df.tail(5)["volume"].mean() / 1000
-                if vol_5 < self.min_volume:
-                    continue
-                single = {stock_id: df}
+                single = {stock_id: all_data[stock_id]}
                 ok, score = _core_check_momentum_entry(
                     single, stock_id, check_date, accum_price=accum_price)
                 all_evaluated.append((stock_id, score))

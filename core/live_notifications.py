@@ -148,11 +148,38 @@ def _build_holdings_message(pd, app_version, title_emoji, title):
 
 
 def _build_inst_screening_msg() -> str:
-    """讀取法人動能篩選結果，回傳訊息文字（無結果時回傳空字串）"""
+    """讀取法人動能篩選結果，回傳訊息文字（無結果時回傳空字串）
+    
+    💡 若無檔案或非今日，自動 new 一個 InstitutionalMomentumStrategy 執行篩選再產生檔案，
+       讓休眠前可以直接看到最新篩選結果，不必等到隔天 13:31-13:45。
+    """
     import json
     from pathlib import Path
 
     inst_path = Path("logs/inst_momentum_screening.json")
+
+    # 檢查是否需要重新篩選（無檔案、非今日、或解析失敗）
+    need_refresh = False
+    if not inst_path.exists():
+        need_refresh = True
+    else:
+        try:
+            from datetime import datetime
+            inst_data = json.loads(inst_path.read_text())
+            if inst_data.get("screen_date") != datetime.now().strftime("%Y-%m-%d"):
+                need_refresh = True
+        except Exception:
+            need_refresh = True
+
+    if need_refresh:
+        try:
+            from strategies.institutional_momentum import InstitutionalMomentumStrategy
+            inst_mom = InstitutionalMomentumStrategy(broker=None, capital=0, top_n=3)
+            inst_mom.get_candidates()
+            print("✅ 休眠前自動執行法人動能篩選完成")
+        except Exception as e:
+            print(f"⚠️ 休眠前自動篩選失敗: {e}")
+
     if not inst_path.exists():
         return ""
     try:
@@ -179,6 +206,7 @@ def _build_inst_screening_msg() -> str:
 def send_sleep_notification(pd, app_version, next_open):
     """發送睡前持倉報告到 Telegram"""
     import os
+    from datetime import datetime
     footer = f"💤 休眠到 {next_open.strftime('%m/%d %H:%M')}" if next_open else ""
     msg = _build_holdings_message(pd, app_version, "💤", "睡前持倉報告")
     if msg is None:
