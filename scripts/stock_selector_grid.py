@@ -553,20 +553,40 @@ def print_top_results(results, n=10):
 # 推薦輸出
 # ══════════════════════════════════════════════════════════════
 
-def recommend_next_quarter(data, params, top_n=4):
+def _catalyst_score(df, end_date):
+    """藥華藥模式評分（同 selector_workflow.py）"""
+    n = 130
+    if end_date not in df.index:
+        return 0
+    idx = df.index.get_loc(end_date)
+    if idx < n:
+        return 0
+    si = idx - n
+    prices = df.iloc[si:idx+1]["close"].values
+    volumes = df.iloc[si:idx+1]["volume"].values
+    mid = n // 2
+    fh_p = prices[:mid]
+    fh_mean, fh_max = np.mean(fh_p), np.max(fh_p)
+    fh_range = (fh_max - np.min(fh_p)) / fh_mean * 100 if fh_mean > 0 else 999
+    sh_p = prices[mid:]
+    cp = prices[-1]
+    pct_above = (cp - fh_mean) / fh_mean * 100 if fh_mean > 0 else 0
+    fv = np.mean(volumes[:mid]) or 1
+    sv = np.mean(volumes[mid:]) or 1
+    vr = sv / fv
+    s_stable = max(0, 1 - fh_range / 40)
+    s_break = min(max(0, pct_above) / 80, 1.0)
+    if pct_above > 30:
+        s_break = min(s_break * 1.2, 1.0)
+    s_vol = min(vr / 5, 1.0) if vr > 1 else vr * 0.2
+    chg60 = (prices[-1] - prices[max(0, len(prices)-60)]) / prices[max(0, len(prices)-60)] * 100 if prices[max(0, len(prices)-60)] > 0 else 0
+    s_mom = min(max(0, chg60) / 50, 1.0)
+    return s_stable * 0.20 + s_break * 0.35 + s_vol * 0.15 + s_mom * 0.30
+
+
+def recommend_next_quarter(data, params, top_n=4, mode="momentum"):
     """用給定參數選出下一季推薦持股"""
     today = datetime.now()
-    # 找最近的交易日
-    q_end = None
-    for m in [3, 6, 9, 12]:
-        qd = pd.Timestamp(today.year, m, 1)
-        if today.month <= m:
-            qd = qd - pd.offsets.MonthEnd(1) if today.month == m else qd - pd.offsets.MonthEnd(1)
-            # 調整到今天或之前的最後交易日
-            if qd > pd.Timestamp(today):
-                qd = today
-            break
-
     # 用最近有資料的日期
     best_date = None
     for sym, df in data.items():
@@ -580,24 +600,62 @@ def recommend_next_quarter(data, params, top_n=4):
         print("❌ 無法取得最新資料")
         return
 
-    print(f"\n📅 基準日期: {best_date.strftime('%Y-%m-%d')}")
-    selected = pick_top_stocks(data, best_date, params, top_n)
+    mode_label = {"momentum": "純動能", "catalyst": "純催化劑", "core-satellite": "核心+衛星"}
+    print(f"\n📅 基準日期: {best_date.strftime('%Y-%m-%d')}  模式: {mode_label.get(mode, mode)}")
+
+    if mode == "catalyst":
+        scored = []
+        for sym, df in data.items():
+            if best_date not in df.index:
+                continue
+            cs = _catalyst_score(df, best_date)
+            if cs <= 0:
+                continue
+            scored.append({"symbol": sym, "close": float(df.loc[best_date, "close"]), "total": cs})
+        scored.sort(key=lambda x: x["total"], reverse=True)
+        selected = scored[:top_n]
+    elif mode == "core-satellite":
+        # 核心 (80%)：動能選 top_n-1 檔
+        core_n = max(top_n - 1, 1)
+        core = pick_top_stocks(data, best_date, params, core_n)
+        core_syms = {s["symbol"] for s in core}
+        # 衛星 (20%)：從剩餘選項中催化劑最高分
+        sat = []
+        for sym, df in data.items():
+            if sym in core_syms or best_date not in df.index:
+                continue
+            cs = _catalyst_score(df, best_date)
+            if cs > 0:
+                sat.append({"symbol": sym, "close": float(df.loc[best_date, "close"]), "catalyst": cs})
+        sat.sort(key=lambda x: x["catalyst"], reverse=True)
+        sat_pick = sat[:1] if sat else []
+        selected = core + sat_pick
+    else:
+        selected = pick_top_stocks(data, best_date, params, top_n)
+
     if not selected:
         print("❌ 無法選出推薦持股")
         return
 
+    header_map = {"momentum": ("近季動能", "momentum"), "catalyst": ("催化劑分", "total"), "core-satellite": ("近季動能", "momentum")}
+    extra_col, extra_key = header_map.get(mode, ("近季動能", "momentum"))
+
     print(f"\n{'='*60}")
-    print(f"  📊 下一季推薦持股（Top {top_n}）")
+    print(f"  📊 下一季推薦持股（Top {top_n} · {mode_label.get(mode, mode)}）")
     print(f"{'='*60}")
-    print(f" {'代號':>5} {'名稱':>8} {'股價':>8} {'近季動能':>10} {'MA20':>8} {'催化劑':>8} {'總分':>7}")
-    print(f" {'-'*5} {'-'*8} {'-'*8} {'-'*10} {'-'*8} {'-'*8} {'-'*7}")
+    print(f" {'代號':>5} {'名稱':>8} {'股價':>8} {extra_col:>10}")
+    print(f" {'-'*5} {'-'*8} {'-'*8} {'-'*10}")
     for s in selected:
         name = POOL_LABELS.get(s["symbol"], "")
-        cat_str = f"{s['catalyst']:.2f}" if s.get('catalyst', 0) > 0 else "-"
-        print(f" {s['symbol']:>5} {name:>8} NT${s['close']:>6,.0f} "
-              f"{s['momentum']:>+9.1%} {s['ma20_pct']:>+7.1%} {cat_str:>8} {s['total']:>6.2f}")
+        val = s.get(extra_key, s.get("total", 0))
+        if extra_key == "momentum":
+            print(f" {s['symbol']:>5} {name:>8} NT${s['close']:>6,.0f} {val:>+9.1%}")
+        else:
+            print(f" {s['symbol']:>5} {name:>8} NT${s['close']:>6,.0f} {val:>9.2f}")
 
-    print(f"\n💡 使用參數: {params}")
+    print(f"\n💡 模式: {mode_label.get(mode, mode)}")
+    if mode == "momentum":
+        print(f"   參數: {params}")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -717,6 +775,8 @@ def main():
     parser.add_argument("--recommend", action="store_true", help="輸出下一季推薦持股")
     parser.add_argument("--report", action="store_true", help="產出 HTML 報告")
     parser.add_argument("--top-n", type=int, default=4, help="每季選股數 (default: 4)")
+    parser.add_argument("--mode", choices=["momentum", "catalyst", "core-satellite"], default="momentum",
+                        help="選股模式：momentum(純動能) / catalyst(純催化劑) / core-satellite(核心+衛星)")
     args = parser.parse_args()
 
     print("=" * 60)
@@ -738,7 +798,7 @@ def main():
 
         out = os.path.join(os.path.dirname(__file__), "..", "img", "stock_selector_grid_report.html")
         generate_html_report(results, data, best_params, out)
-        recommend_next_quarter(data, best_params, top_n=args.top_n)
+        recommend_next_quarter(data, best_params, top_n=args.top_n, mode=args.mode)
 
     if args.grid:
         results = run_grid_search(data, top_n=args.top_n)
@@ -747,7 +807,7 @@ def main():
         best_params = results[0]["params"]
         out = os.path.join(os.path.dirname(__file__), "..", "img", "stock_selector_grid_report.html")
         generate_html_report(results, data, best_params, out)
-        recommend_next_quarter(data, best_params, top_n=args.top_n)
+        recommend_next_quarter(data, best_params, top_n=args.top_n, mode=args.mode)
 
     if args.backtest:
         bt = backtest_selector(data, DEFAULT_PARAMS, top_n=args.top_n, verbose=True)
@@ -757,7 +817,7 @@ def main():
             print(f"   {yr}: {yd['total_ret']:+.1%}")
 
     if args.recommend:
-        recommend_next_quarter(data, DEFAULT_PARAMS, top_n=args.top_n)
+        recommend_next_quarter(data, DEFAULT_PARAMS, top_n=args.top_n, mode=args.mode)
 
 
 if __name__ == "__main__":

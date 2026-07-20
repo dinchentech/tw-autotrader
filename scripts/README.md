@@ -44,8 +44,14 @@ python scripts/find_catalyst_stocks.py --min-score 30       # 最低評分門檻
 # Grid Search 找最佳參數（預設）
 python scripts/stock_selector_grid.py --grid
 
-# 查看本季推薦持股
+# 查看本季推薦持股（純動能，預設）
 python scripts/stock_selector_grid.py --recommend
+
+# 純催化劑模式
+python scripts/stock_selector_grid.py --recommend --mode catalyst
+
+# 核心+衛星（80%動能 + 20%催化劑）
+python scripts/stock_selector_grid.py --recommend --mode core-satellite
 
 # 產出 HTML 報告
 python scripts/stock_selector_grid.py --grid
