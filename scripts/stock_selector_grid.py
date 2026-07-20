@@ -49,18 +49,6 @@ POOL_LABELS = {
     "0050":"元大台灣50","006208":"富邦台50","00878":"國泰永續高股息",
 }
 
-# 從 custom_pool.txt 讀取自訂候選股（無此檔或為空則略過）
-_custom_pool_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "custom_pool.txt")
-if os.path.exists(_custom_pool_file):
-    with open(_custom_pool_file) as _f:
-        for _line in _f:
-            _line = _line.strip()
-            if not _line or _line.startswith("#"):
-                continue
-            _sid = _line.split("#")[0].strip()
-            if _sid.isdigit() and len(_sid) == 4 and _sid not in CANDIDATE_POOL:
-                CANDIDATE_POOL.append(_sid)
-
 START_DATE = "2022-01-01"
 END_DATE = "2025-12-31"
 
@@ -780,6 +768,23 @@ tr:hover td{{background:#f8f9fa}}
 # 主程式
 # ══════════════════════════════════════════════════════════════
 
+def _load_custom_pool():
+    """讀取 custom_pool.txt，回傳自訂股票代號列表（無此檔回傳空列表）"""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "custom_pool.txt")
+    if not os.path.exists(path):
+        return []
+    custom = []
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            sid = line.split("#")[0].strip()
+            if sid.isdigit() and len(sid) == 4 and sid not in CANDIDATE_POOL:
+                custom.append(sid)
+    return custom
+
+
 def main():
     parser = argparse.ArgumentParser(description="每季選股 Grid Search")
     parser.add_argument("--grid", action="store_true", help="執行 Grid Search 找最佳參數")
@@ -794,6 +799,20 @@ def main():
     print("=" * 60)
     print("📊 每季選股神器 — Stock Selector Grid")
     print("=" * 60)
+
+    # 自訂候選股（從 custom_pool.txt）— 詢問使用者是否合併
+    custom = _load_custom_pool()
+    if custom:
+        print(f"\n📋 偵測到自訂候選股: {', '.join(custom)}")
+        try:
+            ans = input("   是否併入候選池？(Y/n): ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            ans = "y"
+        if ans in ("", "y", "yes"):
+            CANDIDATE_POOL.extend(custom)
+            print(f"   ✅ 已加入，候選池共 {len(CANDIDATE_POOL)} 檔")
+        else:
+            print(f"   ⏭️  跳過")
 
     print(f"\n📥 載入 {len(CANDIDATE_POOL)} 檔候選股票資料...")
     data = load_all_stocks()

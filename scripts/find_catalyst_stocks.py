@@ -565,6 +565,22 @@ def main():
                         " | ".join(r.get("reasons",[]))])
     log(f"📁 CSV: {csv_path}")
 
+    # ── 更新 custom_pool.txt（前 5 名） ──
+    _pool_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+    _pool_file = os.path.join(_pool_dir, "custom_pool.txt")
+    if os.path.exists(_pool_file):
+        _bak = _pool_file + ".bak"
+        os.rename(_pool_file, _bak)
+        log(f"📦 備份原 custom_pool.txt → custom_pool.txt.bak")
+    _top5 = [r for r in all_results if r["total_score"] >= args.min_score][:5]
+    if _top5:
+        with open(_pool_file, "w") as _f:
+            _f.write("# 由 find_catalyst_stocks.py 自動產生 — 前 5 名潛力股\n")
+            _f.write(f"# {datetime.now().strftime('%Y-%m-%d')} 掃瞄結果\n\n")
+            for _r in _top5:
+                _f.write(f"{_r['stock_id']}   # {_r['name']} (評分:{_r['total_score']:.0f})\n")
+        log(f"📝 已寫入前 {len(_top5)} 名到 custom_pool.txt")
+
     # HTML
     if args.output_html:
         html_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "img")
