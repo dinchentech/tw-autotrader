@@ -21,7 +21,7 @@ import yfinance as yf
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 # ── 候選股票池（市值前 150 大） ─────────────────────────
-STOCK_NO = int(os.getenv("STOCK_NO", "150"))
+STOCK_NO = int(os.getenv("STOCK_NO", "50"))
 CANDIDATE_POOL = []
 CAP_RANKING = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "cache", "inst_momentum", "mcap_ranking.pkl")
 if os.path.exists(CAP_RANKING):
