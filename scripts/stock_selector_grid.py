@@ -344,11 +344,12 @@ def _snap_date(df, target):
     return df.index[0] if len(df.index) > 0 else None
 
 
-def backtest_selector(data, params, top_n=4, verbose=False):
+def backtest_selector(data, params, top_n=4, verbose=False, mode="momentum"):
     """
     回測每季選股績效。
     每季末用 params 選股 → 持有到下季末 → 計算報酬。
     最後一季只評價不買賣。
+    mode: momentum / catalyst / core-satellite
     """
     import math
     quarter_dates = quarter_end_dates()
@@ -393,7 +394,33 @@ def backtest_selector(data, params, top_n=4, verbose=False):
 
         # 選股日對齊到實際交易日
         buy_date_q = _snap_date(list(data.values())[0], qd) if data else qd
-        selected = pick_top_stocks(data, buy_date_q, params, top_n)
+        if mode == "catalyst":
+            scored = []
+            for sym, df in data.items():
+                if buy_date_q not in df.index:
+                    continue
+                cs = _catalyst_score(df, buy_date_q)
+                if cs <= 0:
+                    continue
+                scored.append({"symbol": sym, "total": cs})
+            scored.sort(key=lambda x: x["total"], reverse=True)
+            selected = scored[:top_n]
+        elif mode == "core-satellite":
+            core_n = max(top_n - 1, 1)
+            core = pick_top_stocks(data, buy_date_q, params, core_n)
+            core_syms = {s["symbol"] for s in core}
+            sat = []
+            for sym, df in data.items():
+                if sym in core_syms or buy_date_q not in df.index:
+                    continue
+                cs = _catalyst_score(df, buy_date_q)
+                if cs > 0:
+                    sat.append({"symbol": sym, "total": cs})
+            sat.sort(key=lambda x: x["total"], reverse=True)
+            sat_pick = sat[:1] if sat else []
+            selected = core + sat_pick
+        else:
+            selected = pick_top_stocks(data, buy_date_q, params, top_n)
         if not selected:
             continue
 
@@ -847,7 +874,7 @@ def main():
         recommend_next_quarter(data, best_params, top_n=args.top_n, mode=args.mode)
 
     if args.backtest:
-        bt = backtest_selector(data, DEFAULT_PARAMS, top_n=args.top_n, verbose=True)
+        bt = backtest_selector(data, DEFAULT_PARAMS, top_n=args.top_n, verbose=True, mode=args.mode)
         print(f"\n📊 預設參數回測結果:")
         print(f"   終值: NT${bt['final_value']:,.0f} ({bt['total_return']:+.1%})")
         for yr, yd in bt["yearly"].items():
