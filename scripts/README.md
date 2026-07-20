@@ -30,7 +30,9 @@ python scripts/find_catalyst_stocks.py --min-score 30       # 最低評分門檻
 
 **輸出：** `img/catalyst_report_YYYYMMDD.html`（HTML 報告）+ `data/catalyst_scan_YYYYMMDD.csv`
 
-> ⚠️ 此工具是「發現機會」用的，不是「決定買入」用的。看到高分標的應該先研究基本面，再考慮是否納入季候選池。
+**自動更新候選清單：** 執行完後會自動把前 5 名寫入根目錄的 `custom_pool.txt`（同時備份舊檔為 `custom_pool.txt.bak`）。`stock_selector_grid.py` 執行時會偵測此檔案，詢問是否合併到候選池。
+
+> ⚠️ 此工具是「發現機會」用的，不是「決定買入」用的。看到高分標的應該先研究基本面，再確認 `custom_pool.txt` 內容後，交給 `stock_selector_grid.py` 做最終篩選。
 
 ---
 
@@ -68,7 +70,7 @@ python scripts/stock_selector_grid.py --grid
 - `use_ma_filter`：MA20 強制過濾（開 / 關）
 - `min_price`：最低股價門檻（5 / 10）
 
-**候選股票池**（定義在程式頂端 `CANDIDATE_POOL`）：
+**候選股票池**（預設 16 檔 + `custom_pool.txt` 自訂）：
 - 大型電子：2330（台積電）、2454（聯發科）、2317（鴻海）
 - 電子：2382（廣達）、2376（技嘉）、2345（智邦）
 - 金融：2881（富邦金）、2882（國泰金）、2886（兆豐金）
@@ -76,6 +78,8 @@ python scripts/stock_selector_grid.py --grid
 - 記憶體：2408（南亞科）、4967（十銓）
 - 生技：6446（藥華藥）
 - ETF：0050、006208、00878
+
+**自訂候選股：** 編輯根目錄的 `custom_pool.txt`，一行一個股票代號，執行時會詢問是否合併。`find_catalyst_stocks.py` 每次執行完會自動把前 5 名寫入此檔。
 
 ---
 
@@ -108,9 +112,10 @@ python scripts/selector_workflow.py
 詳見[使用手冊 — 選股工具工作流程](../使用手冊.md#🛠️-選股工具工作流程)。
 
 ```
-每月初                     →      每季初
-find_catalyst_stocks.py    →      stock_selector_grid.py
-（發現新機會）                      （決定本季持股）
+每月初                                           每季初
+find_catalyst_stocks.py  ─── 寫入前 5 名 ───→   stock_selector_grid.py
+（掃描全市場找潛力股）     custom_pool.txt        （詢問是否合併，選最強 N 檔）
+                                                → 決定本季持股
 ```
 
 ## 注意事項
