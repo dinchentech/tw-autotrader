@@ -8,7 +8,20 @@ services:
     env_file:
       - .env
     volumes:
-      - ./logs:/app/logs         # 只持久化 logs，程式碼走 image
+      # 持久化 logs
+      - ./logs:/app/logs
+      # 程式碼手動掛載（改 .py 只需 restart，不用重 build）
+      - ./live_trader_multi.py:/app/live_trader_multi.py
+      - ./pyarmor_runtime_000000:/app/pyarmor_runtime_000000
+      - ./strategies:/app/strategies
+      - ./core:/app/core
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./config:/app/config
+      - ./scripts:/app/scripts
+      - ./esun_sdk:/app/esun_sdk
+      # FinMind 快取（避免跨重啟重複下載）
+      - ./cache:/app/cache
     logging:
       driver: "json-file"
       options:
