@@ -12,7 +12,7 @@ Usage:
   python scripts/selector_workflow.py
   python scripts/selector_workflow.py --compare  (全部工作流程逐一執行並比較)
 """
-import os, sys, time, itertools, json
+import os, sys, time, itertools, json, pickle
 from datetime import datetime
 import numpy as np
 import pandas as pd
@@ -20,28 +20,19 @@ import yfinance as yf
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-CANDIDATE_POOL = [
-    "2330","2454","2317",
-    "2382","2376","2345",
-    "2881","2882","2886",
-    "2412","2408","4967","6446",
-    "0050","006208","00878",
-]
+# ── 候選股票池（市值前 150 大） ─────────────────────────
+STOCK_NO = int(os.getenv("STOCK_NO", "150"))
+CANDIDATE_POOL = []
+CAP_RANKING = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "cache", "inst_momentum", "mcap_ranking.pkl")
+if os.path.exists(CAP_RANKING):
+    ranked = pickle.loads(open(CAP_RANKING, "rb").read())
+    CANDIDATE_POOL = [s for s in ranked if s.isdigit() and len(s) == 4][:STOCK_NO]
+if not CANDIDATE_POOL:
+    CANDIDATE_POOL = [str(i) for i in range(1101, 9999)]
 
-POOL_LABELS = {
-    "2330":"台積電","2454":"聯發科","2317":"鴻海",
-    "2382":"廣達","2376":"技嘉","2345":"智邦",
-    "2881":"富邦金","2882":"國泰金","2886":"兆豐金",
-    "2412":"中華電","2408":"南亞科","4967":"十銓","6446":"藥華藥",
-    "0050":"元大台灣50","006208":"富邦台50","00878":"國泰永續高股息",
-}
+POOL_LABELS = {}
 
-# 備選池（不在核心池中，可被 catalyst 發掘加入）
-EXTRA_CANDIDATES = [
-    "2303","2308","2356","2357","2409","2412",
-    "3008","3017","3034","3045","3231",
-    "4904","4938","6239","6505","9910",
-]
+EXTRA_CANDIDATES = []
 
 _cache = {}
 def load_stock(symbol):
