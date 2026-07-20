@@ -163,7 +163,7 @@ def _safe_tail(series, n):
 
 def analyze_breakout_pattern(prices: pd.Series, volumes: pd.Series, dates) -> Optional[dict]:
     """
-    核心分析：偵測「長期盤整 → 近期突破」的藥華藥模式。
+    核心分析：偵測「長期盤整 → 近期突破」的潛力股模式。
 
     做法：
     1. 將過去1年資料分成前後兩半

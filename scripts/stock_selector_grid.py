@@ -124,7 +124,7 @@ def volatility(df, end_date, days=63):
 
 
 # ══════════════════════════════════════════════════════════════
-# 藥華藥模式評分（從 find_catalyst_stocks.py 萃取）
+# 潛力股模式評分（從 find_catalyst_stocks.py 萃取）
 # ══════════════════════════════════════════════════════════════
 
 def catalyst_score(df, end_date):
@@ -224,7 +224,7 @@ def score_stock(sym, df, end_date, params):
       - momentum_weight: 動能權重
       - technical_weight: 技術面權重（均線位置）
       - stability_weight: 穩定性權重（低波動加分）
-      - catalyst_weight: 藥華藥模式評分權重（盤整→突破）
+      - catalyst_weight: 潛力股模式評分權重（盤整→突破）
       - use_ma_filter: 是否要求股價站上 MA20
       - min_price: 最低股價門檻
     """
@@ -262,7 +262,7 @@ def score_stock(sym, df, end_date, params):
     vol = volatility(df, end_date)
     stability = 1.0 / (vol + 0.05) if vol else 0
 
-    # 藥華藥模式評分（快取）
+    # 潛力股模式評分（快取）
     cache_key = (sym, end_date.strftime("%Y-%m-%d"))
     if cache_key not in _catalyst_cache:
         _catalyst_cache[cache_key] = catalyst_score(df, end_date)
@@ -554,7 +554,7 @@ def print_top_results(results, n=10):
 # ══════════════════════════════════════════════════════════════
 
 def _catalyst_score(df, end_date):
-    """藥華藥模式評分（同 selector_workflow.py）"""
+    """潛力股模式評分（同 selector_workflow.py）"""
     n = 130
     if end_date not in df.index:
         return 0

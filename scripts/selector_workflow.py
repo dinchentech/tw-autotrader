@@ -79,7 +79,7 @@ def trailing_ret(df, date, days):
     return (ep - sp) / sp
 
 def catalyst_score(df, date):
-    """藥華藥模式評分（從 find_catalyst_stocks.py）"""
+    """潛力股模式評分（從 find_catalyst_stocks.py）"""
     n = 130
     if date not in df.index:
         return 0
@@ -356,7 +356,7 @@ def main():
         ("A｜純動能", "A",
          "每季從16檔固定池選\n近21日動能最強4檔"),
         ("B｜純催化劑", "B",
-         "每季從固定池選\n藥華藥模式評分最高4檔"),
+         "每季從固定池選\n潛力股模式評分最高4檔"),
         ("C｜動能+催化劑", "C",
          "先掃全部股票找催化劑標的\n加入候選池後用動能選"),
         ("D｜核心+衛星", "D",
