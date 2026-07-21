@@ -269,7 +269,7 @@ def main():
                 w = csv.writer(_f)
                 if csv_path.stat().st_size == 0:
                   w.writerow(['timestamp', 'symbol', 'signal', 'price', 'quantity', 'action', 'group'])
-                w.writerow([datetime.now().strftime('%Y-%m-%d %H:%M:%S'), old_sym, -1, round(old_px, 2), old_shares, 'SELL', 9])
+                w.writerow([datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%f'), old_sym, -1, round(old_px, 2), old_shares, 'SELL', 9])
               del holdings[old_sym]
               save_holdings(holdings)
             except Exception as _e:
