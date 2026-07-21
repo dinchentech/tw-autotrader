@@ -336,45 +336,32 @@ def quarter_end_dates(start="2022-01-01", end="2025-12-31"):
 def _detect_and_adjust(market_df, current_date, params, verbose=False):
     """
     依市場狀態自動調整 momentum_days。
-    使用 0050 的 MA20/MA60 關係判斷趨勢/盤整。
-    只在 auto_momentum=True 時啟用。
+    使用 0050 的 MA200 斜率判斷：年線向上用 21d，年線走平/向下用 63d。
     """
     if current_date not in market_df.index:
         return
     idx = market_df.index.get_loc(current_date)
-    if idx < 60:
+    if idx < 240:
         return
     
     close = market_df["close"].values
     cp = close[idx]
-    ma20 = np.mean(close[idx-19:idx+1])
-    ma60 = np.mean(close[idx-59:idx+1])
-    ma20_slope = (ma20 - np.mean(close[idx-39:idx-19])) / np.mean(close[idx-39:idx-19]) if idx >= 40 else 0
-    ma60_slope = (ma60 - np.mean(close[idx-79:idx-59])) / np.mean(close[idx-79:idx-59]) if idx >= 80 else 0
-    
-    # 判斷市場狀態
-    above_ma20 = cp > ma20
-    above_ma60 = cp > ma60
-    ma_gap = abs(ma20 - ma60) / ma60 if ma60 > 0 else 0
+    ma200 = np.mean(close[idx-199:idx+1])
+    ma200_before = np.mean(close[idx-239:idx-199])
+    ma200_slope = (ma200 - ma200_before) / ma200_before if ma200_before > 0 else 0
+    above_ma200 = cp > ma200
     
     original_days = params.get("momentum_days", 21)
     
-    if above_ma20 and above_ma60 and ma20_slope > 0.005 and ma60_slope > 0.002:
-        # 強趨勢：MA20 > MA60，且兩條都向上 → 用 21
+    if above_ma200 and ma200_slope > 0.002:
+        # 年線向上 + 價格在年線上 → 多頭趨勢 → 21d
         params["momentum_days"] = 21
-        reason = "強趨勢"
-    elif (not above_ma20) and (not above_ma60) and ma_gap < 0.03:
-        # 盤整：糾結在一起 → 用 63
-        params["momentum_days"] = 63
-        reason = "盤整"
-    elif ma_gap < 0.05 and abs(ma20_slope) < 0.003:
-        # 震盪：均線接近且走平 → 用 63
-        params["momentum_days"] = 63
-        reason = "震盪"
+        reason = f"多頭(年線+{ma200_slope:.1%})"
     else:
-        # 其他情況：維持原設定
-        params["momentum_days"] = original_days
-        reason = "維持"
+        # 年線走平或向下，或價格跌破年線 → 盤整/空頭 → 63d
+        params["momentum_days"] = 63
+        direction = "上" if ma200_slope > 0 else "下"
+        reason = f"年線{direction}({ma200_slope:+.1%})"
     
     if verbose and params["momentum_days"] != original_days:
         print(f"    📊 auto_momentum: {reason} → momentum_days {original_days}→{params['momentum_days']}")
