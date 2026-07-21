@@ -333,6 +333,53 @@ def quarter_end_dates(start="2022-01-01", end="2025-12-31"):
     return result
 
 
+def _detect_and_adjust(market_df, current_date, params, verbose=False):
+    """
+    依市場狀態自動調整 momentum_days。
+    使用 0050 的 MA20/MA60 關係判斷趨勢/盤整。
+    只在 auto_momentum=True 時啟用。
+    """
+    if current_date not in market_df.index:
+        return
+    idx = market_df.index.get_loc(current_date)
+    if idx < 60:
+        return
+    
+    close = market_df["close"].values
+    cp = close[idx]
+    ma20 = np.mean(close[idx-19:idx+1])
+    ma60 = np.mean(close[idx-59:idx+1])
+    ma20_slope = (ma20 - np.mean(close[idx-39:idx-19])) / np.mean(close[idx-39:idx-19]) if idx >= 40 else 0
+    ma60_slope = (ma60 - np.mean(close[idx-79:idx-59])) / np.mean(close[idx-79:idx-59]) if idx >= 80 else 0
+    
+    # 判斷市場狀態
+    above_ma20 = cp > ma20
+    above_ma60 = cp > ma60
+    ma_gap = abs(ma20 - ma60) / ma60 if ma60 > 0 else 0
+    
+    original_days = params.get("momentum_days", 21)
+    
+    if above_ma20 and above_ma60 and ma20_slope > 0.005 and ma60_slope > 0.002:
+        # 強趨勢：MA20 > MA60，且兩條都向上 → 用 21
+        params["momentum_days"] = 21
+        reason = "強趨勢"
+    elif (not above_ma20) and (not above_ma60) and ma_gap < 0.03:
+        # 盤整：糾結在一起 → 用 63
+        params["momentum_days"] = 63
+        reason = "盤整"
+    elif ma_gap < 0.05 and abs(ma20_slope) < 0.003:
+        # 震盪：均線接近且走平 → 用 63
+        params["momentum_days"] = 63
+        reason = "震盪"
+    else:
+        # 其他情況：維持原設定
+        params["momentum_days"] = original_days
+        reason = "維持"
+    
+    if verbose and params["momentum_days"] != original_days:
+        print(f"    📊 auto_momentum: {reason} → momentum_days {original_days}→{params['momentum_days']}")
+
+
 def _snap_date(df, target):
     """將日期對齊到 df 中 <= target 的最後交易日"""
     if target in df.index:
@@ -344,12 +391,15 @@ def _snap_date(df, target):
     return df.index[0] if len(df.index) > 0 else None
 
 
-def backtest_selector(data, params, top_n=4, verbose=False, mode="momentum"):
+def backtest_selector(data, params, top_n=4, verbose=False, mode="momentum", 
+                       auto_momentum=False, market_data=None):
     """
     回測每季選股績效。
     每季末用 params 選股 → 持有到下季末 → 計算報酬。
     最後一季只評價不買賣。
     mode: momentum / catalyst / core-satellite
+    auto_momentum: True = 依市場狀態自動切換 momentum_days（21/63）
+    market_data: 0050 或大盤指數 DataFrame，用於判讀市場狀態
     """
     import math
     quarter_dates = quarter_end_dates()
@@ -420,7 +470,11 @@ def backtest_selector(data, params, top_n=4, verbose=False, mode="momentum"):
             sat_pick = sat[:1] if sat else []
             selected = core + sat_pick
         else:
-            selected = pick_top_stocks(data, buy_date_q, params, top_n)
+            # ── auto_momentum：依市場狀態自動切換動能天數 ──
+            adj_params = dict(params)
+            if auto_momentum and market_data is not None and buy_date_q in market_data.index:
+                _detect_and_adjust(market_data, buy_date_q, adj_params, verbose)
+            selected = pick_top_stocks(data, buy_date_q, adj_params, top_n)
         if not selected:
             continue
 
@@ -509,6 +563,7 @@ GRID_PARAMS = {
     "technical_weight": [0.0, 0.3, 0.5, 1.0],
     "stability_weight": [0.0, 0.3, 0.5],
     "catalyst_weight": [0.0, 0.3, 0.5, 1.0],
+    "auto_momentum": [0, 1],
     "use_ma_filter": [False, True],
     "min_price": [5, 10],
 }
@@ -519,12 +574,13 @@ DEFAULT_PARAMS = {
     "technical_weight": 0.3,
     "stability_weight": 0.0,
     "catalyst_weight": 0.0,
+    "auto_momentum": 0,
     "use_ma_filter": False,
     "min_price": 5,
 }
 
 
-def run_grid_search(data, top_n=4):
+def run_grid_search(data, top_n=4, auto_momentum=False, market_data=None):
     """Grid Search 所有參數組合"""
     keys = list(GRID_PARAMS.keys())
     values = list(GRID_PARAMS.values())
@@ -541,7 +597,8 @@ def run_grid_search(data, top_n=4):
 
     for ci, combo in enumerate(combinations):
         params = dict(zip(keys, combo))
-        bt = backtest_selector(data, params, top_n, verbose=False)
+        bt = backtest_selector(data, params, top_n, verbose=False, 
+                                auto_momentum=auto_momentum, market_data=market_data)
         results.append({
             "params": params,
             "final_value": bt["final_value"],
@@ -617,7 +674,8 @@ def _catalyst_score(df, end_date):
     return s_stable * 0.20 + s_break * 0.35 + s_vol * 0.15 + s_mom * 0.30
 
 
-def recommend_next_quarter(data, params, top_n=4, mode="momentum"):
+def recommend_next_quarter(data, params, top_n=4, mode="momentum",
+                            auto_momentum=False, market_data=None):
     """用給定參數選出下一季推薦持股"""
     today = datetime.now()
     # 用最近有資料的日期
@@ -664,7 +722,10 @@ def recommend_next_quarter(data, params, top_n=4, mode="momentum"):
         sat_pick = sat[:1] if sat else []
         selected = core + sat_pick
     else:
-        selected = pick_top_stocks(data, best_date, params, top_n)
+        adj_params = dict(params)
+        if auto_momentum and market_data is not None and best_date in market_data.index:
+            _detect_and_adjust(market_data, best_date, adj_params, verbose=True)
+        selected = pick_top_stocks(data, best_date, adj_params, top_n)
 
     if not selected:
         print("❌ 無法選出推薦持股")
@@ -695,9 +756,11 @@ def recommend_next_quarter(data, params, top_n=4, mode="momentum"):
 # HTML 報告
 # ══════════════════════════════════════════════════════════════
 
-def generate_html_report(best_results, data, best_params, output_path):
+def generate_html_report(best_results, data, best_params, output_path,
+                          auto_momentum=False, market_data=None):
     """產出 HTML 報告"""
-    bt = backtest_selector(data, best_params, top_n=4, verbose=False)
+    bt = backtest_selector(data, best_params, top_n=4, verbose=False,
+                            auto_momentum=auto_momentum, market_data=market_data)
 
     rows = ""
     for i, r in enumerate(best_results[:20]):
@@ -837,6 +900,8 @@ def main():
     parser.add_argument("--report", action="store_true", help="產出 HTML 報告")
     parser.add_argument("--top-n", type=int, default=0, help="每季選股數 (0=依資金自動決定)")
     parser.add_argument("--capital", type=int, default=env_capital, help=f"起始資金 (default: 從 .env 讀取={env_capital})")
+    parser.add_argument("--auto-momentum", action="store_true", default=False,
+                        help="自動依市場狀態切換動能天數（趨勢用21d、盤整用63d）")
     args = parser.parse_args()
 
     capital = args.capital
@@ -860,12 +925,14 @@ def main():
     print("=" * 60)
     print(f"   💰 起始資金: NT${capital:,}（--capital 可改）")
     print(f"   📋 建議持股: top {top_n} 檔（--top-n 可改）")
+    if args.auto_momentum:
+        print(f"   🔄 auto_momentum: 開啟（依市場狀態自動切換 21d/63d）")
     print()
 
-    # 自訂候選股（從 custom_pool.txt）— 詢問使用者是否合併
+    # 自訂候選股（從 custom_pool.txt）
     custom = _load_custom_pool()
     if custom:
-        print(f"\n📋 偵測到自訂候選股: {', '.join(custom)}")
+        print(f"📋 偵測到自訂候選股: {', '.join(custom)}")
         try:
             ans = input("   是否併入候選池？(Y/n): ").strip().lower()
         except (EOFError, KeyboardInterrupt):
@@ -880,9 +947,20 @@ def main():
     data = load_all_stocks()
     print(f"✅ 成功載入 {len(data)} 檔")
 
+    # auto_momentum 需要 0050 作為市場指標
+    market_data = None
+    if args.auto_momentum:
+        print(f"\n📥 載入 0050 作為市場指標...")
+        df_0050 = load_stock("0050")
+        if not df_0050.empty:
+            market_data = df_0050
+            print(f"✅ 0050 資料載入成功（{len(df_0050)} 筆）")
+        else:
+            print(f"⚠️ 0050 資料載入失敗，auto_momentum 將不啟用")
+
     if args.report or (not args.grid and not args.backtest and not args.recommend and not args.report):
         print("\n🔍 預設執行 Grid Search...")
-        results = run_grid_search(data, top_n=top_n)
+        results = run_grid_search(data, top_n=top_n, auto_momentum=args.auto_momentum, market_data=market_data)
         print_top_results(results, n=10)
 
         best_params = results[0]["params"]
@@ -890,27 +968,31 @@ def main():
         print(f"   終值: NT${results[0]['final_value']:,.0f} ({results[0]['total_return']:+.1%})")
 
         out = os.path.join(os.path.dirname(__file__), "..", "img", "stock_selector_grid_report.html")
-        generate_html_report(results, data, best_params, out)
-        recommend_next_quarter(data, best_params, top_n=top_n, mode=args.mode)
+        generate_html_report(results, data, best_params, out, auto_momentum=args.auto_momentum, market_data=market_data)
+        recommend_next_quarter(data, best_params, top_n=top_n, mode=args.mode,
+                                auto_momentum=args.auto_momentum, market_data=market_data)
 
     if args.grid:
-        results = run_grid_search(data, top_n=top_n)
+        results = run_grid_search(data, top_n=top_n, auto_momentum=args.auto_momentum, market_data=market_data)
         print_top_results(results, n=10)
 
         best_params = results[0]["params"]
         out = os.path.join(os.path.dirname(__file__), "..", "img", "stock_selector_grid_report.html")
-        generate_html_report(results, data, best_params, out)
-        recommend_next_quarter(data, best_params, top_n=top_n, mode=args.mode)
+        generate_html_report(results, data, best_params, out, auto_momentum=args.auto_momentum, market_data=market_data)
+        recommend_next_quarter(data, best_params, top_n=top_n, mode=args.mode,
+                                auto_momentum=args.auto_momentum, market_data=market_data)
 
     if args.backtest:
-        bt = backtest_selector(data, DEFAULT_PARAMS, top_n=top_n, verbose=True, mode=args.mode)
+        bt = backtest_selector(data, DEFAULT_PARAMS, top_n=top_n, verbose=True, mode=args.mode,
+                                auto_momentum=args.auto_momentum, market_data=market_data)
         print(f"\n📊 預設參數回測結果:")
         print(f"   終值: NT${bt['final_value']:,.0f} ({bt['total_return']:+.1%})")
         for yr, yd in bt["yearly"].items():
             print(f"   {yr}: {yd['total_ret']:+.1%}")
 
     if args.recommend:
-        recommend_next_quarter(data, DEFAULT_PARAMS, top_n=top_n, mode=args.mode)
+        recommend_next_quarter(data, DEFAULT_PARAMS, top_n=top_n, mode=args.mode,
+                                auto_momentum=args.auto_momentum, market_data=market_data)
 
 
 if __name__ == "__main__":
