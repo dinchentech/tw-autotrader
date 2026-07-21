@@ -28,7 +28,7 @@ def load_trades() -> pd.DataFrame:
         return pd.DataFrame()
     if df.empty:
         return df
-    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    df["timestamp"] = pd.to_datetime(df["timestamp"], format='mixed')
     df["symbol"] = df["symbol"].astype(str)
     df = df.sort_values("timestamp").reset_index(drop=True)
     if "group" not in df.columns:

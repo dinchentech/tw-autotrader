@@ -31,7 +31,7 @@ def send_daily_report(pd, date):
     try:
         df = pd.read_csv(csv_path)
         today = date.today()
-        df["timestamp"] = pd.to_datetime(df["timestamp"])
+        df["timestamp"] = pd.to_datetime(df["timestamp"], format='mixed')
         today_df = df[df["timestamp"].dt.date == today]
     except Exception as e:
         notify_all(f"❌ 讀取交易紀錄失敗: {e}")
