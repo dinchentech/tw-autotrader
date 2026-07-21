@@ -75,6 +75,11 @@ def quarter_dates(start="2022-01-01", end="2025-12-31"):
     return result
 
 def calc_mdays(mf, date):
+    """年線斜率判斷：多頭→21d，否則→63d"""
+    # Snap to actual trading day
+    if date not in mf.index:
+        avail = mf[mf.index <= date].index
+        if len(avail) > 0: date = avail[-1]
     if date not in mf.index: return 21
     idx = mf.index.get_loc(date)
     if idx < 240: return 21
@@ -85,8 +90,8 @@ def calc_mdays(mf, date):
 
 
 def simulate(initial_capital=500000, start="2022", end="2025",
-             top_n=4, auto_momentum=False, exit_pct=1.5, verbose=True):
-    """核心模擬引擎"""
+             top_n=4, auto_momentum=False, exit_pct=99, auto_lock=False, verbose=True):
+    """核心模擬引擎：選股+抱緊+季末檢討。auto_lock=True 時，盤整季(63d)自動鎖 1.5x"""
     load_start = str(int(start)-1)+"-01-01"
     data = {}
     for sym in CANDIDATE_POOL:
@@ -103,6 +108,14 @@ def simulate(initial_capital=500000, start="2022", end="2025",
     for qi, qd in enumerate(qds):
         is_last = (qi == len(qds)-1)
         mdays = calc_mdays(mf, qd) if (auto_momentum and mf) else 21
+        
+        # ── auto_lock: 決定本季鎖利倍數 ──
+        quarter_lock = exit_pct  # 手動設定的倍數
+        if auto_lock:
+            if mdays == 63:  # 盤整季，開鎖利
+                quarter_lock = min(quarter_lock, 1.5)
+            else:            # 趨勢季，不鎖
+                quarter_lock = 99
         
         # ── Step 1: 排名 ──
         scored = []
@@ -156,8 +169,8 @@ def simulate(initial_capital=500000, start="2022", end="2025",
                 if verbose:
                     print(f"   📥 買 {sym} {sh}股 @{bp:.0f} NT${cost:,.0f}")
         
-        # ── Step 5: 季末鎖利檢查（僅對保留股）──
-        if not is_last and exit_pct < 90:
+        # ── Step 5: 季末鎖利檢查 ──
+        if not is_last and quarter_lock < 90:
             for sym in list(positions.keys()):
                 pos = positions[sym]
                 df_sym = data[sym]
@@ -200,22 +213,30 @@ def simulate(initial_capital=500000, start="2022", end="2025",
 
 
 def main():
-    parser = argparse.ArgumentParser(description="選股+抱緊+例外鎖利")
-    parser.add_argument("--start", default="2022")
-    parser.add_argument("--end", default="2025")
-    parser.add_argument("--top-n", type=int, default=4)
-    parser.add_argument("--capital", type=int, default=500000)
-    parser.add_argument("--auto", action="store_true")
-    parser.add_argument("--lock-profit-pct", type=float, default=0,
-                        help="季末鎖利倍數，如 2.0=漲到2倍就賣出 (default: 0=不鎖利)")
+    parser = argparse.ArgumentParser(description="選股+抱緊+季末鎖利")
+    parser.add_argument("--start", default="2022"); parser.add_argument("--end", default="2025")
+    parser.add_argument("--top-n", type=int, default=4); parser.add_argument("--capital", type=int, default=500000)
+    parser.add_argument("--auto", action="store_true", help="auto_momentum 自動切換 21d/63d")
+    parser.add_argument("--auto-lock", action="store_true", help="盤整季(63d)自動開 1.5x 鎖利（自動啟用 auto_momentum）")
+    parser.add_argument("--lock-profit-pct", type=float, default=0, help="手動固定鎖利倍數")
     args = parser.parse_args()
     
-    exit_pct = args.lock_profit_pct if args.lock_profit_pct > 0 else 99  # 99=永不觸發
+    # auto-lock 自動啟用 auto_momentum
+    if args.auto_lock:
+        args.auto = True
     
-    print(f"🎯 選股+抱緊+季末鎖利{'('+str(args.lock_profit_pct)+'x)' if args.lock_profit_pct>0 else '(無鎖利)'}")
-    print(f"   {args.start}~{args.end} | NT${args.capital:,} | top{args.top_n} | auto={args.auto}")
+    exit_pct = args.lock_profit_pct if args.lock_profit_pct > 0 else 99
     
-    result = simulate(args.capital, args.start, args.end, args.top_n, args.auto, exit_pct)
+    mode_parts = []
+    if args.auto: mode_parts.append("auto_momentum")
+    if args.auto_lock: mode_parts.append("auto_lock")
+    if args.lock_profit_pct > 0: mode_parts.append(f"鎖利{args.lock_profit_pct}x")
+    mode_str = ", ".join(mode_parts) if mode_parts else "無鎖利"
+    
+    print(f"🎯 選股+抱緊+季末鎖利（{mode_str}）")
+    print(f"   {args.start}~{args.end} | NT${args.capital:,} | top{args.top_n}")
+    
+    result = simulate(args.capital, args.start, args.end, args.top_n, args.auto, exit_pct, args.auto_lock)
     
     print(f"\n{'='*55}")
     print(f"🏆 結果")
