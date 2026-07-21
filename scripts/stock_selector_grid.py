@@ -819,19 +819,48 @@ def _load_custom_pool():
 
 
 def main():
+    # 讀取使用者資金
+    env_capital = 500000
+    try:
+        env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
+        if os.path.exists(env_path):
+            for line in open(env_path):
+                if line.startswith("TOTAL_CAPITAL="):
+                    env_capital = int(line.strip().split("=")[1])
+    except:
+        pass
+
     parser = argparse.ArgumentParser(description="每季選股 Grid Search")
     parser.add_argument("--grid", action="store_true", help="執行 Grid Search 找最佳參數")
     parser.add_argument("--backtest", action="store_true", help="用預設參數回測")
     parser.add_argument("--recommend", action="store_true", help="輸出下一季推薦持股")
     parser.add_argument("--report", action="store_true", help="產出 HTML 報告")
-    parser.add_argument("--top-n", type=int, default=4, help="每季選股數 (default: 4)")
-    parser.add_argument("--mode", choices=["momentum", "catalyst", "core-satellite"], default="momentum",
-                        help="選股模式：momentum(純動能) / catalyst(純催化劑) / core-satellite(核心+衛星)")
+    parser.add_argument("--top-n", type=int, default=0, help="每季選股數 (0=依資金自動決定)")
+    parser.add_argument("--capital", type=int, default=env_capital, help=f"起始資金 (default: 從 .env 讀取={env_capital})")
     args = parser.parse_args()
+
+    capital = args.capital
+
+    # 自動決定建議持股數
+    if args.top_n > 0:
+        top_n = args.top_n
+    elif capital >= 2000000:
+        top_n = 6
+    elif capital >= 1000000:
+        top_n = 5
+    elif capital >= 500000:
+        top_n = 4
+    elif capital >= 200000:
+        top_n = 3
+    else:
+        top_n = 2
 
     print("=" * 60)
     print("📊 每季選股神器 — Stock Selector Grid")
     print("=" * 60)
+    print(f"   💰 起始資金: NT${capital:,}（--capital 可改）")
+    print(f"   📋 建議持股: top {top_n} 檔（--top-n 可改）")
+    print()
 
     # 自訂候選股（從 custom_pool.txt）— 詢問使用者是否合併
     custom = _load_custom_pool()
@@ -853,7 +882,7 @@ def main():
 
     if args.report or (not args.grid and not args.backtest and not args.recommend and not args.report):
         print("\n🔍 預設執行 Grid Search...")
-        results = run_grid_search(data, top_n=args.top_n)
+        results = run_grid_search(data, top_n=top_n)
         print_top_results(results, n=10)
 
         best_params = results[0]["params"]
@@ -862,26 +891,26 @@ def main():
 
         out = os.path.join(os.path.dirname(__file__), "..", "img", "stock_selector_grid_report.html")
         generate_html_report(results, data, best_params, out)
-        recommend_next_quarter(data, best_params, top_n=args.top_n, mode=args.mode)
+        recommend_next_quarter(data, best_params, top_n=top_n, mode=args.mode)
 
     if args.grid:
-        results = run_grid_search(data, top_n=args.top_n)
+        results = run_grid_search(data, top_n=top_n)
         print_top_results(results, n=10)
 
         best_params = results[0]["params"]
         out = os.path.join(os.path.dirname(__file__), "..", "img", "stock_selector_grid_report.html")
         generate_html_report(results, data, best_params, out)
-        recommend_next_quarter(data, best_params, top_n=args.top_n, mode=args.mode)
+        recommend_next_quarter(data, best_params, top_n=top_n, mode=args.mode)
 
     if args.backtest:
-        bt = backtest_selector(data, DEFAULT_PARAMS, top_n=args.top_n, verbose=True, mode=args.mode)
+        bt = backtest_selector(data, DEFAULT_PARAMS, top_n=top_n, verbose=True, mode=args.mode)
         print(f"\n📊 預設參數回測結果:")
         print(f"   終值: NT${bt['final_value']:,.0f} ({bt['total_return']:+.1%})")
         for yr, yd in bt["yearly"].items():
             print(f"   {yr}: {yd['total_ret']:+.1%}")
 
     if args.recommend:
-        recommend_next_quarter(data, DEFAULT_PARAMS, top_n=args.top_n, mode=args.mode)
+        recommend_next_quarter(data, DEFAULT_PARAMS, top_n=top_n, mode=args.mode)
 
 
 if __name__ == "__main__":
