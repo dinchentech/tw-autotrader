@@ -521,7 +521,7 @@ def main():
                   trk['total_shares'] = kw_pre_state['total_shares']
                   trk['sold_date'] = kw_pre_state['sold_date']
                   trk['tp_tiers_fired'] = list(kw_pre_state.get('tp_tiers_fired', []))
-              continue
+                continue
             else:
               broker.place_order(symbol, action, position_size)
             rm.log_trade(symbol, signal, px, position_size)
