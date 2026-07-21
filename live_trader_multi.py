@@ -312,9 +312,27 @@ def main():
           strat_params = get_strategy_params(cfg, sn)
           signal = strat_func(acd, **strat_params)['signal'].iloc[(- 1)]
           px = acd['close'].iloc[(- 1)]
-          if (sn == 'keep_wait'):
-            kw_initial = int(cfg.get('initial_shares', 12))
-            kw_add = int(cfg.get('add_shares', 6))
+           if (sn == 'keep_wait'):
+             kw_max_entry_price = float(cfg.get('max_entry_price', 0))
+             
+             # 🔄 全輪替模式：max_entry_price=-1，一次性買入、不操作、等換季時清倉
+             if kw_max_entry_price == -1:
+               existing = holdings.get(symbol, 0)
+               if existing > 0:
+                 signal = 0
+                 continue
+               position_size = int(cfg.get('initial_shares', 12))
+               trk = pyramid_tracker.setdefault(symbol, {'buy_count': 0})
+               if trk['buy_count'] == 0:
+                 signal = 1
+                 trk['buy_count'] = 1
+                 print(f'📥 {symbol} 全輪替 初始進場 {position_size} 股 @ {px:.0f}')
+               else:
+                 signal = 0
+               continue
+             
+             kw_initial = int(cfg.get('initial_shares', 12))
+             kw_add = int(cfg.get('add_shares', 6))
             kw_drop_pct = float(cfg.get('add_drop_pct', 5))
             kw_max_add = int(cfg.get('max_additions', 2))
             kw_tp_pct = float(cfg.get('tp_trigger_pct', 15))
