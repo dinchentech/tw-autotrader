@@ -123,6 +123,8 @@ def _build_holdings_message(pd, app_version, title_emoji, title):
                 sym_df = df[df["symbol"] == str(sym)]
                 if not sym_df.empty:
                     current_price = sym_df["price"].iloc[-1]
+                    if avg_cost == 0:
+                        avg_cost = current_price
             except Exception:
                 pass
 
