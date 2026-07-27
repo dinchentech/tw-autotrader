@@ -23,8 +23,10 @@ def load_trades() -> pd.DataFrame:
     if not CSV_PATH.exists():
         return pd.DataFrame()
     try:
-        df = pd.read_csv(CSV_PATH)
+        df = pd.read_csv(CSV_PATH, on_bad_lines='skip')
     except pd.errors.EmptyDataError:
+        return pd.DataFrame()
+    except pd.errors.ParserError:
         return pd.DataFrame()
     if df.empty:
         return df

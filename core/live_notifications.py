@@ -29,7 +29,9 @@ def send_daily_report(pd, date):
         return
 
     try:
-        df = pd.read_csv(csv_path)
+        df = pd.read_csv(csv_path, on_bad_lines='skip')
+        if df.empty:
+            return
         today = date.today()
         df["timestamp"] = pd.to_datetime(df["timestamp"], format='mixed')
         today_df = df[df["timestamp"].dt.date == today]
@@ -119,7 +121,7 @@ def _build_holdings_message(pd, app_version, title_emoji, title):
         current_price = avg_cost
         if csv_path.exists():
             try:
-                df = pd.read_csv(csv_path)
+                df = pd.read_csv(csv_path, on_bad_lines='skip')
                 sym_df = df[df["symbol"] == str(sym)]
                 if not sym_df.empty:
                     current_price = sym_df["price"].iloc[-1]
@@ -152,43 +154,20 @@ def _build_holdings_message(pd, app_version, title_emoji, title):
 def _build_inst_screening_msg() -> str:
     """讀取法人動能篩選結果，回傳訊息文字（無結果時回傳空字串）
     
-    💡 若無檔案或非今日，自動 new 一個 InstitutionalMomentumStrategy 執行篩選再產生檔案，
-       讓休眠前可以直接看到最新篩選結果，不必等到隔天 13:31-13:45。
+    若檔案有 qualified / near_misses → 直接回傳。
+    否則（無檔案 / 非今日 / 資料全空）→ 重新篩選一次再讀取。
+    這樣即使舊版 auto-refresh 汙染了空檔案，也會被重新覆蓋。
     """
     import json
     from pathlib import Path
 
     inst_path = Path("logs/inst_momentum_screening.json")
 
-    # 檢查是否需要重新篩選（無檔案、非今日、或解析失敗）
-    need_refresh = False
-    if not inst_path.exists():
-        need_refresh = True
-    else:
-        try:
-            from datetime import datetime
-            inst_data = json.loads(inst_path.read_text())
-            if inst_data.get("screen_date") != datetime.now().strftime("%Y-%m-%d"):
-                need_refresh = True
-        except Exception:
-            need_refresh = True
-
-    if need_refresh:
-        try:
-            from strategies.institutional_momentum import InstitutionalMomentumStrategy
-            inst_mom = InstitutionalMomentumStrategy(broker=None, capital=0, top_n=3)
-            inst_mom.get_candidates()
-            print("✅ 休眠前自動執行法人動能篩選完成")
-        except Exception as e:
-            print(f"⚠️ 休眠前自動篩選失敗: {e}")
-
-    if not inst_path.exists():
-        return ""
-    try:
+    def _build_msg(inst_data):
+        """從解析後的資料建構訊息；回傳 None 表資料不存在或無內容。"""
         from datetime import datetime
-        inst_data = json.loads(inst_path.read_text())
         if inst_data.get("screen_date") != datetime.now().strftime("%Y-%m-%d"):
-            return ""
+            return None
         qualified = inst_data.get("qualified", [])
         near_misses = inst_data.get("near_misses", [])
         parts = []
@@ -200,9 +179,37 @@ def _build_inst_screening_msg() -> str:
             parts.append(f"⚠️ 未達標前三: {names}")
         if parts:
             return "\n📡 *法人動能篩選*\n" + "\n".join(parts) + "\n"
-        return "\n📡 *法人動能篩選*\n❌ 今日無符合標的\n"
-    except Exception:
+        return None  # 沒有 qualified 也沒有 near_misses → 需要重新篩選
+
+    def _try_read():
+        if not inst_path.exists():
+            return None
+        try:
+            return _build_msg(json.loads(inst_path.read_text()))
+        except Exception:
+            return None
+
+    # 第一階段：嘗試讀取現有檔案
+    msg = _try_read()
+    if msg:
+        return msg
+
+    # 第二階段：重新執行篩選（無檔案、非今日、或資料為空）
+    try:
+        from strategies.institutional_momentum import InstitutionalMomentumStrategy
+        inst_mom = InstitutionalMomentumStrategy(broker=None, capital=0, top_n=3)
+        inst_mom.get_candidates()
+    except Exception as e:
+        print(f"⚠️ 法人動能重新篩選失敗: {e}")
         return ""
+
+    # 重新讀取（可能還是空，代表今天真的一檔都沒有）
+    msg = _try_read()
+    if msg:
+        return msg
+    if inst_path.exists():
+        return "\n📡 *法人動能篩選*\n❌ 今日無符合標的\n"
+    return ""
 
 
 def send_sleep_notification(pd, app_version, next_open):
@@ -286,7 +293,7 @@ def send_closing_summary(pd, app_version):
             current_price = avg_cost
             if csv_path.exists():
                 try:
-                    df = pd.read_csv(csv_path)
+                    df = pd.read_csv(csv_path, on_bad_lines='skip')
                     sym_df = df[df["symbol"] == str(sym)]
                     if not sym_df.empty:
                         current_price = sym_df["price"].iloc[-1]

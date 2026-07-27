@@ -260,16 +260,9 @@ def main():
               if old_px <= 0:
                 continue
               broker.place_order(old_sym, 'sell', old_shares)
-              from utils.telegram import send_trade_alert
+              rm.log_trade(old_sym, -1, old_px, old_shares)
               send_trade_alert(old_sym, 'SELL', old_px, old_shares, 'CLEANUP')
               print(f'🧹 清倉 {old_sym} {old_shares} 股 @ {old_px:.0f}（不再在 PORTFOLIO_CONFIG 中）')
-              import csv
-              csv_path = Path('logs/performance.csv')
-              with open(csv_path, 'a', newline='', encoding='utf-8') as _f:
-                w = csv.writer(_f)
-                if csv_path.stat().st_size == 0:
-                  w.writerow(['timestamp', 'symbol', 'signal', 'price', 'quantity', 'action', 'group'])
-                w.writerow([datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%f'), old_sym, -1, round(old_px, 2), old_shares, 'SELL', 9])
               del holdings[old_sym]
               save_holdings(holdings)
             except Exception as _e:
@@ -322,126 +315,131 @@ def main():
                 signal = 0
                 continue
               position_size = int(cfg.get('initial_shares', 12))
-              trk = pyramid_tracker.setdefault(symbol, {'buy_count': 0})
+              if (symbol not in pyramid_tracker):
+                pyramid_tracker[symbol] = {'buy_count': 0, 'last_buy_price': 0.0, 'total_cost': 0.0, 'total_shares': 0, 'sold_date': None}
+              trk = pyramid_tracker[symbol]
+              kw_pre_state = {'buy_count': trk['buy_count'], 'last_buy_price': trk['last_buy_price'], 'total_cost': trk['total_cost'], 'total_shares': trk['total_shares'], 'sold_date': trk['sold_date']}
               if trk['buy_count'] == 0:
                 signal = 1
                 trk['buy_count'] = 1
                 print(f'📥 {symbol} 全輪替 初始進場 {position_size} 股 @ {px:.0f}')
               else:
                 signal = 0
-              continue
+              if (signal == 0):
+                continue
+            if kw_max_entry_price != -1:
             
-            kw_initial = int(cfg.get('initial_shares', 12))
-            kw_add = int(cfg.get('add_shares', 6))
-            kw_drop_pct = float(cfg.get('add_drop_pct', 5))
-            kw_max_add = int(cfg.get('max_additions', 2))
-            kw_tp_pct = float(cfg.get('tp_trigger_pct', 15))
-            kw_tp_sell = float(cfg.get('tp_sell_ratio', 50))
-            kw_tp_tiers = cfg.get('tp_tiers', None)
-            kw_cooldown = int(cfg.get('cooldown_days', 30))
-            if (symbol not in pyramid_tracker):
-              pyramid_tracker[symbol] = {'buy_count': 0, 'last_buy_price': 0.0, 'total_cost': 0.0, 'total_shares': 0, 'sold_date': None, 'notified_tp': set(), 'tp_tiers_fired': []}
-            trk = pyramid_tracker[symbol]
-            kw_pre_state = {'buy_count': trk['buy_count'], 'last_buy_price': trk['last_buy_price'], 'total_cost': trk['total_cost'], 'total_shares': trk['total_shares'], 'sold_date': trk['sold_date'], 'tp_tiers_fired': list(trk.get('tp_tiers_fired', []))}
-            if (trk.get('sold_date') and (trk['buy_count'] == (- 1))):
-              days_since_sold = (datetime.now() - trk['sold_date']).days
-              if (days_since_sold < kw_cooldown):
-                signal = 0
-                continue
-              else:
-                trk['buy_count'] = 0
-            if (trk['buy_count'] == 0):
-              existing = holdings.get(symbol, 0)
-              if (existing > 0):
-                trk['total_shares'] = existing
-                trk['total_cost'] = (px * existing)
+              kw_initial = int(cfg.get('initial_shares', 12))
+              kw_add = int(cfg.get('add_shares', 6))
+              kw_drop_pct = float(cfg.get('add_drop_pct', 5))
+              kw_max_add = int(cfg.get('max_additions', 2))
+              kw_tp_pct = float(cfg.get('tp_trigger_pct', 15))
+              kw_tp_sell = float(cfg.get('tp_sell_ratio', 50))
+              kw_tp_tiers = cfg.get('tp_tiers', None)
+              kw_cooldown = int(cfg.get('cooldown_days', 30))
+              if (symbol not in pyramid_tracker):
+                pyramid_tracker[symbol] = {'buy_count': 0, 'last_buy_price': 0.0, 'total_cost': 0.0, 'total_shares': 0, 'sold_date': None, 'notified_tp': set(), 'tp_tiers_fired': []}
+              trk = pyramid_tracker[symbol]
+              kw_pre_state = {'buy_count': trk['buy_count'], 'last_buy_price': trk['last_buy_price'], 'total_cost': trk['total_cost'], 'total_shares': trk['total_shares'], 'sold_date': trk['sold_date'], 'tp_tiers_fired': list(trk.get('tp_tiers_fired', []))}
+              if (trk.get('sold_date') and (trk['buy_count'] == (- 1))):
+                days_since_sold = (datetime.now() - trk['sold_date']).days
+                if (days_since_sold < kw_cooldown):
+                  signal = 0
+                  continue
+                else:
+                  trk['buy_count'] = 0
+              if (trk['buy_count'] == 0):
+                existing = holdings.get(symbol, 0)
+                if (existing > 0):
+                  trk['total_shares'] = existing
+                  trk['total_cost'] = (px * existing)
+                  trk['last_buy_price'] = px
+                  trk['buy_count'] = 1
+                  signal = 0
+                  print(f'📋 {symbol} keep_wait 偵測到既有持股 {existing} 股，恢復 tracker 狀態')
+                  continue
+                signal = 1
+                if (kw_max_entry_price > 0) and (px > kw_max_entry_price):
+                  signal = 0
+                  print(f'⏸️  {symbol} keep_wait 初始進場跳過: 價格 {px:.2f} > 上限 {kw_max_entry_price:.2f}')
+                  continue
+                position_size = kw_initial
                 trk['last_buy_price'] = px
+                trk['total_cost'] = (px * position_size)
+                trk['total_shares'] = position_size
                 trk['buy_count'] = 1
-                signal = 0
-                print(f'📋 {symbol} keep_wait 偵測到既有持股 {existing} 股，恢復 tracker 狀態')
-                continue
-              signal = 1
-              if (kw_max_entry_price > 0) and (px > kw_max_entry_price):
-                signal = 0
-                print(f'⏸️  {symbol} keep_wait 初始進場跳過: 價格 {px:.2f} > 上限 {kw_max_entry_price:.2f}')
-                continue
-              position_size = kw_initial
-              trk['last_buy_price'] = px
-              trk['total_cost'] = (px * position_size)
-              trk['total_shares'] = position_size
-              trk['buy_count'] = 1
-              print(f'📥 {symbol} keep_wait 初始進場 {position_size} 股 @ {px:.0f}')
-            else:
-              avg_cost = ((trk['total_cost'] / trk['total_shares']) if (trk['total_shares'] > 0) else px)
-              drop_pct = (((trk['last_buy_price'] - px) / trk['last_buy_price']) * 100)
-              profit_pct = (((px - avg_cost) / avg_cost) * 100)
-              take_profit = False
-              if kw_tp_tiers and isinstance(kw_tp_tiers, list) and len(kw_tp_tiers) > 0:
-                # ── 多層停利 (tp_tiers) ──
-                fired_tiers = trk.setdefault('tp_tiers_fired', [])
-                tier_triggered = None
-                for tier_idx, tier in enumerate(kw_tp_tiers):
-                  if tier_idx in fired_tiers:
-                    continue
-                  tier_pct = float(tier.get('pct', 15))
-                  if profit_pct >= tier_pct:
-                    tier_triggered = (tier_idx, tier)
-                    break
-                if (tier_triggered is not None) and (trk['total_shares'] > 0):
+                print(f'📥 {symbol} keep_wait 初始進場 {position_size} 股 @ {px:.0f}')
+              else:
+                avg_cost = ((trk['total_cost'] / trk['total_shares']) if (trk['total_shares'] > 0) else px)
+                drop_pct = (((trk['last_buy_price'] - px) / trk['last_buy_price']) * 100)
+                profit_pct = (((px - avg_cost) / avg_cost) * 100)
+                take_profit = False
+                if kw_tp_tiers and isinstance(kw_tp_tiers, list) and len(kw_tp_tiers) > 0:
+                  # ── 多層停利 (tp_tiers) ──
+                  fired_tiers = trk.setdefault('tp_tiers_fired', [])
+                  tier_triggered = None
+                  for tier_idx, tier in enumerate(kw_tp_tiers):
+                    if tier_idx in fired_tiers:
+                      continue
+                    tier_pct = float(tier.get('pct', 15))
+                    if profit_pct >= tier_pct:
+                      tier_triggered = (tier_idx, tier)
+                      break
+                  if (tier_triggered is not None) and (trk['total_shares'] > 0):
+                    owned = holdings.get(symbol, 0)
+                    tier_idx, tier = tier_triggered
+                    tier_ratio = float(tier.get('ratio', 50)) / 100.0
+                    is_last = (tier_idx == len(kw_tp_tiers) - 1)
+                    sell_qty = owned if is_last else max(1, int(owned * tier_ratio))
+                    if sell_qty > 0:
+                      signal = (- 1)
+                      position_size = sell_qty
+                      fired_tiers.append(tier_idx)
+                      take_profit = True
+                      print(f'📈 {symbol} 停利 T{tier_idx+1}: +{profit_pct:.1f}% >= +{tier["pct"]}% 賣出 {sell_qty}/{owned} 股 ({tier["ratio"]}%)')
+                      if is_last:
+                        trk['buy_count'] = (- 1)
+                        trk['sold_date'] = datetime.now()
+                elif ((profit_pct >= kw_tp_pct) and (trk['total_shares'] > 0)):
+                  # ── 舊版單一停利（向下相容） ──
                   owned = holdings.get(symbol, 0)
-                  tier_idx, tier = tier_triggered
-                  tier_ratio = float(tier.get('ratio', 50)) / 100.0
-                  is_last = (tier_idx == len(kw_tp_tiers) - 1)
-                  sell_qty = owned if is_last else max(1, int(owned * tier_ratio))
-                  if sell_qty > 0:
+                  if ((kw_tp_sell > 0) and (owned > 0)):
+                    sell_qty = max(1, int(((owned * kw_tp_sell) / 100)))
                     signal = (- 1)
                     position_size = sell_qty
-                    fired_tiers.append(tier_idx)
                     take_profit = True
-                    print(f'📈 {symbol} 停利 T{tier_idx+1}: +{profit_pct:.1f}% >= +{tier["pct"]}% 賣出 {sell_qty}/{owned} 股 ({tier["ratio"]}%)')
-                    if is_last:
-                      trk['buy_count'] = (- 1)
-                      trk['sold_date'] = datetime.now()
-              elif ((profit_pct >= kw_tp_pct) and (trk['total_shares'] > 0)):
-                # ── 舊版單一停利（向下相容） ──
-                owned = holdings.get(symbol, 0)
-                if ((kw_tp_sell > 0) and (owned > 0)):
-                  sell_qty = max(1, int(((owned * kw_tp_sell) / 100)))
-                  signal = (- 1)
-                  position_size = sell_qty
-                  take_profit = True
-                  print(f'📈 {symbol} 停利 +{profit_pct:.1f}% 賣出 {sell_qty}/{owned} 股 ({kw_tp_sell:.0f}%)')
-                  trk['buy_count'] = (- 1)
-                  trk['sold_date'] = datetime.now()
-                elif ((kw_tp_sell == 0) and (owned > 0)):
-                  signal = 0
-                  if (profit_pct not in trk.setdefault('notified_tp', set())):
-                    trk['notified_tp'].add(profit_pct)
-                    msg = f'''📈 *{symbol}* 漲幅 +{profit_pct:.1f}% 已達目標 {kw_tp_pct:.0f}%
-目前持有 {owned} 股，成本均價 {avg_cost:.0f}
-是否手動獲利了結？'''
-                    send_telegram_message(msg)
-                    print(f'📢 {symbol} 漲 {profit_pct:.1f}% 達標，已通知使用者')
-                else:
-                  signal = 0
-              if (not take_profit) and (signal == 0):
-                # ── DCA 加碼檢查 ──
-                if ((drop_pct >= kw_drop_pct) and (trk['buy_count'] < kw_max_add)):
-                  if (kw_max_entry_price > 0) and (px > kw_max_entry_price):
-                    print(f'⏸️  {symbol} DCA 跳過: 價格 {px:.2f} > 上限 {kw_max_entry_price:.2f}')
+                    print(f'📈 {symbol} 停利 +{profit_pct:.1f}% 賣出 {sell_qty}/{owned} 股 ({kw_tp_sell:.0f}%)')
+                    trk['buy_count'] = (- 1)
+                    trk['sold_date'] = datetime.now()
+                  elif ((kw_tp_sell == 0) and (owned > 0)):
                     signal = 0
+                    if (profit_pct not in trk.setdefault('notified_tp', set())):
+                      trk['notified_tp'].add(profit_pct)
+                      msg = f'''📈 *{symbol}* 漲幅 +{profit_pct:.1f}% 已達目標 {kw_tp_pct:.0f}%
+  目前持有 {owned} 股，成本均價 {avg_cost:.0f}
+  是否手動獲利了結？'''
+                      send_telegram_message(msg)
+                      print(f'📢 {symbol} 漲 {profit_pct:.1f}% 達標，已通知使用者')
                   else:
-                    signal = 1
-                    position_size = kw_add
-                  trk['last_buy_price'] = px
-                  trk['total_cost'] += (px * position_size)
-                  trk['total_shares'] += position_size
-                  trk['buy_count'] += 1
-                  print(f"📉 {symbol} DCA 第 {trk['buy_count']} 次加碼 {position_size} 股 @ {px:.0f}（距前次 -{drop_pct:.1f}%）")
-                else:
-                  signal = 0
-            if (signal == 0):
-              continue
+                    signal = 0
+                if (not take_profit) and (signal == 0):
+                  # ── DCA 加碼檢查 ──
+                  if ((drop_pct >= kw_drop_pct) and (trk['buy_count'] < kw_max_add)):
+                    if (kw_max_entry_price > 0) and (px > kw_max_entry_price):
+                      print(f'⏸️  {symbol} DCA 跳過: 價格 {px:.2f} > 上限 {kw_max_entry_price:.2f}')
+                      signal = 0
+                    else:
+                      signal = 1
+                      position_size = kw_add
+                    trk['last_buy_price'] = px
+                    trk['total_cost'] += (px * position_size)
+                    trk['total_shares'] += position_size
+                    trk['buy_count'] += 1
+                    print(f"📉 {symbol} DCA 第 {trk['buy_count']} 次加碼 {position_size} 股 @ {px:.0f}（距前次 -{drop_pct:.1f}%）")
+                  else:
+                    signal = 0
+              if (signal == 0):
+                continue
           if (signal != 0):
             action = ('BUY' if (signal == 1) else 'SELL')
             if (sn == 'keep_wait'):

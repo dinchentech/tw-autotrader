@@ -34,7 +34,7 @@ class RiskManager:
                 self.daily_loss = 0.0
                 return
             
-            df = pd.read_csv(self.log_file)
+            df = pd.read_csv(self.log_file, on_bad_lines='skip')
             df['timestamp'] = pd.to_datetime(df['timestamp'])
             today_df = df[df['timestamp'].dt.date == self.today]
             self.daily_trade_count = len(today_df)
