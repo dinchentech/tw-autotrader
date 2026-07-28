@@ -89,6 +89,14 @@ def load_all_stocks(pool=None):
     return data
 
 
+# ── 交易成本 ──
+ETF_STOCKS = {"0050","0056","006208","00878","00646","00632R"}
+COMMISSION_RATE = 0.001425
+STOCK_TAX = 0.003
+ETF_TAX = 0.001
+def tax_rate(sym): return ETF_TAX if sym in ETF_STOCKS else STOCK_TAX
+
+
 # ══════════════════════════════════════════════════════════════
 # 技術指標（僅用截至當前日期的資料）
 # ══════════════════════════════════════════════════════════════
@@ -333,6 +341,20 @@ def quarter_end_dates(start="2022-01-01", end="2025-12-31"):
     return result
 
 
+def month_end_dates(start="2022-01-01", end="2025-12-31"):
+    """回測期間內每個月最後交易日"""
+    all_dates = pd.bdate_range(start=start, end=end, freq="B")
+    months = set()
+    for d in all_dates:
+        months.add((d.year, d.month))
+    result = []
+    for yr, mo in sorted(months):
+        candidates = [d for d in all_dates if d.year == yr and d.month == mo]
+        if candidates:
+            result.append(candidates[-1])
+    return result
+
+
 def _detect_and_adjust(market_df, current_date, params, verbose=False):
     """
     依市場狀態自動調整 momentum_days。
@@ -541,6 +563,177 @@ def backtest_selector(data, params, top_n=4, verbose=False, mode="momentum",
 
 
 # ══════════════════════════════════════════════════════════════
+# TWO_BY_TWO 策略回測 — Group 1
+# ══════════════════════════════════════════════════════════════
+
+def backtest_two_by_two(data, params, verbose=False, mode="momentum",
+                        auto_momentum=False, market_data=None):
+    """
+    TWO_BY_TWO 策略回測（Group 1）。
+    4 個 slot 循環輪替，每個月檢討，每次選 2 檔，持有 2 個月。
+    第 1 個月部署一半（2 slot），第 2 個月部署另一半，之後每月換 2 檔。
+    """
+    dates = month_end_dates()
+    capital = 500000.0
+    cash = capital
+    slots = [None] * 4
+    slot_buy_idx = [-1] * 4
+    records = []
+    year_vals = {}
+    last_val = capital
+
+    for ri, md in enumerate(dates):
+        is_last = (ri == len(dates) - 1)
+
+        # ── Step 1: 賣出滿 2 月的 slot ──
+        for si in range(4):
+            if slot_buy_idx[si] == -1:
+                continue
+            if ri - slot_buy_idx[si] < 2:
+                continue
+            sym = slots[si]["sym"]
+            if sym not in data:
+                slot_buy_idx[si] = -1
+                slots[si] = None
+                continue
+            df = data[sym]
+            sell_date = _snap_date(df, md)
+            if sell_date is None:
+                continue
+            px = float(df.loc[sell_date, "close"])
+            shares = slots[si]["shares"]
+            proceeds = shares * px * (1 - COMMISSION_RATE - tax_rate(sym))
+            cash += proceeds
+            if verbose:
+                buy_px = slots[si].get("buy_px", 0)
+                ret = (px - buy_px) / buy_px if buy_px > 0 else 0
+                print(f"  💰 賣出 {sym} {shares:.1f}股 @ {px:.0f} (+{ret:+.2%}) 得款 NT${proceeds:,.0f}")
+            slot_buy_idx[si] = -1
+            slots[si] = None
+
+        # ── Step 2: 評價組合總值 ──
+        total_val = cash
+        for si in range(4):
+            if slot_buy_idx[si] == -1 or slots[si] is None:
+                continue
+            sym = slots[si]["sym"]
+            if sym not in data:
+                continue
+            df = data[sym]
+            val_date = _snap_date(df, md)
+            if val_date is None:
+                continue
+            px = float(df.loc[val_date, "close"])
+            total_val += slots[si]["shares"] * px
+
+        period_ret = (total_val - last_val) / last_val if last_val > 0 else 0
+        held = [slots[i]["sym"] for i in range(4) if slot_buy_idx[i] != -1 and slots[i] is not None]
+
+        if verbose and not is_last:
+            print(f"\n📅 {md.strftime('%Y-%m-%d')}  TWO_BY_TWO  持有={held}  總值=NT${total_val:,.0f}")
+
+        if is_last:
+            capital = total_val
+            records.append({"date": md, "holdings": held, "return": period_ret, "value": capital})
+            yr = md.year
+            if yr not in year_vals:
+                year_vals[yr] = {"start": last_val, "end": capital, "records": []}
+            year_vals[yr]["records"].append(period_ret)
+            if md.month == 12:
+                year_vals[yr]["end"] = capital
+            break
+
+        records.append({"date": md, "holdings": held, "return": period_ret, "value": total_val})
+        yr = md.year
+        if yr not in year_vals:
+            year_vals[yr] = {"start": last_val, "end": total_val, "records": []}
+        year_vals[yr]["records"].append(period_ret)
+        if md.month == 12:
+            year_vals[yr]["end"] = total_val
+
+        last_val = total_val
+        capital = total_val
+        target_per_slot = capital / 4.0
+
+        # ── Step 3: 選股（排除已持有）──
+        buy_date_q = _snap_date(list(data.values())[0], md) if data else md
+        adj_params = dict(params)
+        if auto_momentum and market_data is not None and buy_date_q in market_data.index:
+            _detect_and_adjust(market_data, buy_date_q, adj_params, verbose)
+
+        held_syms = {slots[i]["sym"] for i in range(4) if slot_buy_idx[i] != -1 and slots[i] is not None}
+
+        n_to_buy = 2
+        if mode == "catalyst":
+            scored = []
+            for sym, df in data.items():
+                if sym in held_syms or buy_date_q not in df.index:
+                    continue
+                cs = _catalyst_score(df, buy_date_q)
+                if cs <= 0:
+                    continue
+                scored.append({"symbol": sym, "total": cs})
+            scored.sort(key=lambda x: x["total"], reverse=True)
+            selected = scored[:n_to_buy]
+        else:
+            selected = pick_top_stocks(data, buy_date_q, adj_params, n_to_buy + len(held_syms),
+                                       exclude=held_syms)
+            selected = selected[:n_to_buy]
+
+        chosen = [s["symbol"] for s in selected]
+        if verbose and chosen:
+            print(f"  📥 選股: {chosen}")
+
+        # ── Step 4: 填入空 slot ──
+        fill_idx = 0
+        for si in range(4):
+            if slot_buy_idx[si] != -1:
+                continue
+            if fill_idx >= len(chosen):
+                break
+            sym = chosen[fill_idx]
+            if sym not in data:
+                fill_idx += 1
+                continue
+            df = data[sym]
+            buy_date_sym = _snap_date(df, md)
+            if buy_date_sym is None:
+                fill_idx += 1
+                continue
+            buy_px = float(df.loc[buy_date_sym, "close"])
+            if buy_px <= 0:
+                fill_idx += 1
+                continue
+            shares = target_per_slot / buy_px
+            cost = shares * buy_px * (1 + COMMISSION_RATE)
+            cash -= cost
+            slots[si] = {"sym": sym, "shares": shares, "buy_px": buy_px}
+            slot_buy_idx[si] = ri
+            if verbose:
+                print(f"    🟢 slot{si} 買入 {sym} {shares:.1f}股 @ {buy_px:.0f} → NT${cost:,.0f}")
+            fill_idx += 1
+
+    yearly = {}
+    for yr, v in year_vals.items():
+        if v["records"]:
+            yearly[yr] = {
+                "start": v["start"],
+                "end": v["end"],
+                "returns": v["records"],
+                "total_ret": (v["end"] - v["start"]) / v["start"] if v["start"] > 0 else 0,
+            }
+
+    final_val = capital
+    total_ret = (final_val - 500000) / 500000
+    return {
+        "records": records,
+        "yearly": yearly,
+        "final_value": final_val,
+        "total_return": total_ret,
+    }
+
+
+# ══════════════════════════════════════════════════════════════
 # Grid Search
 # ══════════════════════════════════════════════════════════════
 
@@ -567,15 +760,25 @@ DEFAULT_PARAMS = {
 }
 
 
-def run_grid_search(data, top_n=4, auto_momentum=False, market_data=None):
+def _run_backtest(data, params, top_n, strategy, mode, auto_momentum, market_data, verbose=False):
+    """依 strategy 選擇回測函數"""
+    if strategy == "two_by_two":
+        return backtest_two_by_two(data, params, verbose=verbose, mode=mode,
+                                    auto_momentum=auto_momentum, market_data=market_data)
+    return backtest_selector(data, params, top_n=top_n, verbose=verbose, mode=mode,
+                              auto_momentum=auto_momentum, market_data=market_data)
+
+
+def run_grid_search(data, top_n=4, auto_momentum=False, market_data=None, strategy="quarterly"):
     """Grid Search 所有參數組合"""
     keys = list(GRID_PARAMS.keys())
     values = list(GRID_PARAMS.values())
     combinations = list(itertools.product(*values))
     total = len(combinations)
 
+    strat_label = "TWO_BY_TWO" if strategy == "two_by_two" else "每季"
     print(f"\n🔍 Grid Search — {len(keys)} 個維度 × {total} 種組合")
-    print(f"   選股池: {len(data)} 檔 | 每季選 top {top_n} 檔")
+    print(f"   選股池: {len(data)} 檔 | {strat_label}")
     print(f"   回測期間: {START_DATE} ~ {END_DATE}")
     print(f"   {'='*55}")
 
@@ -584,8 +787,8 @@ def run_grid_search(data, top_n=4, auto_momentum=False, market_data=None):
 
     for ci, combo in enumerate(combinations):
         params = dict(zip(keys, combo))
-        bt = backtest_selector(data, params, top_n, verbose=False, 
-                                auto_momentum=auto_momentum, market_data=market_data)
+        bt = _run_backtest(data, params, top_n, strategy, "momentum",
+                           auto_momentum, market_data)
         results.append({
             "params": params,
             "final_value": bt["final_value"],
@@ -739,15 +942,68 @@ def recommend_next_quarter(data, params, top_n=4, mode="momentum",
         print(f"   參數: {params}")
 
 
+def recommend_two_by_two(data, params, mode="momentum",
+                         auto_momentum=False, market_data=None):
+    """用 TWO_BY_TWO 策略選出下一期推薦持股（顯示 slot 狀態）"""
+    today = datetime.now()
+    best_date = None
+    for sym, df in data.items():
+        avail = df[df.index <= pd.Timestamp(today)]
+        if not avail.empty:
+            d = avail.index[-1]
+            if best_date is None or d > best_date:
+                best_date = d
+    if best_date is None:
+        print("❌ 無法取得最新資料")
+        return
+
+    mode_label = {"momentum": "純動能", "catalyst": "純催化劑", "core-satellite": "核心+衛星"}
+    print(f"\n📅 基準日期: {best_date.strftime('%Y-%m-%d')}  模式: {mode_label.get(mode, mode)}")
+
+    # 找出這個月在 slot 週期的哪個階段
+    base = pd.Timestamp("2022-01-01")
+    months_since = (best_date.year - base.year) * 12 + (best_date.month - base.month)
+    # ri=0 → deploy first 2 slots, ri=1 → second 2, ri>=2 → replace 2 expired
+    ri = months_since
+    slot_phase = "first_half" if ri == 0 else "second_half" if ri == 1 else "rotation"
+
+    target_per_slot = 500000 / 4.0
+    adj_params = dict(params)
+    if auto_momentum and market_data is not None and best_date in market_data.index:
+        _detect_and_adjust(market_data, best_date, adj_params, verbose=True)
+
+    selected = pick_top_stocks(data, best_date, adj_params, 2)
+    chosen = [s["symbol"] for s in selected]
+
+    print(f"\n{'='*60}")
+    print(f"  📊 TWO_BY_TWO 推薦持股（Group 1 · 每次選 2 檔 · 持有 2 個月）")
+    print(f"{'='*60}")
+    print(f"  Slot 狀態: {slot_phase}")
+    if slot_phase == "first_half":
+        print(f"  → 第一個部署月：部署 slot 0,1（各 NT${target_per_slot:,.0f}）")
+    elif slot_phase == "second_half":
+        print(f"  → 第二個部署月：部署 slot 2,3（各 NT${target_per_slot:,.0f}）")
+    else:
+        print(f"  → 輪替月：2 個 slot 到期，換入 2 檔新標的（各 NT${target_per_slot:,.0f}）")
+    print()
+    print(f" {'代號':>5} {'名稱':>8} {'股價':>8} {'近季動能':>10}")
+    print(f" {'-'*5} {'-'*8} {'-'*8} {'-'*10}")
+    for s in selected:
+        name = POOL_LABELS.get(s["symbol"], "")
+        val = s.get("momentum", s.get("total", 0))
+        print(f" {s['symbol']:>5} {name:>8} NT${s['close']:>6,.0f} {val:>+9.1%}")
+    print(f"\n💡 TWO_BY_TWO: 上述為本月新部署的 2 檔，另 2 檔為上月已持有（續抱中）")
+
+
 # ══════════════════════════════════════════════════════════════
 # HTML 報告
 # ══════════════════════════════════════════════════════════════
 
 def generate_html_report(best_results, data, best_params, output_path,
-                          auto_momentum=False, market_data=None):
+                          auto_momentum=False, market_data=None, strategy="quarterly"):
     """產出 HTML 報告"""
-    bt = backtest_selector(data, best_params, top_n=4, verbose=False,
-                            auto_momentum=auto_momentum, market_data=market_data)
+    bt = _run_backtest(data, best_params, top_n=4, strategy=strategy, mode="momentum",
+                       auto_momentum=auto_momentum, market_data=market_data)
 
     rows = ""
     for i, r in enumerate(best_results[:20]):
@@ -883,12 +1139,18 @@ def main():
     parser = argparse.ArgumentParser(description="每季選股 Grid Search")
     parser.add_argument("--grid", action="store_true", help="執行 Grid Search 找最佳參數")
     parser.add_argument("--backtest", action="store_true", help="用預設參數回測")
-    parser.add_argument("--recommend", action="store_true", help="輸出下一季推薦持股")
+    parser.add_argument("--recommend", action="store_true", help="輸出下一期推薦持股")
     parser.add_argument("--report", action="store_true", help="產出 HTML 報告")
     parser.add_argument("--top-n", type=int, default=0, help="每季選股數 (0=依資金自動決定)")
     parser.add_argument("--capital", type=int, default=env_capital, help=f"起始資金 (default: 從 .env 讀取={env_capital})")
     parser.add_argument("--auto-momentum", action="store_true", default=False,
                         help="自動依市場狀態切換動能天數（趨勢用21d、盤整用63d）")
+    parser.add_argument("--mode", type=str, default="momentum",
+                        choices=["momentum", "catalyst", "core-satellite"],
+                        help="選股模式: momentum=純動能, catalyst=純催化劑, core-satellite=核心+衛星 (default: momentum)")
+    parser.add_argument("--strategy", type=str, default="quarterly",
+                        choices=["quarterly", "two_by_two"],
+                        help="回測策略: quarterly=每季全換, two_by_two=每月2檔持有2月(G1) (default: quarterly)")
     args = parser.parse_args()
 
     capital = args.capital
@@ -907,11 +1169,13 @@ def main():
     else:
         top_n = 2
 
+    strat_label = {"quarterly": "每季全換", "two_by_two": "TWO_BY_TWO(每月2檔×2月) G1"}
     print("=" * 60)
     print("📊 每季選股神器 — Stock Selector Grid")
     print("=" * 60)
     print(f"   💰 起始資金: NT${capital:,}（--capital 可改）")
     print(f"   📋 建議持股: top {top_n} 檔（--top-n 可改）")
+    print(f"   🎯 策略: {strat_label.get(args.strategy, args.strategy)}（--strategy 可改）")
     if args.auto_momentum:
         print(f"   🔄 auto_momentum: 開啟（依市場狀態自動切換 21d/63d）")
     print()
@@ -945,9 +1209,12 @@ def main():
         else:
             print(f"⚠️ 0050 資料載入失敗，auto_momentum 將不啟用")
 
+    is_two_by_two = (args.strategy == "two_by_two")
+
     if args.report or (not args.grid and not args.backtest and not args.recommend and not args.report):
         print("\n🔍 預設執行 Grid Search...")
-        results = run_grid_search(data, top_n=top_n, auto_momentum=args.auto_momentum, market_data=market_data)
+        results = run_grid_search(data, top_n=top_n, auto_momentum=args.auto_momentum,
+                                   market_data=market_data, strategy=args.strategy)
         print_top_results(results, n=10)
 
         best_params = results[0]["params"]
@@ -955,31 +1222,47 @@ def main():
         print(f"   終值: NT${results[0]['final_value']:,.0f} ({results[0]['total_return']:+.1%})")
 
         out = os.path.join(os.path.dirname(__file__), "..", "img", "stock_selector_grid_report.html")
-        generate_html_report(results, data, best_params, out, auto_momentum=args.auto_momentum, market_data=market_data)
-        recommend_next_quarter(data, best_params, top_n=top_n, mode=args.mode,
-                                auto_momentum=args.auto_momentum, market_data=market_data)
+        generate_html_report(results, data, best_params, out, auto_momentum=args.auto_momentum,
+                             market_data=market_data, strategy=args.strategy)
+        if is_two_by_two:
+            recommend_two_by_two(data, best_params, mode=args.mode,
+                                 auto_momentum=args.auto_momentum, market_data=market_data)
+        else:
+            recommend_next_quarter(data, best_params, top_n=top_n, mode=args.mode,
+                                   auto_momentum=args.auto_momentum, market_data=market_data)
 
     if args.grid:
-        results = run_grid_search(data, top_n=top_n, auto_momentum=args.auto_momentum, market_data=market_data)
+        results = run_grid_search(data, top_n=top_n, auto_momentum=args.auto_momentum,
+                                   market_data=market_data, strategy=args.strategy)
         print_top_results(results, n=10)
 
         best_params = results[0]["params"]
         out = os.path.join(os.path.dirname(__file__), "..", "img", "stock_selector_grid_report.html")
-        generate_html_report(results, data, best_params, out, auto_momentum=args.auto_momentum, market_data=market_data)
-        recommend_next_quarter(data, best_params, top_n=top_n, mode=args.mode,
-                                auto_momentum=args.auto_momentum, market_data=market_data)
+        generate_html_report(results, data, best_params, out, auto_momentum=args.auto_momentum,
+                             market_data=market_data, strategy=args.strategy)
+        if is_two_by_two:
+            recommend_two_by_two(data, best_params, mode=args.mode,
+                                 auto_momentum=args.auto_momentum, market_data=market_data)
+        else:
+            recommend_next_quarter(data, best_params, top_n=top_n, mode=args.mode,
+                                   auto_momentum=args.auto_momentum, market_data=market_data)
 
     if args.backtest:
-        bt = backtest_selector(data, DEFAULT_PARAMS, top_n=top_n, verbose=True, mode=args.mode,
-                                auto_momentum=args.auto_momentum, market_data=market_data)
-        print(f"\n📊 預設參數回測結果:")
+        bt = _run_backtest(data, DEFAULT_PARAMS, top_n=top_n, strategy=args.strategy,
+                           mode=args.mode, auto_momentum=args.auto_momentum,
+                           market_data=market_data, verbose=True)
+        print(f"\n📊 預設參數回測結果 ({args.strategy}):")
         print(f"   終值: NT${bt['final_value']:,.0f} ({bt['total_return']:+.1%})")
         for yr, yd in bt["yearly"].items():
             print(f"   {yr}: {yd['total_ret']:+.1%}")
 
     if args.recommend:
-        recommend_next_quarter(data, DEFAULT_PARAMS, top_n=top_n, mode=args.mode,
-                                auto_momentum=args.auto_momentum, market_data=market_data)
+        if is_two_by_two:
+            recommend_two_by_two(data, DEFAULT_PARAMS, mode=args.mode,
+                                 auto_momentum=args.auto_momentum, market_data=market_data)
+        else:
+            recommend_next_quarter(data, DEFAULT_PARAMS, top_n=top_n, mode=args.mode,
+                                   auto_momentum=args.auto_momentum, market_data=market_data)
 
 
 if __name__ == "__main__":
