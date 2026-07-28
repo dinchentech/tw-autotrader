@@ -528,6 +528,32 @@ class InstitutionalMomentumStrategy:
         candidates.sort(key=lambda x: x[1], reverse=True)
         all_evaluated.sort(key=lambda x: x[1], reverse=True)
 
+        # 若魚過濾濾掉全部股票，all_evaluated 為空 → 直接對 all_data 評分一次
+        # 這樣收盤/休眠報告至少能顯示當日最高分的股票
+        if not all_evaluated and all_data:
+            for stock_id in all_data:
+                try:
+                    single = {stock_id: all_data[stock_id]}
+                    ok, score = _core_check_momentum_entry(
+                        single, stock_id, check_date, accum_price=None)
+                    all_evaluated.append((stock_id, score))
+                except Exception:
+                    continue
+            all_evaluated.sort(key=lambda x: x[1], reverse=True)
+
+        # 若 momentum check 也全掛（缺 inst_buy 等欄位），用 fish score 直接排
+        if not all_evaluated and fish_scores:
+            fish_ranked = []
+            for stock_id, score_by_date in fish_scores.items():
+                if not score_by_date: continue
+                latest_date = max(score_by_date.keys())
+                val = score_by_date[latest_date]
+                latest_fish = val[0] if isinstance(val, tuple) else val
+                fish_ranked.append((stock_id, latest_fish))
+            fish_ranked.sort(key=lambda x: x[1], reverse=True)
+            # 取前 3 名作為 near_misses（momentum_score=0 代表未通過動能檢查）
+            all_evaluated = [(s, 0.0) for s, _ in fish_ranked[:self.top_n]]
+
         self._save_screening_summary(candidates, all_evaluated, fish_scores, check_date.isoformat())
 
         if not candidates:

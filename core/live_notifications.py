@@ -152,22 +152,22 @@ def _build_holdings_message(pd, app_version, title_emoji, title):
 
 
 def _build_inst_screening_msg() -> str:
-    """讀取法人動能篩選結果，回傳訊息文字（無結果時回傳空字串）
+    """讀取今日法人動能篩選結果，回傳訊息文字。
     
-    若檔案有 qualified / near_misses → 直接回傳。
-    否則（無檔案 / 非今日 / 資料全空）→ 重新篩選一次再讀取。
-    這樣即使舊版 auto-refresh 汙染了空檔案，也會被重新覆蓋。
+    只讀不寫——篩選由主迴圈 13:31-13:45 的 inst_momentum.run() 執行，
+    避免重複呼叫 FinMind API 造成 rate limit 超額。
     """
     import json
     from pathlib import Path
+    from datetime import datetime
 
     inst_path = Path("logs/inst_momentum_screening.json")
-
-    def _build_msg(inst_data):
-        """從解析後的資料建構訊息；回傳 None 表資料不存在或無內容。"""
-        from datetime import datetime
+    if not inst_path.exists():
+        return ""
+    try:
+        inst_data = json.loads(inst_path.read_text())
         if inst_data.get("screen_date") != datetime.now().strftime("%Y-%m-%d"):
-            return None
+            return ""
         qualified = inst_data.get("qualified", [])
         near_misses = inst_data.get("near_misses", [])
         parts = []
@@ -179,37 +179,9 @@ def _build_inst_screening_msg() -> str:
             parts.append(f"⚠️ 未達標前三: {names}")
         if parts:
             return "\n📡 *法人動能篩選*\n" + "\n".join(parts) + "\n"
-        return None  # 沒有 qualified 也沒有 near_misses → 需要重新篩選
-
-    def _try_read():
-        if not inst_path.exists():
-            return None
-        try:
-            return _build_msg(json.loads(inst_path.read_text()))
-        except Exception:
-            return None
-
-    # 第一階段：嘗試讀取現有檔案
-    msg = _try_read()
-    if msg:
-        return msg
-
-    # 第二階段：重新執行篩選（無檔案、非今日、或資料為空）
-    try:
-        from strategies.institutional_momentum import InstitutionalMomentumStrategy
-        inst_mom = InstitutionalMomentumStrategy(broker=None, capital=0, top_n=3)
-        inst_mom.get_candidates()
-    except Exception as e:
-        print(f"⚠️ 法人動能重新篩選失敗: {e}")
-        return ""
-
-    # 重新讀取（可能還是空，代表今天真的一檔都沒有）
-    msg = _try_read()
-    if msg:
-        return msg
-    if inst_path.exists():
         return "\n📡 *法人動能篩選*\n❌ 今日無符合標的\n"
-    return ""
+    except Exception:
+        return ""
 
 
 def send_sleep_notification(pd, app_version, next_open):
