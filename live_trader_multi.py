@@ -48,6 +48,7 @@ def get_stock_capital(symbol: str) -> float:
   alloc_pct = float(cfg.get('alloc', 20))
   return ((TOTAL_CAPITAL * alloc_pct) / 100.0)
 def main():
+  global TOTAL_CAPITAL
   print(f'🚀 TW AutoTrader v{APP_VERSION} (build {BUILD_DATE}) 多股多策略分流系統啟動')
   print(f'📦 版號：v{APP_VERSION}｜建置日期：{BUILD_DATE}')
   try:
@@ -314,7 +315,10 @@ def main():
               if existing > 0:
                 signal = 0
                 continue
-              position_size = int(cfg.get('initial_shares', 12))
+              # TWO_BY_TWO / 全輪替：依 alloc% × TOTAL_CAPITAL 計算股數
+              alloc_pct = float(cfg.get('alloc', 25))
+              target_amount = (TOTAL_CAPITAL * alloc_pct) / 100.0
+              position_size = max(1, int(target_amount / px)) if px > 0 else int(cfg.get('initial_shares', 12))
               if (symbol not in pyramid_tracker):
                 pyramid_tracker[symbol] = {'buy_count': 0, 'last_buy_price': 0.0, 'total_cost': 0.0, 'total_shares': 0, 'sold_date': None}
               trk = pyramid_tracker[symbol]
