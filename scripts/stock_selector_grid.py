@@ -327,14 +327,16 @@ def pick_top_stocks(data, end_date, params, top_n=4, exclude=None):
 # 季度回測
 # ══════════════════════════════════════════════════════════════
 
-def quarter_end_dates(start="2022-01-01", end="2025-12-31"):
+def quarter_end_dates(start="2022-01-01", end="2025-12-31", quarter_months=None):
     from pandas.tseries.offsets import QuarterEnd
-    """用 pandas QuarterEnd 正確取得季度末日期"""
+    """季度末日期。quarter_months: (1,4,7,10) / (2,5,8,11) / (3,6,9,12) 預設 (3,6,9,12)"""
+    if quarter_months is None:
+        quarter_months = (3, 6, 9, 12)
     all_dates = pd.bdate_range(start=start, end=end, freq="B")
     trading_set = set(all_dates)
     quarters = set()
     for d in all_dates:
-        if d.month in (3, 6, 9, 12):
+        if d.month in quarter_months:
             quarters.add((d.year, d.month))
     result = []
     for yr, mo in sorted(quarters):
@@ -405,7 +407,7 @@ def _snap_date(df, target):
 
 
 def backtest_selector(data, params, top_n=4, verbose=False, mode="momentum", 
-                       auto_momentum=False, market_data=None):
+                       auto_momentum=False, market_data=None, quarter_months=None):
     """
     回測每季選股績效。
     每季末用 params 選股 → 持有到下季末 → 計算報酬。
@@ -413,9 +415,10 @@ def backtest_selector(data, params, top_n=4, verbose=False, mode="momentum",
     mode: momentum / catalyst / core-satellite
     auto_momentum: True = 依市場狀態自動切換 momentum_days（21/63）
     market_data: 0050 或大盤指數 DataFrame，用於判讀市場狀態
+    quarter_months: (1,4,7,10) / (2,5,8,11) / (3,6,9,12)，預設 (3,6,9,12)
     """
     import math
-    quarter_dates = quarter_end_dates()
+    quarter_dates = quarter_end_dates(quarter_months=quarter_months)
     capital = 500000.0
     records = []
     holdings_list = []
@@ -764,23 +767,24 @@ DEFAULT_PARAMS = {
 }
 
 
-def _run_backtest(data, params, top_n, strategy, mode, auto_momentum, market_data, verbose=False):
+def _run_backtest(data, params, top_n, strategy, mode, auto_momentum, market_data, verbose=False, quarter_months=None):
     """依 strategy 選擇回測函數"""
     if strategy == "two_by_two":
         return backtest_two_by_two(data, params, verbose=verbose, mode=mode,
                                     auto_momentum=auto_momentum, market_data=market_data)
     return backtest_selector(data, params, top_n=top_n, verbose=verbose, mode=mode,
-                              auto_momentum=auto_momentum, market_data=market_data)
+                              auto_momentum=auto_momentum, market_data=market_data,
+                              quarter_months=quarter_months)
 
 
-def run_grid_search(data, top_n=4, auto_momentum=False, market_data=None, strategy="quarterly"):
+def run_grid_search(data, top_n=4, auto_momentum=False, market_data=None, strategy="quarterly", quarter_months=(3,6,9,12)):
     """Grid Search 所有參數組合"""
     keys = list(GRID_PARAMS.keys())
     values = list(GRID_PARAMS.values())
     combinations = list(itertools.product(*values))
     total = len(combinations)
 
-    strat_label = "TWO_BY_TWO" if strategy == "two_by_two" else "每季"
+    strat_label = "TWO_BY_TWO" if strategy == "two_by_two" else f"每季({','.join(str(x) for x in quarter_months)})"
     print(f"\n🔍 Grid Search — {len(keys)} 個維度 × {total} 種組合")
     print(f"   選股池: {len(data)} 檔 | {strat_label}")
     print(f"   回測期間: {START_DATE} ~ {END_DATE}")
@@ -792,7 +796,7 @@ def run_grid_search(data, top_n=4, auto_momentum=False, market_data=None, strate
     for ci, combo in enumerate(combinations):
         params = dict(zip(keys, combo))
         bt = _run_backtest(data, params, top_n, strategy, "momentum",
-                           auto_momentum, market_data)
+                           auto_momentum, market_data, quarter_months=quarter_months)
         results.append({
             "params": params,
             "final_value": bt["final_value"],
@@ -1004,10 +1008,10 @@ def recommend_two_by_two(data, params, mode="momentum",
 # ══════════════════════════════════════════════════════════════
 
 def generate_html_report(best_results, data, best_params, output_path,
-                          auto_momentum=False, market_data=None, strategy="quarterly"):
+                          auto_momentum=False, market_data=None, strategy="quarterly", quarter_months=(3,6,9,12)):
     """產出 HTML 報告"""
     bt = _run_backtest(data, best_params, top_n=4, strategy=strategy, mode="momentum",
-                       auto_momentum=auto_momentum, market_data=market_data)
+                       auto_momentum=auto_momentum, market_data=market_data, quarter_months=quarter_months)
 
     rows = ""
     for i, r in enumerate(best_results[:20]):
@@ -1155,6 +1159,9 @@ def main():
     parser.add_argument("--strategy", type=str, default="quarterly",
                         choices=["quarterly", "two_by_two"],
                         help="回測策略: quarterly=每季全換, two_by_two=每月2檔持有2月(G1) (default: quarterly)")
+    parser.add_argument("--quarter", type=str, default="3,6,9,12",
+                        choices=["1,4,7,10", "2,5,8,11", "3,6,9,12"],
+                        help="季度檢討月份 (default: 3,6,9,12)")
     args = parser.parse_args()
 
     capital = args.capital
@@ -1214,11 +1221,13 @@ def main():
             print(f"⚠️ 0050 資料載入失敗，auto_momentum 將不啟用")
 
     is_two_by_two = (args.strategy == "two_by_two")
+    quarter_months = tuple(int(x) for x in args.quarter.split(","))
 
     if args.report or (not args.grid and not args.backtest and not args.recommend and not args.report):
         print("\n🔍 預設執行 Grid Search...")
         results = run_grid_search(data, top_n=top_n, auto_momentum=args.auto_momentum,
-                                   market_data=market_data, strategy=args.strategy)
+                                   market_data=market_data, strategy=args.strategy,
+                                   quarter_months=quarter_months)
         print_top_results(results, n=10)
 
         best_params = results[0]["params"]
@@ -1227,7 +1236,8 @@ def main():
 
         out = os.path.join(os.path.dirname(__file__), "..", "img", "stock_selector_grid_report.html")
         generate_html_report(results, data, best_params, out, auto_momentum=args.auto_momentum,
-                             market_data=market_data, strategy=args.strategy)
+                             market_data=market_data, strategy=args.strategy,
+                             quarter_months=quarter_months)
         if is_two_by_two:
             recommend_two_by_two(data, best_params, mode=args.mode,
                                  auto_momentum=args.auto_momentum, market_data=market_data)
@@ -1237,13 +1247,15 @@ def main():
 
     if args.grid:
         results = run_grid_search(data, top_n=top_n, auto_momentum=args.auto_momentum,
-                                   market_data=market_data, strategy=args.strategy)
+                                   market_data=market_data, strategy=args.strategy,
+                                   quarter_months=quarter_months)
         print_top_results(results, n=10)
 
         best_params = results[0]["params"]
         out = os.path.join(os.path.dirname(__file__), "..", "img", "stock_selector_grid_report.html")
         generate_html_report(results, data, best_params, out, auto_momentum=args.auto_momentum,
-                             market_data=market_data, strategy=args.strategy)
+                             market_data=market_data, strategy=args.strategy,
+                             quarter_months=quarter_months)
         if is_two_by_two:
             recommend_two_by_two(data, best_params, mode=args.mode,
                                  auto_momentum=args.auto_momentum, market_data=market_data)
@@ -1254,7 +1266,8 @@ def main():
     if args.backtest:
         bt = _run_backtest(data, DEFAULT_PARAMS, top_n=top_n, strategy=args.strategy,
                            mode=args.mode, auto_momentum=args.auto_momentum,
-                           market_data=market_data, verbose=True)
+                           market_data=market_data, verbose=True,
+                           quarter_months=quarter_months)
         print(f"\n📊 預設參數回測結果 ({args.strategy}):")
         print(f"   終值: NT${bt['final_value']:,.0f} ({bt['total_return']:+.1%})")
         for yr, yd in bt["yearly"].items():
