@@ -1251,10 +1251,11 @@ def main():
     else:
         quarter_months = (3,6,9,12)
     dual_mode = rotate_mode in (4, 5)
+    if dual_mode:
+        qm_a, qm_b = {4: ((1,4,7,10),(2,5,8,11)), 5: ((2,5,8,11),(3,6,9,12))}[rotate_mode]
 
     def _do_backtest():
         if dual_mode:
-            qm_a, qm_b = {4: ((1,4,7,10),(2,5,8,11)), 5: ((2,5,8,11),(3,6,9,12))}[rotate_mode]
             return backtest_dual_quarterly(data, DEFAULT_PARAMS, top_n=top_n, verbose=True,
                                             auto_momentum=args.auto_momentum, market_data=market_data,
                                             qm_a=qm_a, qm_b=qm_b)
@@ -1302,8 +1303,35 @@ def main():
             print(f"   {yr}: {yd['total_ret']:+.1%}")
 
     if args.recommend:
-        recommend_next_quarter(data, DEFAULT_PARAMS, top_n=top_n, mode=args.mode,
-                               auto_momentum=args.auto_momentum, market_data=market_data)
+        if dual_mode:
+            for label, qm in [("排程A", qm_a), ("排程B", qm_b)]:
+                today = datetime.now()
+                active = today.month in qm
+                flag = "🟢 本月檢討" if active else "📅 下月檢討（預先產出）"
+                print(f"\n{'─'*60}\n📋 {label} {'/'.join(str(m) for m in qm)}月  {flag}\n{'─'*60}")
+                # 用該排程選股（即使非檢討月也預先產出）
+                today = datetime.now()
+                buy_date = None
+                for sym, df in data.items():
+                    d = df[df.index <= pd.Timestamp(today)].index[-1] if not df[df.index <= pd.Timestamp(today)].empty else None
+                    if d and (buy_date is None or d > buy_date):
+                        buy_date = d
+                if buy_date is None:
+                    print("  ❌ 無法取得最新資料")
+                    continue
+                adj_p = dict(DEFAULT_PARAMS)
+                if args.auto_momentum and market_data is not None and buy_date in market_data.index:
+                    _detect_and_adjust(market_data, buy_date, adj_p, verbose=True)
+                selected = pick_top_stocks(data, buy_date, adj_p, top_n)
+                print(f"\n📅 基準日期: {buy_date.strftime('%Y-%m-%d')}")
+                print(f" {'代號':>5} {'名稱':>8} {'股價':>8} {'近季動能':>10}")
+                print(f" {'-'*5} {'-'*8} {'-'*8} {'-'*10}")
+                for s in selected:
+                    name = POOL_LABELS.get(s["symbol"], "")
+                    print(f" {s['symbol']:>5} {name:>8} NT${s['close']:>6,.0f} {s['momentum']:>+9.1%}")
+        else:
+            recommend_next_quarter(data, DEFAULT_PARAMS, top_n=top_n, mode=args.mode,
+                                   auto_momentum=args.auto_momentum, market_data=market_data)
 
 
 if __name__ == "__main__":
