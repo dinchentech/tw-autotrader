@@ -33,6 +33,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 # ── 候選股票池（市值前 150 大） ─────────────────────────
 STOCK_NO = int(os.getenv("STOCK_NO", "50"))
+ROTATE_MODE = int(os.getenv("ROTATE_MODE", "5"))  # 0=off 1=1/4/7/10 2=2/5/8/11 3=3/6/9/12 4=1+2 5=2+3
 CANDIDATE_POOL = []
 CAP_RANKING = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "cache", "inst_momentum", "mcap_ranking.pkl")
 if os.path.exists(CAP_RANKING):
@@ -740,6 +741,24 @@ def backtest_two_by_two(data, params, verbose=False, mode="momentum",
     }
 
 
+def backtest_dual_quarterly(data, params, top_n=4, verbose=False, mode="momentum",
+                            auto_momentum=False, market_data=None,
+                            qm_a=(2,5,8,11), qm_b=(3,6,9,12)):
+    """兩段季度排程 50/50 資金各半並行回測。日期用 module 的 START_DATE/END_DATE。"""
+    bt_a = backtest_selector(data, params, top_n, verbose, mode, auto_momentum,
+                              market_data, quarter_months=qm_a)
+    bt_b = backtest_selector(data, params, top_n, False, mode,
+                              auto_momentum, market_data, quarter_months=qm_b)
+    final_val = (bt_a["final_value"] + bt_b["final_value"]) / 2
+    total_ret = (final_val - 500000) / 500000
+    yearly = {}
+    for yr in set(list(bt_a["yearly"].keys()) + list(bt_b["yearly"].keys())):
+        ya = bt_a["yearly"].get(yr, {})
+        yb = bt_b["yearly"].get(yr, {})
+        yearly[yr] = {"total_ret": (ya.get("total_ret", 0) + yb.get("total_ret", 0)) / 2}
+    return {"final_value": final_val, "total_return": total_ret, "yearly": yearly}
+
+
 # ══════════════════════════════════════════════════════════════
 # Grid Search
 # ══════════════════════════════════════════════════════════════
@@ -1157,11 +1176,13 @@ def main():
                         choices=["momentum", "catalyst", "core-satellite"],
                         help="選股模式: momentum=純動能, catalyst=純催化劑, core-satellite=核心+衛星 (default: momentum)")
     parser.add_argument("--strategy", type=str, default="quarterly",
-                        choices=["quarterly", "two_by_two"],
-                        help="回測策略: quarterly=每季全換, two_by_two=每月2檔持有2月(G1) (default: quarterly)")
+                        choices=["quarterly"],
+                        help="回測策略: quarterly=每季全換 (default: quarterly)")
+    parser.add_argument("--rotate-mode", type=int, default=0,
+                        help="季度排程: 0=不啟用 1=1/4/7/10 2=2/5/8/11 3=3/6/9/12 4=1/4/7/10+2/5/8/11 5=2/5/8/11+3/6/9/12 (default: 0=由env ROTATE_MODE控制)")
     parser.add_argument("--quarter", type=str, default="3,6,9,12",
                         choices=["1,4,7,10", "2,5,8,11", "3,6,9,12"],
-                        help="季度檢討月份 (default: 3,6,9,12)")
+                        help="季度檢討月份 (被 --rotate-mode 優先覆蓋, default: 3,6,9,12)")
     args = parser.parse_args()
 
     capital = args.capital
@@ -1220,8 +1241,26 @@ def main():
         else:
             print(f"⚠️ 0050 資料載入失敗，auto_momentum 將不啟用")
 
-    is_two_by_two = (args.strategy == "two_by_two")
-    quarter_months = tuple(int(x) for x in args.quarter.split(","))
+    # 季度排程解析
+    ROTATE_QMAP = {1: (1,4,7,10), 2: (2,5,8,11), 3: (3,6,9,12)}
+    rotate_mode = args.rotate_mode if args.rotate_mode > 0 else ROTATE_MODE
+    if args.quarter != "3,6,9,12":
+        quarter_months = tuple(int(x) for x in args.quarter.split(","))
+    elif 1 <= rotate_mode <= 3:
+        quarter_months = ROTATE_QMAP[rotate_mode]
+    else:
+        quarter_months = (3,6,9,12)
+    dual_mode = rotate_mode in (4, 5)
+
+    def _do_backtest():
+        if dual_mode:
+            qm_a, qm_b = {4: ((1,4,7,10),(2,5,8,11)), 5: ((2,5,8,11),(3,6,9,12))}[rotate_mode]
+            return backtest_dual_quarterly(data, DEFAULT_PARAMS, top_n=top_n, verbose=True,
+                                            auto_momentum=args.auto_momentum, market_data=market_data,
+                                            qm_a=qm_a, qm_b=qm_b)
+        return _run_backtest(data, DEFAULT_PARAMS, top_n=top_n, strategy=args.strategy,
+                             mode=args.mode, auto_momentum=args.auto_momentum,
+                             market_data=market_data, verbose=True, quarter_months=quarter_months)
 
     if args.report or (not args.grid and not args.backtest and not args.recommend and not args.report):
         print("\n🔍 預設執行 Grid Search...")
@@ -1238,12 +1277,8 @@ def main():
         generate_html_report(results, data, best_params, out, auto_momentum=args.auto_momentum,
                              market_data=market_data, strategy=args.strategy,
                              quarter_months=quarter_months)
-        if is_two_by_two:
-            recommend_two_by_two(data, best_params, mode=args.mode,
-                                 auto_momentum=args.auto_momentum, market_data=market_data)
-        else:
-            recommend_next_quarter(data, best_params, top_n=top_n, mode=args.mode,
-                                   auto_momentum=args.auto_momentum, market_data=market_data)
+        recommend_next_quarter(data, best_params, top_n=top_n, mode=args.mode,
+                               auto_momentum=args.auto_momentum, market_data=market_data)
 
     if args.grid:
         results = run_grid_search(data, top_n=top_n, auto_momentum=args.auto_momentum,
@@ -1256,30 +1291,19 @@ def main():
         generate_html_report(results, data, best_params, out, auto_momentum=args.auto_momentum,
                              market_data=market_data, strategy=args.strategy,
                              quarter_months=quarter_months)
-        if is_two_by_two:
-            recommend_two_by_two(data, best_params, mode=args.mode,
-                                 auto_momentum=args.auto_momentum, market_data=market_data)
-        else:
-            recommend_next_quarter(data, best_params, top_n=top_n, mode=args.mode,
-                                   auto_momentum=args.auto_momentum, market_data=market_data)
+        recommend_next_quarter(data, best_params, top_n=top_n, mode=args.mode,
+                               auto_momentum=args.auto_momentum, market_data=market_data)
 
     if args.backtest:
-        bt = _run_backtest(data, DEFAULT_PARAMS, top_n=top_n, strategy=args.strategy,
-                           mode=args.mode, auto_momentum=args.auto_momentum,
-                           market_data=market_data, verbose=True,
-                           quarter_months=quarter_months)
-        print(f"\n📊 預設參數回測結果 ({args.strategy}):")
+        bt = _do_backtest()
+        print(f"\n📊 預設參數回測結果:")
         print(f"   終值: NT${bt['final_value']:,.0f} ({bt['total_return']:+.1%})")
         for yr, yd in bt["yearly"].items():
             print(f"   {yr}: {yd['total_ret']:+.1%}")
 
     if args.recommend:
-        if is_two_by_two:
-            recommend_two_by_two(data, DEFAULT_PARAMS, mode=args.mode,
-                                 auto_momentum=args.auto_momentum, market_data=market_data)
-        else:
-            recommend_next_quarter(data, DEFAULT_PARAMS, top_n=top_n, mode=args.mode,
-                                   auto_momentum=args.auto_momentum, market_data=market_data)
+        recommend_next_quarter(data, DEFAULT_PARAMS, top_n=top_n, mode=args.mode,
+                               auto_momentum=args.auto_momentum, market_data=market_data)
 
 
 if __name__ == "__main__":
