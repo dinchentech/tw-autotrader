@@ -257,7 +257,7 @@ def score_stock(sym, df, end_date, params):
     if cp < min_px:
         return None
 
-    # 動能分數
+    # 動能分數（支援雙動能: momentum_days 為主, momentum2_days/weight 為輔）
     m_ret = trailing_ret(df, end_date, m_days)
     if m_ret is None:
         return None
@@ -283,9 +283,13 @@ def score_stock(sym, df, end_date, params):
     cat = _catalyst_cache[cache_key]
     cat_val = cat["cat_total"] if cat else 0
 
-    # 綜合
-    momentum_val = max(0, m_ret)
-    total = (momentum_val * m_w + tech_score * t_w + stability * s_w * 0.01 + cat_val * c_w)
+    # 綜合（雙動能: momentum2 加權獨立於 momentum_weight）
+    m2_days = params.get("momentum2_days", None)
+    m2_term = 0.0
+    if m2_days:
+        m2_ret = trailing_ret(df, end_date, m2_days)
+        m2_term = max(0, m2_ret) * params.get("momentum2_weight", 1.0)
+    total = (max(0, m_ret) * m_w + m2_term + tech_score * t_w + stability * s_w * 0.01 + cat_val * c_w)
 
     return {
         "symbol": sym,
@@ -754,7 +758,7 @@ DEFAULT_PARAMS = {
     "technical_weight": 0.3,
     "stability_weight": 0.0,
     "catalyst_weight": 0.0,
-    "auto_momentum": 0,
+    "auto_momentum": 1,
     "use_ma_filter": False,
     "min_price": 5,
 }
