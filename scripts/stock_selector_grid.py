@@ -544,8 +544,7 @@ def backtest_selector(data, params, top_n=4, verbose=False, mode="momentum",
         if yr not in year_vals:
             year_vals[yr] = {"start": last_val, "end": capital, "records": []}
         year_vals[yr]["records"].append(q_ret)
-        if qd.month == 12:
-            year_vals[yr]["end"] = capital
+        year_vals[yr]["end"] = capital
 
         last_val = capital
 
