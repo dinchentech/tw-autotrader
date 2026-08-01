@@ -892,7 +892,8 @@ def _catalyst_score(df, end_date):
 
 
 def recommend_next_quarter(data, params, top_n=4, mode="momentum",
-                            auto_momentum=False, market_data=None):
+                            auto_momentum=False, market_data=None,
+                            output_env=False, schedule_label="A"):
     """用給定參數選出下一季推薦持股"""
     today = datetime.now()
     # 用最近有資料的日期
@@ -905,11 +906,10 @@ def recommend_next_quarter(data, params, top_n=4, mode="momentum",
                 best_date = d
 
     if best_date is None:
-        print("❌ 無法取得最新資料")
+        print("❌ 無法取得最新資料", file=sys.stderr)
         return
 
     mode_label = {"momentum": "純動能", "catalyst": "純催化劑", "core-satellite": "核心+衛星"}
-    print(f"\n📅 基準日期: {best_date.strftime('%Y-%m-%d')}  模式: {mode_label.get(mode, mode)}")
 
     if mode == "catalyst":
         scored = []
@@ -945,9 +945,18 @@ def recommend_next_quarter(data, params, top_n=4, mode="momentum",
         selected = pick_top_stocks(data, best_date, adj_params, top_n)
 
     if not selected:
-        print("❌ 無法選出推薦持股")
+        print("❌ 無法選出推薦持股", file=sys.stderr)
         return
 
+    if output_env:
+        alloc = round(50.0 / top_n, 1)
+        print(f"#SCHEDULE={schedule_label}")
+        for s in selected:
+            cfg = {"strategy": "keep_wait", "alloc": alloc, "max_entry_price": -1, "initial_buy_pct": 1.0}
+            print(f"PC_{s['symbol']}={json.dumps(cfg, separators=(',', ':'))}")
+        return
+
+    print(f"\n📅 基準日期: {best_date.strftime('%Y-%m-%d')}  模式: {mode_label.get(mode, mode)}")
     header_map = {"momentum": ("近季動能", "momentum"), "catalyst": ("催化劑分", "total"), "core-satellite": ("近季動能", "momentum")}
     extra_col, extra_key = header_map.get(mode, ("近季動能", "momentum"))
 
@@ -1183,6 +1192,10 @@ def main():
     parser.add_argument("--quarter", type=str, default="3,6,9,12",
                         choices=["1,4,7,10", "2,5,8,11", "3,6,9,12"],
                         help="季度檢討月份 (被 --rotate-mode 優先覆蓋, default: 3,6,9,12)")
+    parser.add_argument("--output-env", action="store_true", default=False,
+                        help="輸出 PC_* .env 格式而非 console 表格（搭配 --recommend 使用）")
+    parser.add_argument("--schedule-label", type=str, default="A",
+                        help="排程標籤 A/B，用於 .env 區段標記（搭配 --output-env 使用）")
     args = parser.parse_args()
 
     capital = args.capital
@@ -1279,7 +1292,8 @@ def main():
                              market_data=market_data, strategy=args.strategy,
                              quarter_months=quarter_months)
         recommend_next_quarter(data, best_params, top_n=top_n, mode=args.mode,
-                               auto_momentum=args.auto_momentum, market_data=market_data)
+                                auto_momentum=args.auto_momentum, market_data=market_data,
+                                output_env=args.output_env, schedule_label=args.schedule_label)
 
     if args.grid:
         results = run_grid_search(data, top_n=top_n, auto_momentum=args.auto_momentum,
@@ -1293,7 +1307,8 @@ def main():
                              market_data=market_data, strategy=args.strategy,
                              quarter_months=quarter_months)
         recommend_next_quarter(data, best_params, top_n=top_n, mode=args.mode,
-                               auto_momentum=args.auto_momentum, market_data=market_data)
+                                auto_momentum=args.auto_momentum, market_data=market_data,
+                                output_env=args.output_env, schedule_label=args.schedule_label)
 
     if args.backtest:
         bt = _do_backtest()
@@ -1308,7 +1323,6 @@ def main():
                 today = datetime.now()
                 active = today.month in qm
                 flag = "🟢 本月檢討" if active else "📅 下月檢討（預先產出）"
-                print(f"\n{'─'*60}\n📋 {label} {'/'.join(str(m) for m in qm)}月  {flag}\n{'─'*60}")
                 # 用該排程選股（即使非檢討月也預先產出）
                 today = datetime.now()
                 buy_date = None
@@ -1317,21 +1331,31 @@ def main():
                     if d and (buy_date is None or d > buy_date):
                         buy_date = d
                 if buy_date is None:
-                    print("  ❌ 無法取得最新資料")
+                    print("  ❌ 無法取得最新資料", file=sys.stderr)
                     continue
                 adj_p = dict(DEFAULT_PARAMS)
                 if args.auto_momentum and market_data is not None and buy_date in market_data.index:
                     _detect_and_adjust(market_data, buy_date, adj_p, verbose=True)
                 selected = pick_top_stocks(data, buy_date, adj_p, top_n)
-                print(f"\n📅 基準日期: {buy_date.strftime('%Y-%m-%d')}")
-                print(f" {'代號':>5} {'名稱':>8} {'股價':>8} {'近季動能':>10}")
-                print(f" {'-'*5} {'-'*8} {'-'*8} {'-'*10}")
-                for s in selected:
-                    name = POOL_LABELS.get(s["symbol"], "")
-                    print(f" {s['symbol']:>5} {name:>8} NT${s['close']:>6,.0f} {s['momentum']:>+9.1%}")
+                if args.output_env:
+                    sched_label = label.replace("排程", "")
+                    alloc = round(50.0 / top_n, 1)
+                    print(f"#SCHEDULE={sched_label}")
+                    for s in selected:
+                        cfg = {"strategy": "keep_wait", "alloc": alloc, "max_entry_price": -1, "initial_buy_pct": 1.0}
+                        print(f"PC_{s['symbol']}={json.dumps(cfg, separators=(',', ':'))}")
+                else:
+                    print(f"\n{'─'*60}\n📋 {label} {'/'.join(str(m) for m in qm)}月  {flag}\n{'─'*60}")
+                    print(f"\n📅 基準日期: {buy_date.strftime('%Y-%m-%d')}")
+                    print(f" {'代號':>5} {'名稱':>8} {'股價':>8} {'近季動能':>10}")
+                    print(f" {'-'*5} {'-'*8} {'-'*8} {'-'*10}")
+                    for s in selected:
+                        name = POOL_LABELS.get(s["symbol"], "")
+                        print(f" {s['symbol']:>5} {name:>8} NT${s['close']:>6,.0f} {s['momentum']:>+9.1%}")
         else:
             recommend_next_quarter(data, DEFAULT_PARAMS, top_n=top_n, mode=args.mode,
-                                   auto_momentum=args.auto_momentum, market_data=market_data)
+                                   auto_momentum=args.auto_momentum, market_data=market_data,
+                                   output_env=args.output_env, schedule_label=args.schedule_label)
 
 
 if __name__ == "__main__":

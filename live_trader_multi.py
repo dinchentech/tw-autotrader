@@ -61,12 +61,16 @@ def main():
   except Exception:
     pass
   print(f'📈 個股設定：共 {len(PORTFOLIO_CONFIG)} 檔')
+  ROTATE_MODE_VAL = int(os.getenv('ROTATE_MODE', '0'))
+  _rotate_labels = {0: '關閉', 1: '單排程 (1/4/7/10)', 2: '單排程 (2/5/8/11)', 3: '單排程 (3/6/9/12)', 4: '雙排程 (1+2)', 5: '雙排程 (2+3)'}
+  print(f'🔄 全輪替模式：ROTATE_MODE={ROTATE_MODE_VAL}（{_rotate_labels.get(ROTATE_MODE_VAL, "未知")}）')
   for (sym, cfg) in PORTFOLIO_CONFIG.items():
     cap = get_stock_capital(sym)
     print(f"   {sym} → {cfg['strategy']}（上限 NT${cap:,.0f}）")
   send_line_notification(f'''
 🤖 TW AutoTrader v{APP_VERSION} 雲端主機已成功啟動！開始全天候監控台股...''')
   send_telegram_message((f'''✅ *TW AutoTrader* v{APP_VERSION} 多股多策略系統已啟動
+🔄 全輪替: ROTATE_MODE={ROTATE_MODE_VAL}（{_rotate_labels.get(ROTATE_MODE_VAL, "未知")}）
 📈 監控中: ''' + ', '.join((f"{s}[{c['strategy']}]" for (s, c) in PORTFOLIO_CONFIG.items()))))
   env_chat_id = os.getenv('TELEGRAM_CHAT_ID', '未設定')
   try:
@@ -241,6 +245,26 @@ def main():
     (h, m) = (now.hour, now.minute)
     cci()
     today_str = now.strftime('%Y-%m-%d')
+    if is_weekday and h == 8 and m >= 40:
+      try:
+        from dotenv import load_dotenv as _reload
+        _reload(override=True)
+        new_config = load_portfolio_config()
+        removed = set(PORTFOLIO_CONFIG.keys()) - set(new_config.keys())
+        PORTFOLIO_CONFIG.clear()
+        PORTFOLIO_CONFIG.update(new_config)
+        for sym in removed:
+          portfolio_history.pop(sym, None)
+          pyramid_tracker.pop(sym, None)
+        for sym in new_config:
+          if sym not in portfolio_history:
+            df_init = broker.get_minute_bars(sym, minutes=60) if USE_REAL_API else broker.get_historical_data(sym, days=30)
+            if not df_init.empty:
+              portfolio_history[sym] = df_init
+              print(f'✅ {sym} 熱重載初始化成功')
+        print(f'🔄 08:40 熱重載 .env 完成，目前監控 {len(PORTFOLIO_CONFIG)} 檔')
+      except Exception as e:
+        pass
     if (daily_symbol_trades_date != today_str):
       daily_symbol_trades = {}
       daily_symbol_trades_date = today_str
@@ -613,6 +637,41 @@ def main():
           print(f'❌ [INST_MOM] 執行錯誤: {e}')
       time.sleep(60)
       continue
+    # ── 盤後全輪替選股觸發（13:31~13:35，每月第一個交易日）──
+    ROTATE_MODE_VAL = int(os.getenv('ROTATE_MODE', '0'))
+    if ROTATE_MODE_VAL > 0 and is_weekday and h == 13 and 31 <= m <= 35:
+        _rotate_key = '_rotate_done_date'
+        if globals().get(_rotate_key) != today_str:
+            try:
+                from core.trading_calendar import TradingCalendar
+                from core.rotate_scheduler import should_rotate_today, update_env_section, backup_env
+                _rc = TradingCalendar()
+                schedule = should_rotate_today(now.date(), ROTATE_MODE_VAL, _rc)
+                if schedule:
+                    import subprocess as _sp
+                    print(f'🔄 全輪替觸發：{schedule}排程，執行選股程式...')
+                    result = _sp.run(
+                        ['python', 'scripts/stock_selector_grid.py', '--recommend', '--output-env',
+                         '--schedule-label', schedule, '--top-n', '4'],
+                        capture_output=True, text=True, timeout=120
+                    )
+                    if result.returncode == 0:
+                        pc_lines = [l for l in result.stdout.strip().split('\n') if l.startswith('PC_')]
+                        if pc_lines:
+                            backup_env('.env', 'backups')
+                            update_env_section('.env', schedule, pc_lines)
+                            stocks_list = ', '.join(l.split('=')[0].replace('PC_', '') for l in pc_lines)
+                            send_telegram_message(f'🔄 *全輪替 {schedule}排程 選股完成*\n📋 選出 {len(pc_lines)} 檔: {stocks_list}\n📁 舊 .env 已備份至 backups/')
+                            print(f'✅ 全輪替 {schedule}排程: .env 已更新 {len(pc_lines)} 檔')
+                        else:
+                            print(f'⚠️ 全輪替: selector 無輸出')
+                    else:
+                        print(f'❌ 全輪替: selector 執行失敗\n{result.stderr[:500]}')
+            except ImportError:
+                pass
+            except Exception as e:
+                print(f'❌ 全輪替選股異常: {e}')
+            globals()[_rotate_key] = today_str
     next_open = _next_market_open(now)
     sleep_seconds = min((next_open - now).total_seconds(), 3600)
     if (sleep_seconds >= 3600):
