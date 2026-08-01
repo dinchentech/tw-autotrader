@@ -111,6 +111,26 @@ class TestRotateScheduler(unittest.TestCase):
         self.assertEqual(result, 'A',
                          'Aug 3 2026 should be 1st trading day, ROTATE_MODE=5 schedule A')
 
+    def test_should_rotate_nth_trading_day_2(self):
+        result = self.should_rotate_today(date(2026, 8, 4), 5, self.calendar, nth_trading_day=2)
+        self.assertEqual(result, 'A',
+                         'Aug 4 2026 should be 2nd trading day, ROTATE_MODE=5 schedule A')
+
+    def test_should_rotate_nth_trading_day_5(self):
+        result = self.should_rotate_today(date(2026, 8, 7), 5, self.calendar, nth_trading_day=5)
+        self.assertEqual(result, 'A',
+                         'Aug 7 2026 should be 5th trading day (Mon-Fri week), schedule A')
+
+    def test_should_rotate_nth_trading_day_wrong_day(self):
+        result = self.should_rotate_today(date(2026, 8, 3), 5, self.calendar, nth_trading_day=2)
+        self.assertIsNone(result,
+                          'Aug 3 is 1st trading day, not 2nd — should not trigger for N=2')
+
+    def test_should_rotate_nth_trading_day_default_is_first(self):
+        result = self.should_rotate_today(date(2026, 8, 4), 5, self.calendar)
+        self.assertIsNone(result,
+                          'Default N=1 means only 1st trading day triggers, not 2nd')
+
     def test_should_rotate_mode5_september_first_trading_day(self):
         result = self.should_rotate_today(date(2026, 9, 1), 5, self.calendar)
         self.assertEqual(result, 'B',

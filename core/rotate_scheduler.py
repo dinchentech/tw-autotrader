@@ -34,7 +34,7 @@ def get_rotate_months(rotate_mode):
     return {cfg['label']: cfg['months']}
 
 
-def should_rotate_today(today, rotate_mode, calendar):
+def should_rotate_today(today, rotate_mode, calendar, nth_trading_day=1):
     from core.trading_calendar import TradingCalendar
     if rotate_mode == 0:
         return None
@@ -45,8 +45,8 @@ def should_rotate_today(today, rotate_mode, calendar):
         return None
     for label, months in months_map.items():
         if today.month in months:
-            first_td = calendar.get_first_trading_day(today.year, today.month)
-            if first_td and today.year == first_td.year and today.month == first_td.month and today.day == first_td.day:
+            target_td = calendar.get_nth_trading_day(today.year, today.month, nth_trading_day)
+            if target_td and today.year == target_td.year and today.month == target_td.month and today.day == target_td.day:
                 return label
     return None
 

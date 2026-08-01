@@ -62,8 +62,9 @@ def main():
     pass
   print(f'📈 個股設定：共 {len(PORTFOLIO_CONFIG)} 檔')
   ROTATE_MODE_VAL = int(os.getenv('ROTATE_MODE', '0'))
+  ROTATE_TRADING_DAY_N = int(os.getenv('ROTATE_TRADING_DAY_N', '1'))
   _rotate_labels = {0: '關閉', 1: '單排程 (1/4/7/10)', 2: '單排程 (2/5/8/11)', 3: '單排程 (3/6/9/12)', 4: '雙排程 (1+2)', 5: '雙排程 (2+3)'}
-  print(f'🔄 全輪替模式：ROTATE_MODE={ROTATE_MODE_VAL}（{_rotate_labels.get(ROTATE_MODE_VAL, "未知")}）')
+  print(f'🔄 全輪替模式：ROTATE_MODE={ROTATE_MODE_VAL}（{_rotate_labels.get(ROTATE_MODE_VAL, "未知")}）｜選股日: 每月第 {ROTATE_TRADING_DAY_N} 個交易日')
   for (sym, cfg) in PORTFOLIO_CONFIG.items():
     cap = get_stock_capital(sym)
     print(f"   {sym} → {cfg['strategy']}（上限 NT${cap:,.0f}）")
@@ -71,6 +72,7 @@ def main():
 🤖 TW AutoTrader v{APP_VERSION} 雲端主機已成功啟動！開始全天候監控台股...''')
   send_telegram_message((f'''✅ *TW AutoTrader* v{APP_VERSION} 多股多策略系統已啟動
 🔄 全輪替: ROTATE_MODE={ROTATE_MODE_VAL}（{_rotate_labels.get(ROTATE_MODE_VAL, "未知")}）
+📅 選股日: 每月第 {ROTATE_TRADING_DAY_N} 個交易日
 📈 監控中: ''' + ', '.join((f"{s}[{c['strategy']}]" for (s, c) in PORTFOLIO_CONFIG.items()))))
   env_chat_id = os.getenv('TELEGRAM_CHAT_ID', '未設定')
   try:
@@ -637,8 +639,9 @@ def main():
           print(f'❌ [INST_MOM] 執行錯誤: {e}')
       time.sleep(60)
       continue
-    # ── 盤後全輪替選股觸發（13:31~13:35，每月第一個交易日）──
+    # ── 盤後全輪替選股觸發（13:31~13:35，每月第 N 個交易日）──
     ROTATE_MODE_VAL = int(os.getenv('ROTATE_MODE', '0'))
+    ROTATE_TRADING_DAY_N = int(os.getenv('ROTATE_TRADING_DAY_N', '1'))
     if ROTATE_MODE_VAL > 0 and is_weekday and h == 13 and 31 <= m <= 35:
         _rotate_key = '_rotate_done_date'
         if globals().get(_rotate_key) != today_str:
@@ -646,7 +649,7 @@ def main():
                 from core.trading_calendar import TradingCalendar
                 from core.rotate_scheduler import should_rotate_today, update_env_section, backup_env
                 _rc = TradingCalendar()
-                schedule = should_rotate_today(now.date(), ROTATE_MODE_VAL, _rc)
+                schedule = should_rotate_today(now.date(), ROTATE_MODE_VAL, _rc, ROTATE_TRADING_DAY_N)
                 if schedule:
                     import subprocess as _sp
                     print(f'🔄 全輪替觸發：{schedule}排程，執行選股程式...')
