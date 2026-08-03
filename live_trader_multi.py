@@ -249,6 +249,31 @@ def main():
     today_str = now.strftime('%Y-%m-%d')
     if is_weekday and h == 8 and m >= 40:
       try:
+        _cal_file = Path('config/taiwan_holidays.json')
+        _need_update = True
+        if _cal_file.exists():
+          try:
+            _cal_data = json.loads(_cal_file.read_text(encoding='utf-8'))
+            _last_upd = _cal_data.get('_last_updated', '')
+            if _last_upd:
+              from datetime import datetime as _dt
+              _age = (datetime.now() - _dt.strptime(_last_upd, '%Y-%m-%d %H:%M:%S')).days
+              _need_update = _age > 30
+          except Exception:
+            pass
+        if _need_update:
+          try:
+            import subprocess as _sp
+            _r = _sp.run(['python', 'scripts/update_taiwan_holidays.py'], capture_output=True, text=True, timeout=60)
+            if _r.returncode == 0:
+              print(f'📅 休市日曆已自動更新')
+            else:
+              print(f'⚠️ 休市日曆更新失敗: {_r.stderr[:200]}')
+          except Exception as _e:
+            print(f'⚠️ 休市日曆更新異常: {_e}')
+      except Exception:
+        pass
+      try:
         from dotenv import load_dotenv as _reload
         _reload(override=True)
         new_config = load_portfolio_config()
