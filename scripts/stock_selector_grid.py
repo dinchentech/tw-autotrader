@@ -31,8 +31,8 @@ import yfinance as yf
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-# ── 候選股票池（市值前 150 大） ─────────────────────────
-STOCK_NO = int(os.getenv("STOCK_NO", "50"))
+# ── 候選股票池（市值前 N 大） ─────────────────────────
+STOCK_NO = int(os.getenv("ROTATE_STOCK_NO", os.getenv("STOCK_NO", "50")))  # 全輪替候選池（優先 ROTATE_STOCK_NO，fallback STOCK_NO）
 ROTATE_MODE = int(os.getenv("ROTATE_MODE", "5"))  # 0=off 1=1/4/7/10 2=2/5/8/11 3=3/6/9/12 4=1+2 5=2+3
 MIN_DAILY_AMOUNT = float(os.getenv("MIN_DAILY_AMOUNT", "0"))  # 日均成交額門檻（萬元，0=不啟用）
 CANDIDATE_POOL = []
