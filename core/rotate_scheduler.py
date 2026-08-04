@@ -9,7 +9,9 @@ from datetime import datetime, date
 from pathlib import Path
 
 # 全輪替策略常數
-ROTATE_ALLOC = 12.5
+ROTATE_TOP_N = int(os.getenv('ROTATE_TOP_N', '4'))
+ROTATE_MODE = int(os.getenv('ROTATE_MODE', '0'))
+ROTATE_ALLOC = round((50.0 if ROTATE_MODE in (4, 5) else 100.0) / ROTATE_TOP_N, 2)
 ROTATE_STRATEGY = 'keep_wait'
 ROTATE_MAX_ENTRY = -1
 ROTATE_BUY_PCT = 1.0

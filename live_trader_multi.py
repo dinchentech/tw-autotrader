@@ -680,7 +680,7 @@ def main():
                     print(f'🔄 全輪替觸發：{schedule}排程，執行選股程式...')
                     result = _sp.run(
                         ['python', 'scripts/stock_selector_grid.py', '--recommend', '--output-env',
-                         '--schedule-label', schedule, '--top-n', '4'],
+                         '--schedule-label', schedule, '--top-n', os.getenv('ROTATE_TOP_N', '4')],
                         capture_output=True, text=True, timeout=120
                     )
                     if result.returncode == 0:
