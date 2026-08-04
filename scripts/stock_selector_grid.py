@@ -34,6 +34,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 # ── 候選股票池（市值前 150 大） ─────────────────────────
 STOCK_NO = int(os.getenv("STOCK_NO", "50"))
 ROTATE_MODE = int(os.getenv("ROTATE_MODE", "5"))  # 0=off 1=1/4/7/10 2=2/5/8/11 3=3/6/9/12 4=1+2 5=2+3
+MIN_DAILY_AMOUNT = float(os.getenv("MIN_DAILY_AMOUNT", "0"))  # 日均成交額門檻（萬元，0=不啟用）
 CANDIDATE_POOL = []
 CAP_RANKING = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "cache", "inst_momentum", "mcap_ranking.pkl")
 if os.path.exists(CAP_RANKING):
@@ -257,6 +258,15 @@ def score_stock(sym, df, end_date, params):
     cp = float(df.loc[end_date, "close"])
     if cp < min_px:
         return None
+
+    if MIN_DAILY_AMOUNT > 0:
+        idx = df.index.get_loc(end_date)
+        start_i = max(0, idx - 20)
+        window = df.iloc[start_i:idx + 1]
+        avg_vol = window["volume"].mean()
+        avg_amount_wan = (avg_vol * 1000 * cp) / 10000.0
+        if avg_amount_wan < MIN_DAILY_AMOUNT:
+            return None
 
     # 動能分數（支援雙動能: momentum_days 為主, momentum2_days/weight 為輔）
     m_ret = trailing_ret(df, end_date, m_days)
