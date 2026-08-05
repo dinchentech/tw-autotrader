@@ -59,23 +59,49 @@ except Exception:
 
 START_DATE = "2022-01-01"
 END_DATE = "2025-12-31"
+# 實盤選股只需近期資料（動能 63 日 + MA60 足夠）。VM 實盤可設 SELECTOR_LOOKBACK_DAYS=250 減少下載量。
+LOOKBACK_DAYS = int(os.getenv("SELECTOR_LOOKBACK_DAYS", "0"))  # 0=用 START_DATE 完整期間（回測用）
 
 # ══════════════════════════════════════════════════════════════
 # 資料載入
 # ══════════════════════════════════════════════════════════════
 
 _cache = {}
+_PRICE_CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "cache", "selector_prices")
+
 def load_stock(symbol: str) -> pd.DataFrame:
     if symbol in _cache:
         return _cache[symbol]
+    # 磁碟快取：先讀 pkl，避免每次重新下載
+    pkl_path = os.path.join(_PRICE_CACHE_DIR, f"{symbol}.pkl")
+    if os.path.exists(pkl_path):
+        try:
+            df = pickle.loads(open(pkl_path, "rb").read())
+            if not df.empty:
+                _cache[symbol] = df
+                return df
+        except Exception:
+            pass
     yf_sym = f"{symbol}.TW" if symbol.isdigit() else f"{symbol}.TW"
-    df = yf.download(yf_sym, start=START_DATE, end="2026-12-31", auto_adjust=True, progress=False)
+    if LOOKBACK_DAYS > 0:
+        from datetime import date as _date, timedelta as _td
+        start = (_date.today() - _td(days=LOOKBACK_DAYS)).isoformat()
+        df = yf.download(yf_sym, start=start, end="2026-12-31", auto_adjust=True, progress=False)
+    else:
+        df = yf.download(yf_sym, start=START_DATE, end="2026-12-31", auto_adjust=True, progress=False)
     if df.empty:
         _cache[symbol] = df
         return df
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
     df = df.rename(columns={"Open":"open","High":"high","Low":"low","Close":"close","Volume":"volume"})
+    # 寫入磁碟快取
+    try:
+        os.makedirs(_PRICE_CACHE_DIR, exist_ok=True)
+        with open(pkl_path, "wb") as f:
+            pickle.dump(df, f)
+    except Exception:
+        pass
     _cache[symbol] = df
     return df
 

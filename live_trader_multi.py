@@ -681,7 +681,8 @@ def main():
                     result = _sp.run(
                         ['python', 'scripts/stock_selector_grid.py', '--recommend', '--output-env',
                          '--schedule-label', schedule, '--top-n', os.getenv('ROTATE_TOP_N', '4')],
-                        capture_output=True, text=True, timeout=120
+                        capture_output=True, text=True, timeout=120,
+                        env={**os.environ, 'SELECTOR_LOOKBACK_DAYS': os.getenv('ROTATE_LOOKBACK_DAYS', '250')}
                     )
                     if result.returncode == 0:
                         pc_lines = [l for l in result.stdout.strip().split('\n') if l.startswith('PC_')]
