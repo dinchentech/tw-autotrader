@@ -23,6 +23,7 @@ import os
 import sys
 import time
 import glob
+import threading
 import pandas as pd
 import requests
 from datetime import datetime, timedelta
@@ -35,6 +36,9 @@ from esun_trade.constant import Action, APCode, PriceFlag, Trade, BSFlag
 
 # Default path relative to project root
 _DEFAULT_INI = "esun_sdk/config.simulation.ini"
+
+# E.Sun SDK 偶發無限阻塞凍結主程式，下單等待上限秒（可被 ESUN_PLACE_ORDER_TIMEOUT 覆寫）
+PLACE_ORDER_TIMEOUT = int(os.getenv("ESUN_PLACE_ORDER_TIMEOUT", "30"))
 
 
 def _resolve_cert_path(cfg):
@@ -303,52 +307,72 @@ class EsunProvider:
     # ── order execution interface ────────────────────────────────
 
     def place_order(self, symbol: str, action: str, quantity: int):
-        """下單（限價），依股數自動選擇盤中零股或整股"""
+        """下單（限價），依股數自動選擇盤中零股或整股
+
+        ⚠️ SDK 呼叫可能無限阻塞（曾造成交易主執行緒凍結數小時），
+        故包在 daemon thread 中執行，超過 PLACE_ORDER_TIMEOUT 秒即放棄，
+        回傳 {"error": ...} 讓呼叫方 rollback，主程式保持運作。
+        """
         if self._trade_sdk is None:
             print("❌ E.Sun trade SDK not available – login failed earlier")
             return {"error": "trade SDK not available"}
 
-        self.login()
-        try:
-            buy_sell = Action.Buy if action.upper() == "BUY" else Action.Sell
-            price = self.get_current_price(symbol)
-            if price <= 0:
-                return {"error": "cannot get current price"}
+        result_holder = {}
 
-            # 999 股以下走盤中零股，以上走整股
-            if quantity <= 999:
-                ap_code = APCode.IntradayOdd
-                order_type = "盤中零股"
-            else:
-                ap_code = APCode.Common
-                order_type = "整股"
-                # 整股四捨五入至整張，ESun Common APCode 以「張」為單位
-                if quantity % 1000 >= 500:
-                    quantity = (quantity // 1000) + 1
-                    print(f"↻  {symbol} {quantity * 1000} 股餘數 ≥500，進位至 {quantity} 張")
+        def _do_place(sym, act, qty):
+            self.login()
+            try:
+                buy_sell = Action.Buy if act.upper() == "BUY" else Action.Sell
+                price = self.get_current_price(sym)
+                if price <= 0:
+                    result_holder["error"] = "cannot get current price"
+                    return
+
+                # 999 股以下走盤中零股，以上走整股
+                if qty <= 999:
+                    ap_code = APCode.IntradayOdd
+                    order_type = "盤中零股"
                 else:
-                    lots = quantity // 1000
-                    if lots == 0:
-                        return {"error": "quantity too small for board lot order"}
-                    if quantity % 1000 > 0:
-                        print(f"↻  {symbol} {quantity} 股餘數 <500，捨去為 {lots} 張")
-                    quantity = lots
+                    ap_code = APCode.Common
+                    order_type = "整股"
+                    # 整股四捨五入至整張，ESun Common APCode 以「張」為單位
+                    if qty % 1000 >= 500:
+                        qty = (qty // 1000) + 1
+                        print(f"↻  {sym} {qty * 1000} 股餘數 ≥500，進位至 {qty} 張")
+                    else:
+                        lots = qty // 1000
+                        if lots == 0:
+                            result_holder["error"] = "quantity too small for board lot order"
+                            return
+                        if qty % 1000 > 0:
+                            print(f"↻  {sym} {qty} 股餘數 <500，捨去為 {lots} 張")
+                        qty = lots
 
-            order = OrderObject(
-                buy_sell=buy_sell,
-                price=price,
-                stock_no=symbol,
-                quantity=quantity,
-                ap_code=ap_code,
-                bs_flag=BSFlag.ROD,
-                price_flag=PriceFlag.Limit,
-                trade=Trade.Cash,
-                user_def="tw-autotrader",
-            )
-            result = self._trade_sdk.place_order(order)
-            display_qty = quantity * 1000 if ap_code == APCode.Common else quantity
-            print(f"✅ E.Sun 下單成功: {order_type} {action} {symbol} {display_qty} 股 @ {price:.2f}")
-            return result
-        except Exception as e:
-            print(f"❌ E.Sun 下單失敗: {e}")
-            return {"error": str(e)}
+                order = OrderObject(
+                    buy_sell=buy_sell,
+                    price=price,
+                    stock_no=sym,
+                    quantity=qty,
+                    ap_code=ap_code,
+                    bs_flag=BSFlag.ROD,
+                    price_flag=PriceFlag.Limit,
+                    trade=Trade.Cash,
+                    user_def="tw-autotrader",
+                )
+                result = self._trade_sdk.place_order(order)
+                display_qty = qty * 1000 if ap_code == APCode.Common else qty
+                print(f"✅ E.Sun 下單成功: {order_type} {act} {sym} {display_qty} 股 @ {price:.2f}")
+                result_holder["result"] = result
+            except Exception as e:
+                print(f"❌ E.Sun 下單失敗: {e}")
+                result_holder["error"] = str(e)
+
+        t = threading.Thread(target=_do_place, args=(symbol, action, quantity), daemon=True)
+        t.start()
+        t.join(timeout=PLACE_ORDER_TIMEOUT)
+        if t.is_alive():
+            print(f"⚠️ E.Sun 下單逾 {PLACE_ORDER_TIMEOUT} 秒無回應（{symbol} {action} {quantity} 股），已跳過避免主程式凍結")
+            return {"error": f"E.Sun place_order timeout ({PLACE_ORDER_TIMEOUT}s)"}
+        if "error" in result_holder:
+            return {"error": result_holder["error"]}
+        return result_holder.get("result")

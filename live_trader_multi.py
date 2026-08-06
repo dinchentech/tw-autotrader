@@ -317,6 +317,14 @@ def main():
               print(f'🧹 清倉 {old_sym} {old_shares} 股 @ {old_px:.0f}（不再在 PORTFOLIO_CONFIG 中）')
               del holdings[old_sym]
               save_holdings(holdings)
+              # v3.5: 清倉後同步扣減分帳本，避免舊累積成本擋下未來重新進場
+              if old_sym in stock_alloc:
+                stock_alloc[old_sym] = {'total_buy_cost': 0, 'total_buy_shares': 0}
+                save_stock_allocation(stock_alloc)
+                print(f'🧹 分帳本已重置 {old_sym} → 0')
+              if old_sym in budget_spent:
+                budget_spent.pop(old_sym, None)
+                save_monthly_budget(budget_spent)
             except Exception as _e:
               print(f'⚠️ 清倉 {old_sym} 失敗: {_e}')
         globals()[_cd_key] = today_str
@@ -689,6 +697,13 @@ def main():
                         if pc_lines:
                             backup_env('.env', 'backups')
                             update_env_section('.env', schedule, pc_lines)
+                            # v3.5: 換季換股成功後，重置分帳本讓新一季從零開始
+                            for _s in list(stock_alloc.keys()):
+                              stock_alloc[_s] = {'total_buy_cost': 0, 'total_buy_shares': 0}
+                            save_stock_allocation(stock_alloc)
+                            budget_spent.clear()
+                            save_monthly_budget(budget_spent)
+                            print('🧹 全輪替換季：分帳本與每月預算已全部重置')
                             stocks_list = ', '.join(l.split('=')[0].replace('PC_', '') for l in pc_lines)
                             send_telegram_message(f'🔄 *全輪替 {schedule}排程 選股完成*\n📋 選出 {len(pc_lines)} 檔: {stocks_list}\n📁 舊 .env 已備份至 backups/')
                             print(f'✅ 全輪替 {schedule}排程: .env 已更新 {len(pc_lines)} 檔')
