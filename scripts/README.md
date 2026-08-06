@@ -13,6 +13,7 @@
 | `find_catalyst_stocks.py` | 🔍 掃描全市場 | 找「長期盤整→近期突破」的翻倍潛力股 | **每月初** | ~5 分鐘 |
 | `selector_workflow.py` | 📈 工作流程比較 | 比較四種選股策略的歷史回測績效 | 參考用 | ~5 分鐘 |
 | `update_taiwan_holidays.py` | 📅 休市日曆更新 | 從 TWSE API 自動更新休市日 | 每日 08:40（自動）| ~1 秒 |
+| `build_historical_shares.py` | 🏭 歷史股本資料庫 | 抓 FinMind 歷史股本，供回測重現動態市值候選池 | 回測前（手動）| ~2 分鐘/150 檔 |
 | `generate_dashboard.py` | 📉 績效儀表板 | 產生 `logs/dashboard.html` 績效圖表 | 實盤每日自動 | — |
 
 ---
@@ -192,6 +193,37 @@ python scripts/update_taiwan_holidays.py --year 2026 --dry-run  # 預覽不寫�
 ```
 
 > ⚠️ TWSE 每年 11~12 月才公布隔年行事曆，未公布年份 API 會回傳舊年資料，程式自動跳過。
+
+---
+
+### `build_historical_shares.py` — 歷史股本資料庫（回測重現用）
+
+建立「歷史股本」資料庫，供**全輪替回測**重現「動態市值前 N 大」候選池 — 可避免回測套用「2026 年市值排名」到過去年份（**倖存者偏差 / 開卷考試**）的錯誤。
+
+**為什麼需要它：** 回測模擬「2015 年選股」時，候選池必須是**當時**真實市值前 N 大（市值 = 歷史股本 × 當季股價）。歷史股價回測程式已有，但「歷史股本」這半份以前沒有留存 → 產生此腳本補上。
+
+```bash
+# 生成/更新 150 檔（與實盤 ROTATE_STOCK_NO=150 一致）
+python scripts/build_historical_shares.py
+
+# 擴大到市值前 300 檔
+python scripts/build_historical_shares.py --top-n 300
+
+# 指定年份範圍（預設 2015~2025）
+python scripts/build_historical_shares.py --start 2015 2026
+
+# 預覽不寫檔
+python scripts/build_historical_shares.py --dry-run
+
+# 只處理指定股票（除錯用）
+python scripts/build_historical_shares.py --stock 2330 2455
+```
+
+**產出：** `cache/inst_momentum/historical_shares.pkl`
+
+**說明：** `{(stock_id, 'YYYY-MM'): 發行股本(股)}`，每季點 2/5/8/11 月底（對應選股排程）。資料源 FinMind `taiwan_stock_shareholding` 的 `NumberOfSharesIssued`（免費帳號可用）。已存在股票會自動跳過（增量更新），重跑不會重複抓取。
+
+> ⚠️ 需 `.env` 的 `FINMIND_API_TOKEN`（FinMind 免費帳號即可）。此資料庫只鎖定「市值前 N 大」的歷史股本，若回測候選池改用更大範圍，請加大 `--top-n`。
 
 ---
 
