@@ -199,6 +199,14 @@ esun_sdk/config.simulation.ini.example
 node_modules/
 # 一致化備份（原始檔已 copy 至 plans/）
 live_trader_multi.py
+# Backups: deploy.sh 產生的 .env 時間戳備份 + E.Sun 憑證/設定（機密，永不提交）
+backups/**/.env*
+backups/**/*.p12
+backups/**/*.pem
+backups/**/*.key
+backups/**/*.ini
+backups/**/*.whl
+backups/**/capital.txt
 # Pyarmor 加密產物 + Docker image 暫存（deploy.sh 產生）
 TMP/
 # IDTMP
