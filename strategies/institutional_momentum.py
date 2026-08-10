@@ -264,9 +264,11 @@ class InstitutionalMomentumStrategy:
         回傳 DataFrame 含 columns: date, close, volume, ma20, inst_buy, inst_sell
         """
         # 1. 價格資料
-        #   ⚠️  fish 評分需要至少 30 個交易日（~42 日曆天）
-        #       lookback + 10 僅 30 日曆天（~22 交易日），會讓 fish 分數全部被跳過
-        min_days = max(self.lookback + 10, 60)
+        #   ⚠️  fish 評分需要至少 30 個交易日（~42 日曆天）熱身，
+        #       且魚過濾回溯視窗為 FISH_DAYS 天 → 價格資料必須涵蓋 fish_days+60 天，
+        #       否則實盤魚視窗不完整（與回測不一致，2026-08 發現）
+        fish_days = int(os.getenv("INST_MOM_FISH_DAYS", "90"))
+        min_days = max(self.lookback + 10, fish_days + 60, 60)
         df_price = self._get_price_data(stock_id, days=min_days)
         if df_price.empty or len(df_price) < self.lookback:
             return pd.DataFrame()
@@ -448,6 +450,7 @@ class InstitutionalMomentumStrategy:
         """
         signals = {}
         positions = self.state.get("positions", {})
+        dl = self._get_dataloader()
 
         for stock_id, pos in list(positions.items()):
             price = current_prices.get(stock_id)
@@ -458,6 +461,19 @@ class InstitutionalMomentumStrategy:
             if buy_price <= 0:
                 continue
 
+            # 移動停利需要 MA（共用資料層，與回測一致；抓不到時只做硬性停損）
+            ma = None
+            try:
+                end = date.today()
+                df, _src = inst_data.get_price_data(
+                    dl, stock_id, end - timedelta(days=self.trailing_period + 20), end,
+                    cache_path=self._price_cache_dir / f"{stock_id}.pkl",
+                    max_stale_days=5, sources=("finmind", "twse"))
+                if not df.empty and len(df) >= self.trailing_period:
+                    ma = df["close"].rolling(self.trailing_period).mean().iloc[-1]
+            except Exception:
+                ma = None
+
             core_positions = {
                 stock_id: {
                     "buy_price": buy_price,
@@ -467,6 +483,8 @@ class InstitutionalMomentumStrategy:
                 }
             }
             price_info = {"close": price}
+            if ma is not None and not math.isnan(ma):
+                price_info["ma10"] = ma
             tmp_log = []
             proceeds, cost_basis, _ = _core_check_position_exit(
                 stock_id, core_positions, price_info, date.today(), 0, tmp_log

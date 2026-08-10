@@ -151,6 +151,10 @@ FISH_PRE_FILTER = args.fish_pre_filter
 FISH_DAYS = args.fish_days or 90
 FISH_MIN_SCORE = args.fish_score if args.fish_score is not None else 7.0
 
+# 價格下載緩衝：魚過濾需回溯 FISH_DAYS 天 + 分數熱身(~30天)，
+# 60 天緩衝會讓開局前段魚視窗不完整（2026-08 發現：官方數字取決於快取狀態）
+DATA_BUFFER_DAYS = max(60, FISH_DAYS + 90)
+
 AUTO_CAPITAL = args.auto_capital
 AUTO_CAP_MONTHS = args.auto_cap_months
 AUTO_CAP_RATIO = args.auto_cap_ratio
@@ -185,7 +189,7 @@ def get_all_stock_ids(dl) -> list:
 def download_price_data(dl, stock_id: str) -> pd.DataFrame:
     """下載單一 stock 的日K，回傳含 ma20/ma10 的 DataFrame（共用資料層）"""
     cache_file = PRICE_CACHE_DIR / f"{stock_id}.pkl"
-    start_dt = datetime.strptime(START_DATE, "%Y-%m-%d") - timedelta(days=60)
+    start_dt = datetime.strptime(START_DATE, "%Y-%m-%d") - timedelta(days=DATA_BUFFER_DAYS)
     start = start_dt.strftime("%Y-%m-%d")
 
     df, _src = _data_get_price_data(
@@ -193,6 +197,7 @@ def download_price_data(dl, stock_id: str) -> pd.DataFrame:
         cache_path=cache_file, max_stale_days=7,
         ref_date=pd.Timestamp(END_DATE).date(),
         sources=("finmind", "yfinance"),
+        min_start=start,
     )
     if df.empty:
         return pd.DataFrame()

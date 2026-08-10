@@ -213,7 +213,9 @@ def _fetch_price_yfinance(stock_id: str, start: str, end: str) -> pd.DataFrame:
     try:
         import yfinance as yf
         tk = yf.Ticker(f"{stock_id}.TW")
-        df = tk.history(start=start, end=end)
+        # auto_adjust=False：與 FinMind 一致使用原始價（除權前後不調整）。
+        # 舊版用預設(調整後)價會讓快取混入還原價，導致回測訊號/進場價失真
+        df = tk.history(start=start, end=end, auto_adjust=False)
         if df.empty:
             return pd.DataFrame()
         df = df.reset_index()
@@ -228,10 +230,12 @@ def _fetch_price_yfinance(stock_id: str, start: str, end: str) -> pd.DataFrame:
 
 def get_price_data(dl, stock_id: str, start, end, cache_path=None,
                    max_stale_days: int = 5, ref_date=None,
-                   sources=("finmind", "twse")) -> tuple:
+                   sources=("finmind", "twse"), min_start=None) -> tuple:
     """取得個股日 K（date/open/high/low/close/volume）。
 
     cache_path 提供時做新鮮度檢查（ref_date 與 max_stale_days 可設定）。
+    min_start 提供時，快取命中還需覆蓋到該起始日（避免舊快取歷史深度不足，
+    導致魚過濾 90 天回溯視窗不完整 — 2026-08 官方數字無法重現事件的根因）。
     回傳 (df, source)，source ∈ cache / finmind / twse / yfinance / none。
     """
     if ref_date is None:
@@ -243,7 +247,9 @@ def get_price_data(dl, stock_id: str, start, end, cache_path=None,
             df = pickle.loads(Path(cache_path).read_bytes())
             if isinstance(df, pd.DataFrame) and not df.empty:
                 latest = pd.Timestamp(df["date"].max())
-                if (ref_ts - latest).days <= max_stale_days:
+                history_ok = (min_start is None
+                              or pd.Timestamp(df["date"].min()) <= pd.Timestamp(min_start))
+                if history_ok and (ref_ts - latest).days <= max_stale_days:
                     return _norm_price(df), "cache"
         except Exception:
             pass
