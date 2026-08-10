@@ -244,7 +244,7 @@ def get_price_data(dl, stock_id: str, start, end, cache_path=None,
             if isinstance(df, pd.DataFrame) and not df.empty:
                 latest = pd.Timestamp(df["date"].max())
                 if (ref_ts - latest).days <= max_stale_days:
-                    return df, "cache"
+                    return _norm_price(df), "cache"
         except Exception:
             pass
 
@@ -307,7 +307,7 @@ def get_institutional_data(dl, stock_id: str, start, end, cache_path=None,
             if isinstance(df, pd.DataFrame) and not df.empty:
                 latest = pd.Timestamp(df["date"].max())
                 if (ref_ts - latest).days <= max_stale_days:
-                    return df, "cache", latest.date()
+                    return _norm_inst(df), "cache", latest.date()
         except Exception:
             pass
 
