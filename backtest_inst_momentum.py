@@ -21,10 +21,8 @@ backtest_inst_momentum.py — 法人抬轎動能策略回測
 import os
 import sys
 import argparse
-import pickle
 import math
 import time
-import requests
 import pandas as pd
 import numpy as np
 from datetime import datetime, date, timedelta
@@ -44,6 +42,11 @@ from core.inst_strategy_core import (
     log_capital_roll as _core_log_capital_roll,
 )
 import core.inst_strategy_core as inst_core
+from core.inst_data import (
+    get_price_data as _data_get_price_data,
+    fetch_twse_inst_bulk as _data_fetch_twse_inst_bulk,
+    get_all_stock_ids as _data_get_all_stock_ids,
+)
 
 
 def precompute_fish_scores(all_data):
@@ -168,99 +171,34 @@ def finmind_login():
 # ─── 階段 1a：下載價格資料（FinMind，含快取）─────────────
 
 def get_all_stock_ids(dl) -> list:
-    """回傳上市普通股 stock_id 列表（按市值排序取前 TOP_N_STOCKS）"""
+    """回傳上市普通股 stock_id 列表（按市值排序取前 TOP_N_STOCKS，共用資料層）"""
     MCAP_RANKING = Path("cache/inst_momentum/mcap_ranking.pkl")
-    n = TOP_N_STOCKS
-
-    if MCAP_RANKING.exists():
-        ranked = pickle.loads(MCAP_RANKING.read_bytes())
-        # 過濾掉非 4 位數字（ETF、TDR 等）
-        ranked = [s for s in ranked if s.isdigit() and len(s) == 4]
-        ids = ranked[:n]
-        print(f"📋 按市值排序，取前 {len(ids)} 檔上市股票")
-        return ids
-
-    # 無市值排名時，退而求其次：FinMind stock_id 排序
-    cache_file = PRICE_CACHE_DIR / "stock_ids.pkl"
-    if cache_file.exists():
-        ids = pickle.loads(cache_file.read_bytes())
-        return ids[:n]
-    df = dl.taiwan_stock_info()
-    ids = sorted(set(
-        s.strip() for s in df["stock_id"]
-        if s.strip().isdigit() and len(s.strip()) == 4
-    ))
-    ids = ids[:n]
-    cache_file.write_bytes(pickle.dumps(ids))
-    print(f"📋 上市股票總數: {len(ids)}（無市值排名，依 stock_id 排序）")
+    ids = _data_get_all_stock_ids(dl, TOP_N_STOCKS, exclude_etf=False,
+                                  mcap_file=MCAP_RANKING)
+    print(f"📋 按市值排序，取前 {len(ids)} 檔上市股票")
     return ids
 
 
 def download_price_data(dl, stock_id: str) -> pd.DataFrame:
-    """下載單一 stock 的日K，回傳含 ma20/ma10 的 DataFrame"""
+    """下載單一 stock 的日K，回傳含 ma20/ma10 的 DataFrame（共用資料層）"""
     cache_file = PRICE_CACHE_DIR / f"{stock_id}.pkl"
-    if cache_file.exists():
-        df = pickle.loads(cache_file.read_bytes())
-        if not df.empty and df["date"].max() >= pd.Timestamp(END_DATE) - timedelta(days=7):
-            return df
     start_dt = datetime.strptime(START_DATE, "%Y-%m-%d") - timedelta(days=60)
     start = start_dt.strftime("%Y-%m-%d")
 
-    # 先試 FinMind，失敗則以 yfinance 補
-    df_new = _try_finmind_price(dl, stock_id, start)
-    if df_new is None:
-        df_new = _try_yfinance_price(stock_id, start)
-
-    if df_new is None or df_new.empty:
+    df, _src = _data_get_price_data(
+        dl, stock_id, start, END_DATE,
+        cache_path=cache_file, max_stale_days=7,
+        ref_date=pd.Timestamp(END_DATE).date(),
+        sources=("finmind", "yfinance"),
+    )
+    if df.empty:
         return pd.DataFrame()
 
-    df_price = df_new
-
+    df = df.copy()
     # 計算技術指標
-    df_price["ma20"] = df_price["close"].rolling(LOOKBACK).mean()
-    df_price["ma10"] = df_price["close"].rolling(TRAILING_PERIOD).mean()
+    df["ma20"] = df["close"].rolling(LOOKBACK).mean()
+    df["ma10"] = df["close"].rolling(TRAILING_PERIOD).mean()
 
-    cache_file.write_bytes(pickle.dumps(df_price))
-    return df_price
-
-
-def _try_finmind_price(dl, stock_id: str, start: str) -> pd.DataFrame | None:
-    """從 FinMind 下載股價，失敗回傳 None"""
-    try:
-        df = dl.taiwan_stock_daily(
-            stock_id=stock_id, start_date=start, end_date=END_DATE
-        )
-    except Exception:
-        return None
-    if df.empty:
-        return None
-    df = df.rename(columns={
-        "date": "date", "open": "open", "max": "high",
-        "min": "low", "close": "close", "Trading_Volume": "volume",
-    })
-    df["date"] = pd.to_datetime(df["date"])
-    df = df.sort_values("date").reset_index(drop=True)
-    return df
-
-
-def _try_yfinance_price(stock_id: str, start: str) -> pd.DataFrame | None:
-    """以 yfinance 補下載股價，失敗回傳 None"""
-    try:
-        import yfinance as yf
-        tk = yf.Ticker(f"{stock_id}.TW")
-        df = tk.history(start=start, end=END_DATE)
-    except Exception:
-        return None
-    if df.empty:
-        return None
-    df = df.reset_index()
-    df["date"] = pd.to_datetime(df["Date"].dt.date)
-    df = df.rename(columns={
-        "Open": "open", "High": "high", "Low": "low",
-        "Close": "close", "Volume": "volume",
-    })
-    df = df[["date", "open", "high", "low", "close", "volume"]]
-    df = df.sort_values("date").reset_index(drop=True)
     return df
 
 
@@ -268,7 +206,7 @@ def _try_yfinance_price(stock_id: str, start: str) -> pd.DataFrame | None:
 
 def fetch_twse_inst_data(trading_dates: set) -> dict:
     """
-    從 TWSE 公開 API 下載三大法人買賣超日報。
+    從 TWSE 公開 API 下載三大法人買賣超日報（共用資料層 fetch_twse_day）。
     TWSE 一次回傳全市場資料，不用逐股查詢，避開 FinMind 配額限制。
 
     回傳 { date_str: { stock_id: (inst_buy, inst_sell) } }
@@ -276,48 +214,9 @@ def fetch_twse_inst_data(trading_dates: set) -> dict:
     """
     cache_key = f"twse_inst_{START_DATE}_{END_DATE}.pkl"
     cache_file = CACHE_DIR / cache_key
-    if cache_file.exists():
-        print(f"   載入 TWSE 法人資料快取（{cache_key}）...")
-        return pickle.loads(cache_file.read_bytes())
-
     dates = sorted(d for d in trading_dates
                    if pd.Timestamp(START_DATE).date() <= d <= pd.Timestamp(END_DATE).date())
-    inst_data = {}  # { date_str: { stock_id: (buy, sell) } }
-
-    for i, d in enumerate(dates):
-        date_str = d.strftime("%Y%m%d")
-        url = f"https://www.twse.com.tw/fund/T86?response=json&date={date_str}&selectType=ALLBUT0999"
-        try:
-            resp = requests.get(url, timeout=15)
-            data = resp.json()
-        except Exception as e:
-            print(f"  ⚠ TWSE 請求失敗 {date_str}: {e}")
-            continue
-
-        if data.get("stat") != "OK":
-            continue
-
-        day_data = {}
-        for row in data.get("data", []):
-            sid = str(row[0]).strip()
-            if not sid.isdigit() or len(sid) != 4:
-                continue
-            try:
-                foreign_buy = int(row[2].replace(",", ""))
-                foreign_sell = int(row[3].replace(",", ""))
-                trust_buy = int(row[8].replace(",", ""))
-                trust_sell = int(row[9].replace(",", ""))
-            except (ValueError, IndexError):
-                continue
-            day_data[sid] = (foreign_buy + trust_buy, foreign_sell + trust_sell)
-        inst_data[d.isoformat()] = day_data
-
-        if (i + 1) % 50 == 0:
-            print(f"   TWSE 下載進度: {i+1}/{len(dates)}")
-
-    cache_file.write_bytes(pickle.dumps(inst_data))
-    print(f"✅ TWSE 法人資料下載完成: {len(inst_data)} 交易日")
-    return inst_data
+    return _data_fetch_twse_inst_bulk(dates, cache_path=cache_file, progress_every=50)
 
 
 def merge_twse_inst(all_data: dict, twse_data: dict) -> dict:

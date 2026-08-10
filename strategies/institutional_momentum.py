@@ -15,8 +15,6 @@ import os
 import math
 import json
 import time
-import pickle
-import requests
 import numpy as np
 import pandas as pd
 from datetime import datetime, date, timedelta
@@ -32,6 +30,7 @@ from FinMind.data import DataLoader
 from FinMind.schema.data import Dataset
 
 import core.inst_strategy_core as inst_core
+import core.inst_data as inst_data
 from core.inst_strategy_core import (
     check_momentum_entry as _core_check_momentum_entry,
     check_position_exit as _core_check_position_exit,
@@ -67,10 +66,11 @@ class InstitutionalMomentumStrategy:
         self.state = self._load_state()
         self.finmind_token = os.getenv("FINMIND_API_TOKEN", "")
 
-        # TWSE 備援快取（實例層級，避免跨篩選汙染）
-        self._twse_cache = {}           # { date_str: { stock_id: { name: {buy, sell} } } }
-        self._twse_cache_built = False
+        # TWSE 備援逐日快取（共用資料層，避免跨篩選汙染）
+        self._twse_day_cache = inst_data.TwseDayCache(max_days=20)
         self._data_fail_notified = {}   # { source_key: date_str } 同一來源一天只通知一次
+        # 資料健康度（篩選摘要用，讓 0 觸發可區分「資料壞」與「沒訊號」）
+        self._data_stats = {}
 
         # 磁碟快取（避免重複呼叫 FinMind API，免費版每小時 600 次上限）
         self._price_cache_dir = Path("cache/inst_momentum/price")
@@ -198,220 +198,50 @@ class InstitutionalMomentumStrategy:
     def _get_all_stock_ids(self) -> list:
         """回傳上市普通股 stock_id 列表（前 MAX_STOCKS 檔，控制 API 配額）
 
-        與回測一致：優先使用市值排名快取（cache/inst_momentum/mcap_ranking.pkl），
-        缺檔時退回 stock_id 排序。
+        與回測一致：共用資料層依市值排名（cache/inst_momentum/mcap_ranking.pkl）。
         """
-        mcap_file = Path("cache/inst_momentum/mcap_ranking.pkl")
-        if mcap_file.exists():
-            try:
-                ranked = pickle.loads(mcap_file.read_bytes())
-                ranked = [s.strip() for s in ranked
-                          if s.strip().isdigit() and len(s.strip()) == 4]
-                if self.exclude_etf:
-                    ranked = [s for s in ranked if not s.startswith("0")]
-                if ranked:
-                    return ranked[:self.MAX_STOCKS]
-            except Exception:
-                pass
-        dl = self._get_dataloader()
-        df = dl.taiwan_stock_info()
-        # 只保留上市普通股（type="twse" 且 stock_id 為 4 位數字）
-        df = df[df["type"] == "twse"]
-        ids = [s.strip() for s in df["stock_id"] if s.strip().isdigit() and len(s.strip()) == 4]
-        # 排除 ETF（代號開頭為 0，如 0050、00878），由 .env INST_MOM_EXCLUDE_ETF 控制
-        if self.exclude_etf:
-            ids = [s for s in ids if not s.startswith("0")]
-        return sorted(set(ids))[:self.MAX_STOCKS]
+        return inst_data.get_all_stock_ids(
+            self._get_dataloader(), self.MAX_STOCKS,
+            exclude_etf=self.exclude_etf,
+            mcap_file=Path("cache/inst_momentum/mcap_ranking.pkl"))
 
     def _get_price_data(self, stock_id: str, days: int = 30) -> pd.DataFrame:
-        """取得個股日 K 資料，FinMind → TWSE 備援"""
+        """取得個股日 K 資料（共用資料層：FinMind → TWSE 備援，快取 5 天新鮮度）"""
         end = date.today()
         start = end - timedelta(days=days)
-        df = self._fetch_price_finmind(stock_id, start, end)
+        df, source = inst_data.get_price_data(
+            self._get_dataloader(), stock_id, start, end,
+            cache_path=self._price_cache_dir / f"{stock_id}.pkl",
+            max_stale_days=5, sources=("finmind", "twse"))
+        self._data_stats.setdefault("price_source", {})
+        self._data_stats["price_source"][source] = self._data_stats["price_source"].get(source, 0) + 1
         if not df.empty:
-            return df.sort_values("date").reset_index(drop=True)
-        df = self._fetch_price_twse(stock_id, start, end)
-        if df.empty:
+            self._data_stats["stocks_with_price"] = self._data_stats.get("stocks_with_price", 0) + 1
+        else:
             self._notify_once("price_fail", f"股價資料全線失效：{stock_id}，FinMind 與 TWSE 皆無法取得")
         return df
 
-    def _fetch_price_finmind(self, stock_id: str, start: date, end: date) -> pd.DataFrame:
-        # 磁碟快取：同一股票同一天不重複下載
-        cache_file = self._price_cache_dir / f"{stock_id}.pkl"
-        if cache_file.exists():
-            try:
-                df = pickle.loads(cache_file.read_bytes())
-                if isinstance(df, pd.DataFrame) and not df.empty and len(df) >= 30:
-                    # 確認快取夠新（latest date 在 5 天內），否則重抓
-                    latest_date = pd.Timestamp(df["date"].max())
-                    if (date.today() - latest_date.date()).days <= 5:
-                        return df
-            except Exception:
-                pass
-        dl = self._get_dataloader()
-        try:
-            df = dl.taiwan_stock_daily(
-                stock_id=stock_id,
-                start_date=start.isoformat(),
-                end_date=end.isoformat(),
-            )
-        except Exception:
-            return pd.DataFrame()
-        if df.empty:
-            return df
-        rename = {
-            "Trading_Volume": "volume",
-            "Trading_money": "amount",
-            "Trading_turnover": "turnover",
-            "max": "high",
-            "min": "low",
-        }
-        df = df.rename(columns={k: v for k, v in rename.items() if k in df.columns})
-        # 寫入快取
-        cache_file.write_bytes(pickle.dumps(df))
-        return df
-
-    def _fetch_price_twse(self, stock_id: str, start: date, end: date) -> pd.DataFrame:
-        """從 TWSE STOCK_DAY API 取得個股日 K（回傳格式與 FinMind 統一後一致）"""
-        try:
-            dt_str = start.strftime("%Y%m01")
-            url = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
-            params = {"response": "json", "date": dt_str, "stockNo": stock_id}
-            resp = requests.get(url, params=params, headers={
-                "User-Agent": "Mozilla/5.0",
-            }, timeout=10)
-            data = resp.json()
-            if data.get("stat") != "OK" or not data.get("data"):
-                return pd.DataFrame()
-
-            rows = []
-            for row in data["data"]:
-                try:
-                    # 日期格式: 115/06/01 → 2026-06-01（民國年+1911）
-                    parts = row[0].split("/")
-                    d = f"{int(parts[0])+1911}-{parts[1]}-{parts[2]}"
-                    if d < start.isoformat() or d > end.isoformat():
-                        continue
-                    rows.append({
-                        "date": d,
-                        "stock_id": stock_id,
-                        "open": float(row[3].replace(",", "")),
-                        "high": float(row[4].replace(",", "")),
-                        "low": float(row[5].replace(",", "")),
-                        "close": float(row[6].replace(",", "")),
-                        "volume": int(row[1].replace(",", "")),
-                    })
-                except (ValueError, IndexError):
-                    continue
-            if not rows:
-                return pd.DataFrame()
-            df = pd.DataFrame(rows)
-            return df.sort_values("date").reset_index(drop=True)
-        except Exception:
-            return pd.DataFrame()
-
     def _get_institutional_data(self, stock_id: str, days: int = 10) -> pd.DataFrame:
-        """取得個股法人買賣資料，FinMind → TWSE 備援
-
-        磁碟快取有新鮮度檢查（與價格快取一致）：最新日期超過 5 天即重新下載，
-        避免法人資料永久凍結在舊日期。
-        """
-        cache_file = self._inst_cache_dir / f"{stock_id}.pkl"
-        if cache_file.exists():
-            try:
-                df = pickle.loads(cache_file.read_bytes())
-                if isinstance(df, pd.DataFrame) and not df.empty:
-                    latest_date = pd.Timestamp(df["date"].max())
-                    if (date.today() - latest_date.date()).days <= 5:
-                        return df
-            except Exception:
-                pass
-        dl = self._get_dataloader()
+        """取得個股法人買賣資料（共用資料層：FinMind → TWSE 備援，快取 5 天新鮮度）"""
         end = date.today()
         start = end - timedelta(days=days)
-        try:
-            df = dl.taiwan_stock_institutional_investors(
-                stock_id=stock_id,
-                start_date=start.isoformat(),
-                end_date=end.isoformat(),
-            )
-            if not df.empty:
-                cache_file.write_bytes(pickle.dumps(df))
-                return df
-        except Exception:
-            pass
-        # FinMind 失敗 → TWSE 備援
-        df = self._get_institutional_data_twse(stock_id, days)
-        if df.empty:
+        df, source, latest = inst_data.get_institutional_data(
+            self._get_dataloader(), stock_id, start, end,
+            cache_path=self._inst_cache_dir / f"{stock_id}.pkl",
+            max_stale_days=5, sources=("finmind", "twse"),
+            twse_day_cache=self._twse_day_cache)
+        self._data_stats.setdefault("inst_source", {})
+        self._data_stats["inst_source"][source] = self._data_stats["inst_source"].get(source, 0) + 1
+        if not df.empty:
+            self._data_stats["stocks_with_inst"] = self._data_stats.get("stocks_with_inst", 0) + 1
+            if latest is not None:
+                cur = self._data_stats.get("latest_inst_date")
+                if cur is None or latest.isoformat() > cur:
+                    self._data_stats["latest_inst_date"] = latest.isoformat()
+        else:
+            self._data_stats["stocks_missing_inst"] = self._data_stats.get("stocks_missing_inst", 0) + 1
             self._notify_once("inst_fail", f"法人資料全線失效：{stock_id}，FinMind 與 TWSE 皆無法取得")
         return df
-
-    # ================================================================
-    # TWSE 法人資料備援（FinMind 額度用罄時自動切換）
-    # ================================================================
-    def _build_twse_inst_cache(self, end_date: date, lookback_days: int = 15):
-        """初始建立 TWSE 快取：一次抓取近 N 天全市場法人買賣超。
-
-        後續呼叫 _refresh_twse_cache() 只補最新一天、淘汰最舊一天。
-        """
-        self._twse_cache = {}
-        for i in range(lookback_days):
-            d = end_date - timedelta(days=i)
-            dt_str = d.strftime("%Y%m%d")
-            day_data = self._fetch_twse_day(dt_str)
-            if day_data:
-                self._twse_cache[dt_str] = day_data
-
-        self._twse_cache_built = True
-        print(f"✅ [INST_MOM] TWSE 快取建立 ({len(self._twse_cache)} 天, "
-              f"{sum(len(v) for v in self._twse_cache.values())} 筆)")
-
-    def _refresh_twse_cache(self, today: date, max_days: int = 15):
-        """增量更新：只抓今天(或最近未緩存日期)的資料，淘汰最舊的一天。"""
-        today_str = today.strftime("%Y%m%d")
-        # 如果今天還未快取 → 抓
-        if today_str not in self._twse_cache:
-            day_data = self._fetch_twse_day(today_str)
-            if day_data:
-                self._twse_cache[today_str] = day_data
-        # 超過 max_days → 刪最舊的
-        keys = sorted(self._twse_cache.keys())
-        while len(keys) > max_days:
-            oldest = keys.pop(0)
-            del self._twse_cache[oldest]
-
-    def _fetch_twse_day(self, dt_str: str) -> dict:
-        """呼叫 TWSE T86 API 抓單日全市場法人資料，回傳 {stock_id: {name: {buy, sell}}}
-
-        T86 欄位（回測與實盤共用此定義）：
-          0 證券代號 | 1 證券名稱 | 2 外陸資買進 | 3 外陸資賣出 | 4 外陸資買賣超
-          5 外資自營商買進 | 6 外資自營商賣出 | 7 外資自營商買賣超
-          8 投信買進 | 9 投信賣出 | 10 投信買賣超
-          11 自營商買賣超 | 12 自營商(自行)買進 | 13 自營商(自行)賣出
-          14 自營商(自行)買賣超 | 15 自營商(避險)買進 | 16 自營商(避險)賣出
-          17 自營商(避險)買賣超 | 18 三大法人買賣超
-        """
-        try:
-            url = "https://www.twse.com.tw/fund/T86"
-            params = {"response": "json", "date": dt_str, "selectType": "ALLBUT0999"}
-            resp = requests.get(url, params=params, headers={
-                "User-Agent": "Mozilla/5.0",
-            }, timeout=10)
-            data = resp.json()
-            if data.get("stat") != "OK" or not data.get("data"):
-                return {}
-            day_data = {}
-            for row in data["data"]:
-                stock_id = row[0].strip()
-                day_data[stock_id] = {
-                    "外資": {"buy": self._safe_int(row[2]), "sell": self._safe_int(row[3])},
-                    "投信": {"buy": self._safe_int(row[8]), "sell": self._safe_int(row[9])},
-                    "自營商": {"buy": self._safe_int(row[12]) + self._safe_int(row[15]),
-                               "sell": self._safe_int(row[13]) + self._safe_int(row[16])},
-                }
-            return day_data
-        except Exception:
-            return {}
 
     def _notify_once(self, key: str, msg: str):
         """同一 source_key 一天只發一次 TG 通知"""
@@ -424,39 +254,6 @@ class InstitutionalMomentumStrategy:
             send_telegram_message(f"⚠️ *法人抬轎動能策略*\n{msg}")
         except Exception:
             pass
-
-    def _safe_int(self, val) -> int:
-        if isinstance(val, str):
-            val = val.replace(",", "").strip()
-        try:
-            return int(val)
-        except (ValueError, TypeError):
-            return 0
-
-    def _get_institutional_data_twse(self, stock_id: str, days: int = 10) -> pd.DataFrame:
-        """從 TWSE 快取中取出個股法人買賣資料，回傳格式與 FinMind 一致"""
-        today = date.today()
-        if not self._twse_cache_built:
-            self._build_twse_inst_cache(today, lookback_days=days + 5)
-        else:
-            self._refresh_twse_cache(today, max_days=days + 5)
-
-        rows = []
-        for date_str, stocks in self._twse_cache.items():
-            if stock_id in stocks:
-                d = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}"
-                for name, data in stocks[stock_id].items():
-                    rows.append({
-                        "date": d,
-                        "stock_id": stock_id,
-                        "name": name,
-                        "buy": data["buy"],
-                        "sell": data["sell"],
-                    })
-
-        if not rows:
-            return pd.DataFrame()
-        return pd.DataFrame(rows)
 
     # ================================================================
     # 核心篩選邏輯（使用共用核心，確保回測與實盤一致性）
@@ -486,18 +283,8 @@ class InstitutionalMomentumStrategy:
         if df_inst.empty:
             return pd.DataFrame()
 
-        # 聚合法人資料為每日 inst_buy / inst_sell（投信+外資）
-        # FinMind 回傳英文名（Foreign_Investor/Investment_Trust），TWSE 備援回傳中文名（外資/投信）
-        name_map = {
-            "Foreign_Investor": "外資", "Investment_Trust": "投信",
-            "Foreign_Dealer_Self": "外資自營商", "Dealer_self": "自營商", "Dealer_Hedging": "自營商",
-        }
-        df_inst["name"] = df_inst["name"].replace(name_map)
-        mask = df_inst["name"].isin(["投信", "外資"])
-        inst_agg = df_inst[mask].groupby("date").agg(
-            inst_buy=("buy", "sum"),
-            inst_sell=("sell", "sum"),
-        ).reset_index()
+        # 聚合法人資料為每日 inst_buy / inst_sell（投信+外資，共用資料層正規化名稱）
+        inst_agg = inst_data.aggregate_institutional(df_inst)
         inst_agg["date"] = pd.to_datetime(inst_agg["date"])
 
         # 3. 合併
@@ -520,6 +307,13 @@ class InstitutionalMomentumStrategy:
         all_ids = self._get_all_stock_ids()
         check_date = date.today()
         loser_ban = self.state.get("loser_ban", {})
+
+        # 重置資料健康度統計（本次篩選的資料來源/覆蓋率）
+        self._data_stats = {
+            "inst_source": {}, "price_source": {},
+            "stocks_with_inst": 0, "stocks_missing_inst": 0,
+            "stocks_with_price": 0, "latest_inst_date": None,
+        }
 
         fish_enabled = os.getenv("INST_MOM_FISH_FILTER", "true").lower() == "true"
         fish_days = int(os.getenv("INST_MOM_FISH_DAYS", "90"))
@@ -586,6 +380,16 @@ class InstitutionalMomentumStrategy:
 
         self._save_screening_summary(candidates, all_evaluated, fish_scores, check_date.isoformat())
 
+        # 資料降級警報：FinMind 失敗改用 TWSE 備援、或法人資料缺損過多時通知（一天一次）
+        twse_cnt = self._data_stats.get("inst_source", {}).get("twse", 0)
+        missing = self._data_stats.get("stocks_missing_inst", 0)
+        have = self._data_stats.get("stocks_with_inst", 0)
+        if twse_cnt > 0 or (have + missing > 0 and missing / (have + missing) > 0.2):
+            self._notify_once(
+                "inst_degraded",
+                f"法人資料降級：{twse_cnt} 檔來自 TWSE 備援、{missing} 檔無資料"
+                f"（FinMind 法人資料可能異常，最新日期: {self._data_stats.get('latest_inst_date')}）")
+
         if not candidates:
             return [], all_evaluated[:self.top_n]
 
@@ -618,6 +422,14 @@ class InstitutionalMomentumStrategy:
             "has_qualified": len(candidates) > 0,
             "qualified": [{"stock_id": s, "score": round(sc, 4)} for s, sc in candidates],
             "near_misses": evaluated_list[:self.top_n],
+            "data_health": {
+                "stocks_with_price": self._data_stats.get("stocks_with_price", 0),
+                "stocks_with_inst": self._data_stats.get("stocks_with_inst", 0),
+                "stocks_missing_inst": self._data_stats.get("stocks_missing_inst", 0),
+                "latest_inst_date": self._data_stats.get("latest_inst_date"),
+                "inst_source": self._data_stats.get("inst_source", {}),
+                "price_source": self._data_stats.get("price_source", {}),
+            },
         }
 
         summary_path = Path("logs/inst_momentum_screening.json")
