@@ -214,3 +214,4 @@ TMP/
 command
 package.json
 vm_logs/
+cache/inst_momentum/price/
