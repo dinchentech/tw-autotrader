@@ -196,7 +196,23 @@ class InstitutionalMomentumStrategy:
     MAX_STOCKS = int(os.getenv("STOCK_NO", "150"))  # 前 N 大股票，控制 FinMind API 呼叫量
 
     def _get_all_stock_ids(self) -> list:
-        """回傳上市普通股 stock_id 列表（前 MAX_STOCKS 檔，控制 API 配額）"""
+        """回傳上市普通股 stock_id 列表（前 MAX_STOCKS 檔，控制 API 配額）
+
+        與回測一致：優先使用市值排名快取（cache/inst_momentum/mcap_ranking.pkl），
+        缺檔時退回 stock_id 排序。
+        """
+        mcap_file = Path("cache/inst_momentum/mcap_ranking.pkl")
+        if mcap_file.exists():
+            try:
+                ranked = pickle.loads(mcap_file.read_bytes())
+                ranked = [s.strip() for s in ranked
+                          if s.strip().isdigit() and len(s.strip()) == 4]
+                if self.exclude_etf:
+                    ranked = [s for s in ranked if not s.startswith("0")]
+                if ranked:
+                    return ranked[:self.MAX_STOCKS]
+            except Exception:
+                pass
         dl = self._get_dataloader()
         df = dl.taiwan_stock_info()
         # 只保留上市普通股（type="twse" 且 stock_id 為 4 位數字）
@@ -295,13 +311,19 @@ class InstitutionalMomentumStrategy:
             return pd.DataFrame()
 
     def _get_institutional_data(self, stock_id: str, days: int = 10) -> pd.DataFrame:
-        """取得個股法人買賣資料，FinMind → TWSE 備援"""
+        """取得個股法人買賣資料，FinMind → TWSE 備援
+
+        磁碟快取有新鮮度檢查（與價格快取一致）：最新日期超過 5 天即重新下載，
+        避免法人資料永久凍結在舊日期。
+        """
         cache_file = self._inst_cache_dir / f"{stock_id}.pkl"
         if cache_file.exists():
             try:
                 df = pickle.loads(cache_file.read_bytes())
                 if isinstance(df, pd.DataFrame) and not df.empty:
-                    return df
+                    latest_date = pd.Timestamp(df["date"].max())
+                    if (date.today() - latest_date.date()).days <= 5:
+                        return df
             except Exception:
                 pass
         dl = self._get_dataloader()
@@ -359,10 +381,19 @@ class InstitutionalMomentumStrategy:
             del self._twse_cache[oldest]
 
     def _fetch_twse_day(self, dt_str: str) -> dict:
-        """呼叫 TWSE T86 API 抓單日全市場法人資料，回傳 {stock_id: {name: {buy, sell}}}"""
+        """呼叫 TWSE T86 API 抓單日全市場法人資料，回傳 {stock_id: {name: {buy, sell}}}
+
+        T86 欄位（回測與實盤共用此定義）：
+          0 證券代號 | 1 證券名稱 | 2 外陸資買進 | 3 外陸資賣出 | 4 外陸資買賣超
+          5 外資自營商買進 | 6 外資自營商賣出 | 7 外資自營商買賣超
+          8 投信買進 | 9 投信賣出 | 10 投信買賣超
+          11 自營商買賣超 | 12 自營商(自行)買進 | 13 自營商(自行)賣出
+          14 自營商(自行)買賣超 | 15 自營商(避險)買進 | 16 自營商(避險)賣出
+          17 自營商(避險)買賣超 | 18 三大法人買賣超
+        """
         try:
             url = "https://www.twse.com.tw/fund/T86"
-            params = {"response": "json", "date": dt_str}
+            params = {"response": "json", "date": dt_str, "selectType": "ALLBUT0999"}
             resp = requests.get(url, params=params, headers={
                 "User-Agent": "Mozilla/5.0",
             }, timeout=10)
@@ -372,12 +403,11 @@ class InstitutionalMomentumStrategy:
             day_data = {}
             for row in data["data"]:
                 stock_id = row[0].strip()
-                buy_foreign = self._safe_int(row[2]) + (self._safe_int(row[8]) if len(row) > 8 else 0)
-                sell_foreign = self._safe_int(row[3]) + (self._safe_int(row[9]) if len(row) > 9 else 0)
                 day_data[stock_id] = {
-                    "外資": {"buy": buy_foreign, "sell": sell_foreign},
-                    "投信": {"buy": self._safe_int(row[4]), "sell": self._safe_int(row[5])},
-                    "自營商": {"buy": self._safe_int(row[6]), "sell": self._safe_int(row[7])},
+                    "外資": {"buy": self._safe_int(row[2]), "sell": self._safe_int(row[3])},
+                    "投信": {"buy": self._safe_int(row[8]), "sell": self._safe_int(row[9])},
+                    "自營商": {"buy": self._safe_int(row[12]) + self._safe_int(row[15]),
+                               "sell": self._safe_int(row[13]) + self._safe_int(row[16])},
                 }
             return day_data
         except Exception:

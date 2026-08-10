@@ -49,6 +49,16 @@ def get_stock_capital(symbol: str) -> float:
   return ((TOTAL_CAPITAL * alloc_pct) / 100.0)
 def main():
   global TOTAL_CAPITAL
+  # ── 單實例鎖：host 與 docker 共用 logs/ 掛載（同一 inode），第二個實例直接退出 ──
+  #    檔案: logs/trader.lock；flock 隨程序結束自動釋放，無殘留問題
+  #    退出碼 0 = 正常結束，避免觸發 docker restart 循環加重
+  import fcntl
+  _lock_file = open(str(Path('logs') / 'trader.lock'), 'w')
+  try:
+    fcntl.flock(_lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+  except OSError:
+    print('⚠️ 已有另一個實盤實例在運行，本實例退出（單實例鎖 logs/trader.lock）')
+    raise SystemExit(0)
   print(f'🚀 TW AutoTrader v{APP_VERSION} (build {BUILD_DATE}) 多股多策略分流系統啟動')
   print(f'📦 版號：v{APP_VERSION}｜建置日期：{BUILD_DATE}')
   try:
