@@ -81,6 +81,7 @@ parser.add_argument("--stop-loss", type=float, default=None, help="停損幅度�
 parser.add_argument("--min-volume", type=int, default=None, help="流動性門檻（張，預設 2000）")
 parser.add_argument("--loser-ban", type=int, default=None, help="停損黑名單天數（預設 0=停用）")
 parser.add_argument("--lookback", type=int, default=None, help="創高/MA 回溯期（預設 20）")
+parser.add_argument("--trailing", type=int, default=None, help="移動停利 MA 期數（預設 10，對應 INST_MOM_TRAILING_PERIOD）")
 parser.add_argument("--max-dist-from-accum", type=float, default=None,
                     help="進場價離法人成本最大距離（預設 0.15=15%%，0=停用）")
 parser.add_argument("--no-fish-pre-filter", dest="fish_pre_filter", action="store_false",
@@ -129,6 +130,8 @@ if args.loser_ban is not None:
     LOSER_BAN_DAYS = args.loser_ban
 if args.lookback is not None:
     LOOKBACK = args.lookback
+if args.trailing is not None:
+    TRAILING_PERIOD = args.trailing
 if args.max_dist_from_accum is not None:
     MAX_DIST_FROM_ACCUM = args.max_dist_from_accum
 
