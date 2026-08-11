@@ -162,7 +162,7 @@ python backtest.py --strategy g1_strategy_1 --symbol 2330
 
 > ⚠️ **免責聲明**：候選池為全市場市值前 150 大股票（非人為挑選），已計入零股手續費（NT$1/筆）與證交稅（股票 0.3%/ETF 0.1%），惟未考慮買賣價差與市場衝擊。此為歷史回測，不代表未來績效。
 
-> ⚠️ **過去績效不代表未來獲利**。逐年檢討已整合至 `simulate_portfolio.py`。方案三：`STOCK_NO=150 python backtest_inst_momentum.py --start 2022-01-01 --end 2025-12-31 --daily --stop-loss 0.10 --fish-days 90 --fish-score 7.0 --max-dist-from-accum 0.15`。
+> ⚠️ **過去績效不代表未來獲利**。逐年檢討已整合至 `simulate_portfolio.py`。方案三（現行全天候參數）：`python backtest_inst_momentum.py --start 2022-01-01 --end 2026-08-10 --daily --lookback 10 --fish-days 120 --buy-ratio 0.08 --trailing 10`。
 
 ### 關於回測數據的嚴格性
 
