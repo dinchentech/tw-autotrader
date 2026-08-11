@@ -1,3 +1,3 @@
 """TW AutoTrader 版本（單一來源，所有模組共用）"""
 
-APP_VERSION = "3.7"
+APP_VERSION = "3.8"

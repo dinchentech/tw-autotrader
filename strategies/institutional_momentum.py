@@ -2,7 +2,7 @@
 Institutional Momentum Strategy — 法人抬轎動能策略
 
 不同於固定標的策略，此策略動態選股（由 INST_MOM_DAILY_SCREENING 控制頻率）：
-  1. 盤後篩選（流動性 > 2,000 張、法人買超 > 3%、創 20 日新高 + 站穩 MA20）
+  1. 盤後篩選（流動性 > 2,000 張、法人買超 > 8%、創 10 日新高 + 站穩 MA10（2026-08 walk-forward 全天候預設））
      每週（預設）：週五 13:31-13:45
      每日（INST_MOM_DAILY_SCREENING=true）：每個交易日 13:31-13:45
   2. 依投信+外資買超佔比排序，選前 N 名（預設 2 檔）
@@ -55,8 +55,8 @@ class InstitutionalMomentumStrategy:
 
         # 預設參數（可從 .env 覆蓋）
         self.min_volume = int(os.getenv("INST_MOM_MIN_VOLUME", "2000"))         # 張
-        self.buy_ratio = float(os.getenv("INST_MOM_BUY_RATIO", "0.03"))         # 3%
-        self.lookback = int(os.getenv("INST_MOM_LOOKBACK", "20"))               # 天
+        self.buy_ratio = float(os.getenv("INST_MOM_BUY_RATIO", "0.08"))         # 8%（2026-08 walk-forward 全天候預設）
+        self.lookback = int(os.getenv("INST_MOM_LOOKBACK", "10"))               # 天（2026-08 walk-forward 全天候預設）
         self.stop_loss = float(os.getenv("INST_MOM_STOP_LOSS", "0.10"))         # -10%
         self.trailing_period = int(os.getenv("INST_MOM_TRAILING_PERIOD", "10")) # MA10
         self.exclude_etf = os.getenv("INST_MOM_EXCLUDE_ETF", "true").lower() == "true"  # 預設排除 ETF
@@ -267,7 +267,7 @@ class InstitutionalMomentumStrategy:
         #   ⚠️  fish 評分需要至少 30 個交易日（~42 日曆天）熱身，
         #       且魚過濾回溯視窗為 FISH_DAYS 天 → 價格資料必須涵蓋 fish_days+60 天，
         #       否則實盤魚視窗不完整（與回測不一致，2026-08 發現）
-        fish_days = int(os.getenv("INST_MOM_FISH_DAYS", "90"))
+        fish_days = int(os.getenv("INST_MOM_FISH_DAYS", "120"))
         min_days = max(self.lookback + 10, fish_days + 60, 60)
         df_price = self._get_price_data(stock_id, days=min_days)
         if df_price.empty or len(df_price) < self.lookback:
@@ -306,6 +306,13 @@ class InstitutionalMomentumStrategy:
             near_misses:  [(stock_id, score), ...] — 未完全通過但最高分的前 N 名
                           （只在 qualified 為空時有值，讓使用者知道篩選有正常執行）
         """
+        # 同步 instance 參數到共用核心模組（乾跑/直呼 get_candidates 時與 run() 一致）
+        inst_core.MIN_VOLUME_SHARES = self.min_volume
+        inst_core.BUY_RATIO_THRESHOLD = self.buy_ratio
+        inst_core.LOOKBACK = self.lookback
+        inst_core.STOP_LOSS = self.stop_loss
+        inst_core.TRAILING_PERIOD = self.trailing_period
+
         all_ids = self._get_all_stock_ids()
         check_date = date.today()
         loser_ban = self.state.get("loser_ban", {})
@@ -318,7 +325,7 @@ class InstitutionalMomentumStrategy:
         }
 
         fish_enabled = os.getenv("INST_MOM_FISH_FILTER", "true").lower() == "true"
-        fish_days = int(os.getenv("INST_MOM_FISH_DAYS", "90"))
+        fish_days = int(os.getenv("INST_MOM_FISH_DAYS", "120"))
         fish_min = float(os.getenv("INST_MOM_FISH_MIN_SCORE", "7.0"))
 
         all_data = {}

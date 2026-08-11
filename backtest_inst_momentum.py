@@ -110,8 +110,8 @@ PRICE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 INITIAL_CAPITAL = float(os.getenv("INITIAL_CAPITAL", os.getenv("TOTAL_CAPITAL", 500000)))
 TOP_N = 3
 MIN_VOLUME_SHARES = 2000        # 張
-BUY_RATIO_THRESHOLD = float(os.getenv("INST_MOM_BUY_RATIO", "0.03"))
-LOOKBACK = 20
+BUY_RATIO_THRESHOLD = float(os.getenv("INST_MOM_BUY_RATIO", "0.08"))
+LOOKBACK = int(os.getenv("INST_MOM_LOOKBACK", "10"))
 STOP_LOSS = 0.10
 TRAILING_PERIOD = 10
 LOSER_BAN_DAYS = int(os.getenv("INST_MOM_LOSER_BAN_DAYS", "0"))
@@ -148,7 +148,7 @@ inst_core.SELL_COST = SELL_COST
 
 # ─── 法人低吃過濾參數 ────────────────────────────────
 FISH_PRE_FILTER = args.fish_pre_filter
-FISH_DAYS = args.fish_days or 90
+FISH_DAYS = args.fish_days or 120
 FISH_MIN_SCORE = args.fish_score if args.fish_score is not None else 7.0
 
 # 價格下載緩衝：魚過濾需回溯 FISH_DAYS 天 + 分數熱身(~30天)，
