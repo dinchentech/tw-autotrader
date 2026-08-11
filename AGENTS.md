@@ -57,6 +57,11 @@
 - 跨專案可複用的經驗，待接上知識庫後再透過畢業機制沉澱（provider 暫緩對接——見上方初始化設定）。
 - **Bug 修復三步曲（硬規則）**：修 bug 前先寫會失敗的回歸測試 → 修復 → 當下在 `cairn/LOG.md` 記一條並更新對應知識專題。未寫測試、未記 cairn 的修復視為未完成。
 
+## 快取使用規則（硬規則）
+
+- 回測與實盤的快取一律經 `core/cache_io.py` 版本化讀寫；**可以共用的就共用、格式統一**，禁止各策略自建一套。共用基準：`cache/inst_momentum/price/`（法人動能三腳本共用股價）、`cache/inst_momentum/{year}/`（TWSE 法人/TAIEX）。
+- 新增快取前先查共用地圖（`cairn/backtest-data-pitfalls.md`）；股價語義不同（還原價 vs 原始價）不得合併。
+
 ---
 
 # TW AutoTrader — Agent Guide

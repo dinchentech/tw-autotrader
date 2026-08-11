@@ -37,6 +37,19 @@ authoring_mode: ai_generated
 - ~~`backtest_inst_bottomfish.py`、`backtest_july.py`、`scripts/*.py` 各自的 inline pickle 快取~~ — 2026-08-11 已全部版本化，統一走 `core/cache_io.py`。
 - 例外（未處理）：`plans/` 是獨立嵌套 git repo，其 `backtest_inst_momentum.py` 屬另一版本控制範圍；`mcap_ranking.pkl` 在 repo 內無寫入者（由外部/加密程式產生），讀取端一律用 `load_cache_or_raw` 遷移式讀取相容舊格式。
 
+## 快取共用地圖（新快取前先查這裡）
+
+| 快取 | 共用者 | 語義 | 寫入者 |
+|---|---|---|---|
+| `cache/inst_momentum/price/{sid}.pkl` | 法人動能三腳本（momentum/july/bottomfish） | 原始價（FinMind 為主，yfinance `auto_adjust=False`） | inst_data / july / bottomfish |
+| `cache/inst_momentum/{year}/twse_inst_*.pkl`、`taiex_ma200_*.pkl` | 同上 | TWSE 法人逐日 / TAIEX MA200 | inst_data / july / bottomfish |
+| `cache/inst_momentum/mcap_ranking.pkl` | 法人動能 + 全輪替選股工具 | 市值排名（寫入者在外部/加密程式） | 外部 |
+| `cache/selector_prices/{sid}.pkl` | 僅 stock_selector_grid（全輪替） | **還原價**（`auto_adjust=True`）——與 inst_momentum/price 語義不同，禁止合併 | stock_selector_grid |
+| `cache/inst_momentum/historical_shares.pkl` | 僅 build_historical_shares / 回測重現 | 歷史股本資料庫（累積型，遷移式讀取） | build_historical_shares |
+
+**格式統一原則（2026-08-11 使用者指令）**：可共用的快取一律共用、格式統一，禁止不同策略各建一套。
+已知待統一：`cache/inst_momentum/price/` 內 july/bottomfish 寫入含 `ma20/ma10[/ma60]` 欄位、inst_data 寫入不含——同一目錄格式不一致，應統一以 `core/inst_data.py` 為規範來源（見 ROADMAP）。
+
 ## 陷阱：偵測復發檢查清單
 
 1. **回測數字突然劇變 → 先懷疑快取**，不要先懷疑策略邏輯。
