@@ -12,6 +12,10 @@ inst_data.py — 法人動能策略共用資料層（回測與實盤唯一資料
   - TwseDayCache                            TWSE 逐日快取（實盤備援避免逐股逐日重複呼叫）
   - aggregate_institutional                 投信+外資每日加總（core 格式）
   - get_all_stock_ids                       市值前 N 選股池（與回測一致）
+
+快取格式一律經 _dump_cache/_load_cache 版本化（CACHE_SCHEMA_VERSION）。
+快取資料語義改變（欄位/價格調整/正規化方式）時必須遞增版本，否則舊快取會被靜默載入
+——這是 2026-08 回測數字無法重現事件（價格快取混入 yfinance 還原價）的根因。
 """
 import os
 import pickle
@@ -19,6 +23,8 @@ import requests
 import pandas as pd
 from datetime import date, timedelta
 from pathlib import Path
+
+from core.cache_io import CACHE_SCHEMA_VERSION, load_cache as _load_cache, dump_cache as _dump_cache
 
 FINMIND_TOKEN_KEY = "FINMIND_API_TOKEN"
 
@@ -85,8 +91,10 @@ def fetch_twse_inst_bulk(trading_dates, cache_path=None, progress_every=50) -> d
     trading_dates: date/datetime 集合。
     """
     if cache_path is not None and cache_path.exists():
-        print(f"   載入 TWSE 法人資料快取（{Path(cache_path).name}）...")
-        return pickle.loads(Path(cache_path).read_bytes())
+        data, _meta = _load_cache(cache_path)
+        if data is not None:
+            print(f"   載入 TWSE 法人資料快取（{Path(cache_path).name}）...")
+            return data
 
     inst_data = {}
     dates = sorted(trading_dates)
@@ -108,7 +116,7 @@ def fetch_twse_inst_bulk(trading_dates, cache_path=None, progress_every=50) -> d
             print(f"   TWSE 下載進度: {i+1}/{len(dates)}")
 
     if cache_path is not None:
-        Path(cache_path).write_bytes(pickle.dumps(inst_data))
+        _dump_cache(cache_path, inst_data, meta={"source": "TWSE_T86", "dates": len(inst_data)})
         print(f"✅ TWSE 法人資料下載完成: {len(inst_data)} 交易日")
     return inst_data
 
@@ -243,16 +251,13 @@ def get_price_data(dl, stock_id: str, start, end, cache_path=None,
     ref_ts = pd.Timestamp(ref_date)
 
     if cache_path is not None and Path(cache_path).exists():
-        try:
-            df = pickle.loads(Path(cache_path).read_bytes())
-            if isinstance(df, pd.DataFrame) and not df.empty:
-                latest = pd.Timestamp(df["date"].max())
-                history_ok = (min_start is None
-                              or pd.Timestamp(df["date"].min()) <= pd.Timestamp(min_start))
-                if history_ok and (ref_ts - latest).days <= max_stale_days:
-                    return _norm_price(df), "cache"
-        except Exception:
-            pass
+        df, _meta = _load_cache(cache_path)
+        if df is not None and isinstance(df, pd.DataFrame) and not df.empty:
+            latest = pd.Timestamp(df["date"].max())
+            history_ok = (min_start is None
+                          or pd.Timestamp(df["date"].min()) <= pd.Timestamp(min_start))
+            if history_ok and (ref_ts - latest).days <= max_stale_days:
+                return _norm_price(df), "cache"
 
     start_s, end_s = str(start)[:10], str(end)[:10]
     fetchers = {
@@ -268,7 +273,9 @@ def get_price_data(dl, stock_id: str, start, end, cache_path=None,
         if df is not None and not df.empty:
             if cache_path is not None:
                 try:
-                    Path(cache_path).write_bytes(pickle.dumps(df))
+                    _dump_cache(cache_path, df,
+                                meta={"stock_id": stock_id, "source": src,
+                                      "start": start_s, "end": end_s})
                 except Exception:
                     pass
             return df, src
@@ -308,14 +315,11 @@ def get_institutional_data(dl, stock_id: str, start, end, cache_path=None,
     ref_ts = pd.Timestamp(ref_date)
 
     if cache_path is not None and Path(cache_path).exists():
-        try:
-            df = pickle.loads(Path(cache_path).read_bytes())
-            if isinstance(df, pd.DataFrame) and not df.empty:
-                latest = pd.Timestamp(df["date"].max())
-                if (ref_ts - latest).days <= max_stale_days:
-                    return _norm_inst(df), "cache", latest.date()
-        except Exception:
-            pass
+        df, _meta = _load_cache(cache_path)
+        if df is not None and isinstance(df, pd.DataFrame) and not df.empty:
+            latest = pd.Timestamp(df["date"].max())
+            if (ref_ts - latest).days <= max_stale_days:
+                return _norm_inst(df), "cache", latest.date()
 
     for src in sources:
         if src == "finmind":
@@ -329,7 +333,9 @@ def get_institutional_data(dl, stock_id: str, start, end, cache_path=None,
                     df = _norm_inst(df)
                     if cache_path is not None:
                         try:
-                            Path(cache_path).write_bytes(pickle.dumps(df))
+                            _dump_cache(cache_path, df,
+                                        meta={"stock_id": stock_id, "source": "finmind",
+                                              "start": str(start)[:10], "end": str(end)[:10]})
                         except Exception:
                             pass
                     return df, "finmind", pd.Timestamp(df["date"].max()).date()

@@ -16,7 +16,7 @@ Usage:
   python scripts/selector_keep.py --exit-pct 2.0      # 2 倍才賣
   python scripts/selector_keep.py --top-n 3            # 只選 3 檔
 """
-import argparse, json, os, sys, time, pickle
+import argparse, json, os, sys, time
 from collections import defaultdict
 import numpy as np
 import pandas as pd
@@ -24,11 +24,14 @@ import yfinance as yf
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from core.cache_io import load_cache_or_raw
+
 # ── 候選池（市值排名）──
 CAP_RANKING = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "cache", "inst_momentum", "mcap_ranking.pkl")
 CANDIDATE_POOL = None
 if os.path.exists(CAP_RANKING):
-    ranked = pickle.loads(open(CAP_RANKING, "rb").read())
+    ranked, _ = load_cache_or_raw(CAP_RANKING)
+    ranked = ranked or []
     CANDIDATE_POOL = [s for s in ranked if s.isdigit() and len(s) == 4][:50]
 if not CANDIDATE_POOL:
     CANDIDATE_POOL = ["2330","2454","2317","2382","2376","2345","2308","2303","2327",

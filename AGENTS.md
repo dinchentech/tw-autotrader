@@ -55,6 +55,7 @@
 
 - 每有實質進展，就在 `cairn/LOG.md` 最上方加一條（摘要 + 指標）；讓結論沉澱到 `cairn/` 知識專題文件。
 - 跨專案可複用的經驗，待接上知識庫後再透過畢業機制沉澱（provider 暫緩對接——見上方初始化設定）。
+- **Bug 修復三步曲（硬規則）**：修 bug 前先寫會失敗的回歸測試 → 修復 → 當下在 `cairn/LOG.md` 記一條並更新對應知識專題。未寫測試、未記 cairn 的修復視為未完成。
 
 ---
 
@@ -149,9 +150,10 @@ python -m unittest test.test_strategies
 
 1. **Missing deps in requirements.txt**: `requirements.txt` is missing `python-dotenv`, `yfinance`, and `tqdm` (FinMind needs it). Always install extras after `pip install -r requirements.txt`.
 2. **`min_periods=1` in rolling windows**: Strategy functions use `min_periods=1` which produces values from the first row. Be aware when comparing against other implementations.
-3. **`.omo/` is gitignored**: Boulder/plan tracking data stays local.
+3. **`.omo/` 是 git 版控的一部分**: Boulder/plan tracking data 已進 git（2026-08-11 起），跨機器可同步；機密（`.env`、`backups/`、`esun_sdk/*.p12`）仍被 .gitignore 排除。
 4. **Modular strategy engine** (`core/strategy_engine.py`) is a thin wrapper — used only by `backtest.py`. The multi-trader instantiates strategy functions directly.
 5. **E.Sun keyring in Docker**: When running `BROKER=esun` in Docker, set `PYTHON_KEYRING_BACKEND=keyrings.cryptfile.cryptfile.CryptFileKeyring` and `KEYRING_CRYPTFILE_PASSWORD` in the container environment. If passwords aren't in keyring, login will prompt interactively and fail.
+6. **回測數字突然劇變 → 先懷疑快取**: 檢查 cache_path 檔的 `schema_version` 與來源標籤，確認價格語義（原始價 vs 還原價）符合預期；`core/inst_data.py` 的 `CACHE_SCHEMA_VERSION` 在快取語義改變時必須遞增，否則舊快取會被靜默載入。詳見 `cairn/backtest-data-pitfalls.md`。
 
 ## Development workflow
 

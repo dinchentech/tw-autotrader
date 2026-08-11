@@ -189,8 +189,8 @@ create_tw_autotrader.py
 .idea/tw-autotrader.iml
 .idea/vcs.xml
 .idea/inspectionProfiles/profiles_settings.xml
-/.omo
-/.omo
+# 回測/選股資料快取（可重建，不進版控；快取格式由 core/cache_io.py 版本化）
+cache/
 # E.Sun SDK: 憑證(p12)、WHL 套件、以及環境設定檔（.example 是範本，.ini 是實際設定）
 esun_sdk/*.p12
 esun_sdk/*.whl

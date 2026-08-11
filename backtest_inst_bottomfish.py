@@ -20,13 +20,15 @@ backtest_inst_bottomfish.py — 法人低接策略回測 (Group 2)
   python backtest_inst_bottomfish.py --score 4   # 放寬分數門檻
 """
 
-import os, sys, argparse, pickle, math, time
+import os, sys, argparse, math, time
 import requests
 import pandas as pd
 import numpy as np
 from datetime import datetime, date, timedelta
 from pathlib import Path
 from collections import defaultdict
+
+from core.cache_io import load_cache, dump_cache, load_cache_or_raw
 
 # ─── 參數 ─────────────────────────────────────────────────
 parser = argparse.ArgumentParser(description="法人低接策略回測")
@@ -70,29 +72,32 @@ def finmind_login():
 def get_all_stock_ids(dl) -> list:
     MCAP_RANKING = Path("cache/inst_momentum/mcap_ranking.pkl")
     if MCAP_RANKING.exists():
-        ranked = pickle.loads(MCAP_RANKING.read_bytes())
+        ranked, _ = load_cache_or_raw(MCAP_RANKING)
+        ranked = ranked or []
         ranked = [s for s in ranked if s.isdigit() and len(s) == 4]
         return ranked[:TOP_N_STOCKS]
     cache_file = PRICE_CACHE_DIR / "stock_ids.pkl"
     if cache_file.exists():
-        ids = pickle.loads(cache_file.read_bytes())
-        return ids[:TOP_N_STOCKS]
+        ids, _ = load_cache(cache_file)
+        if ids is not None:
+            return ids[:TOP_N_STOCKS]
     df = dl.taiwan_stock_info()
     ids = sorted(set(s.strip() for s in df["stock_id"]
                       if s.strip().isdigit() and len(s.strip()) == 4))
     ids = ids[:TOP_N_STOCKS]
-    cache_file.write_bytes(pickle.dumps(ids))
+    dump_cache(cache_file, ids, meta={"source": "finmind_taiwan_stock_info"})
     return ids
 
 def download_price_data(dl, stock_id: str) -> pd.DataFrame:
     cache_file = PRICE_CACHE_DIR / f"{stock_id}.pkl"
+    df = None
     if cache_file.exists():
-        df = pickle.loads(cache_file.read_bytes())
-        if not df.empty and df["date"].max() >= pd.Timestamp(END_DATE):
+        df, _ = load_cache(cache_file)
+        if df is not None and not df.empty and df["date"].max() >= pd.Timestamp(END_DATE):
             return df
-        last_date = df["date"].max().strftime("%Y-%m-%d") if not df.empty else None
-    else:
-        last_date = None
+    last_date = None
+    if df is not None and not df.empty:
+        last_date = df["date"].max().strftime("%Y-%m-%d")
     start_dt = datetime.strptime(START_DATE, "%Y-%m-%d") - timedelta(days=90)
     if last_date and last_date > start_dt.strftime("%Y-%m-%d"):
         start_dt = datetime.strptime(last_date, "%Y-%m-%d") + timedelta(days=1)
@@ -123,8 +128,8 @@ def download_price_data(dl, stock_id: str) -> pd.DataFrame:
         except Exception:
             return pd.DataFrame()
     if last_date:
-        df_old = pickle.loads(cache_file.read_bytes())
-        if not df_old.empty:
+        df_old, _ = load_cache(cache_file)
+        if df_old is not None and not df_old.empty:
             df_old = df_old[df_old["date"] < df_new["date"].min()]
             df_new = pd.concat([df_old, df_new], ignore_index=True).drop_duplicates(
                 subset=["date"], keep="last"
@@ -132,15 +137,17 @@ def download_price_data(dl, stock_id: str) -> pd.DataFrame:
     df_new["ma20"] = df_new["close"].rolling(20).mean()
     df_new["ma10"] = df_new["close"].rolling(LOOKBACK).mean()
     df_new["ma60"] = df_new["close"].rolling(60).mean()
-    cache_file.write_bytes(pickle.dumps(df_new))
+    dump_cache(cache_file, df_new, meta={"stock_id": stock_id, "source": "finmind/yfinance"})
     return df_new
 
 def fetch_twse_inst_data(trading_dates: set) -> dict:
     cache_key = f"twse_inst_{START_DATE}_{END_DATE}.pkl"
     cache_file = CACHE_DIR / cache_key
     if cache_file.exists():
-        print(f"   載入 TWSE 法人資料快取 ...")
-        return pickle.loads(cache_file.read_bytes())
+        data, _ = load_cache(cache_file)
+        if data is not None:
+            print(f"   載入 TWSE 法人資料快取 ...")
+            return data
     dates = sorted(d for d in trading_dates
                    if pd.Timestamp(START_DATE).date() <= d <= pd.Timestamp(END_DATE).date())
     inst_data = {}
@@ -170,7 +177,7 @@ def fetch_twse_inst_data(trading_dates: set) -> dict:
         inst_data[d.isoformat()] = day_data
         if (i + 1) % 50 == 0:
             print(f"   TWSE 下載進度: {i+1}/{len(dates)}")
-    cache_file.write_bytes(pickle.dumps(inst_data))
+    dump_cache(cache_file, inst_data, meta={"source": "TWSE_T86", "dates": len(inst_data)})
     return inst_data
 
 def merge_twse_inst(all_data: dict, twse_data: dict) -> dict:
@@ -372,7 +379,9 @@ def fetch_taiex_ma200() -> dict:
     cache_key = f"taiex_ma200_{START_DATE}_{END_DATE}.pkl"
     cache_file = CACHE_DIR / cache_key
     if cache_file.exists():
-        return pickle.loads(cache_file.read_bytes())
+        data, _ = load_cache(cache_file)
+        if data is not None:
+            return data
 
     all_rows = []
     seen = set()
@@ -410,7 +419,7 @@ def fetch_taiex_ma200() -> dict:
         else:
             result[d.isoformat()] = False
 
-    cache_file.write_bytes(pickle.dumps(result))
+    dump_cache(cache_file, result, meta={"source": "TWSE_FMTQIK"})
     print(f"  ✅ TAIEX MA200 快取: {sum(result.values())}/{len(result)} 天在年線上")
     return result
 

@@ -19,7 +19,6 @@ import argparse
 import itertools
 import json
 import os
-import pickle
 import sys
 import time
 from collections import defaultdict
@@ -31,6 +30,8 @@ import yfinance as yf
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from core.cache_io import load_cache, dump_cache, load_cache_or_raw
+
 # ── 候選股票池（市值前 N 大） ─────────────────────────
 STOCK_NO = int(os.getenv("ROTATE_STOCK_NO", os.getenv("STOCK_NO", "50")))  # 全輪替候選池（優先 ROTATE_STOCK_NO，fallback STOCK_NO）
 ROTATE_MODE = int(os.getenv("ROTATE_MODE", "5"))  # 0=off 1=1/4/7/10 2=2/5/8/11 3=3/6/9/12 4=1+2 5=2+3
@@ -38,7 +39,8 @@ MIN_DAILY_AMOUNT = float(os.getenv("MIN_DAILY_AMOUNT", "0"))  # 日均成交額�
 CANDIDATE_POOL = []
 CAP_RANKING = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "cache", "inst_momentum", "mcap_ranking.pkl")
 if os.path.exists(CAP_RANKING):
-    ranked = pickle.loads(open(CAP_RANKING, "rb").read())
+    ranked, _ = load_cache_or_raw(CAP_RANKING)
+    ranked = ranked or []
     CANDIDATE_POOL = [s for s in ranked if s.isdigit() and len(s) == 4][:STOCK_NO]
 if not CANDIDATE_POOL:
     # 無排名檔時的 fallback
@@ -75,13 +77,10 @@ def load_stock(symbol: str) -> pd.DataFrame:
     # 磁碟快取：先讀 pkl，避免每次重新下載
     pkl_path = os.path.join(_PRICE_CACHE_DIR, f"{symbol}.pkl")
     if os.path.exists(pkl_path):
-        try:
-            df = pickle.loads(open(pkl_path, "rb").read())
-            if not df.empty:
-                _cache[symbol] = df
-                return df
-        except Exception:
-            pass
+        df, _ = load_cache(pkl_path)
+        if df is not None and not df.empty:
+            _cache[symbol] = df
+            return df
     yf_sym = f"{symbol}.TW" if symbol.isdigit() else f"{symbol}.TW"
     if LOOKBACK_DAYS > 0:
         from datetime import date as _date, timedelta as _td
@@ -98,8 +97,7 @@ def load_stock(symbol: str) -> pd.DataFrame:
     # 寫入磁碟快取
     try:
         os.makedirs(_PRICE_CACHE_DIR, exist_ok=True)
-        with open(pkl_path, "wb") as f:
-            pickle.dump(df, f)
+        dump_cache(pkl_path, df, meta={"symbol": symbol, "source": "yfinance"})
     except Exception:
         pass
     _cache[symbol] = df

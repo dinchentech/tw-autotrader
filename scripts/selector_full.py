@@ -27,12 +27,14 @@ from strategies.bollinger import bollinger_reverse_strategy
 from strategies.vwap_deviation import vwap_deviation_strategy
 from strategies.keep_wait import keep_wait_strategy
 
+from core.cache_io import load_cache_or_raw
+
 # ── 候選池（從市值排名快取動態載入）──
 try:
-    import pickle
     CAP_RANKING = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "cache", "inst_momentum", "mcap_ranking.pkl")
     if os.path.exists(CAP_RANKING):
-        ranked = pickle.loads(open(CAP_RANKING, "rb").read())
+        ranked, _ = load_cache_or_raw(CAP_RANKING)
+        ranked = ranked or []
         CANDIDATE_POOL = [s for s in ranked if s.isdigit() and len(s) == 4][:50]
     else:
         CANDIDATE_POOL = None

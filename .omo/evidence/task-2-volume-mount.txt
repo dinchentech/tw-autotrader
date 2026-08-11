@@ -1,0 +1,3 @@
+    volumes:
+      - ./logs:/app/logs
+      - ./.env:/app/.env:rw

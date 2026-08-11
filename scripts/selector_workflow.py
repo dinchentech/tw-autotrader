@@ -12,7 +12,7 @@ Usage:
   python scripts/selector_workflow.py
   python scripts/selector_workflow.py --compare  (全部工作流程逐一執行並比較)
 """
-import os, sys, time, itertools, json, pickle
+import os, sys, time, itertools, json
 from datetime import datetime
 import numpy as np
 import pandas as pd
@@ -20,12 +20,15 @@ import yfinance as yf
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from core.cache_io import load_cache_or_raw
+
 # ── 候選股票池（市值前 150 大） ─────────────────────────
 STOCK_NO = int(os.getenv("STOCK_NO", "50"))
 CANDIDATE_POOL = []
 CAP_RANKING = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "cache", "inst_momentum", "mcap_ranking.pkl")
 if os.path.exists(CAP_RANKING):
-    ranked = pickle.loads(open(CAP_RANKING, "rb").read())
+    ranked, _ = load_cache_or_raw(CAP_RANKING)
+    ranked = ranked or []
     CANDIDATE_POOL = [s for s in ranked if s.isdigit() and len(s) == 4][:STOCK_NO]
 if not CANDIDATE_POOL:
     CANDIDATE_POOL = [str(i) for i in range(1101, 9999)]
