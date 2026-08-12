@@ -140,5 +140,34 @@ class TestQuarterlyPool(unittest.TestCase):
         self.assertEqual(pools["2018-05"], ["2330"])
 
 
+class TestRegimeState(unittest.TestCase):
+    """牛熊適應：0050 年線斜率切換（參照全輪替 auto_momentum）"""
+
+    def test_bull_regime(self):
+        """長多頭(站上MA200 且斜率向上)→ 多數日期為牛市"""
+        dates = pd.date_range("2020-01-01", periods=400, freq="B")
+        closes = [10000 + i * 30 for i in range(400)]  # 穩定上升
+        df = pd.DataFrame({"date": dates, "close": closes})
+        state = ic.build_regime_state(df, ma_days=200, slope_days=40)
+        last = state.iloc[-1]
+        self.assertTrue(bool(last))
+        self.assertGreater(state.tail(100).sum(), 90)  # 近百日幾乎全牛市
+
+    def test_bear_regime(self):
+        """長空頭(跌破MA200 且斜率向下)→ 牛市判定為 False"""
+        dates = pd.date_range("2021-01-01", periods=400, freq="B")
+        closes = [20000 - i * 20 for i in range(400)]  # 穩定下跌
+        df = pd.DataFrame({"date": dates, "close": closes})
+        state = ic.build_regime_state(df, ma_days=200, slope_days=40)
+        self.assertFalse(bool(state.iloc[-1]))
+
+    def test_insufficient_data_defaults_bull(self):
+        """資料不足 MA 熱身 → 預設牛市(不限制進場)"""
+        dates = pd.date_range("2022-01-01", periods=100, freq="B")
+        df = pd.DataFrame({"date": dates, "close": [10000] * 100})
+        state = ic.build_regime_state(df, ma_days=200, slope_days=40)
+        self.assertTrue(bool(state.iloc[-1]))
+
+
 if __name__ == "__main__":
     unittest.main()

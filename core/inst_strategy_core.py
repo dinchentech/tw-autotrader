@@ -25,6 +25,11 @@ MAX_DIST_FROM_ACCUM = float(os.getenv("INST_MOM_MAX_DIST_FROM_ACCUM", "0.15"))
 # 真拉抬特徵：已離開成本區、法人連續買超、放量攻擊
 MIN_BREAKOUT_FROM_ACCUM = float(os.getenv("INST_MOM_MIN_BREAKOUT", "0.02"))   # 進場時需已離開法人成本 ≥2%（0=停用）
 BUY_STREAK_DAYS = int(os.getenv("INST_MOM_BUY_STREAK_DAYS", "1"))             # 法人淨買超天數（進場日需為買超日，1 日已足夠；0=停用）
+# ── 牛熊適應（參照全輪替 auto_momentum，2026-08-11 導入）──
+# 依 0050 年線(MA200)斜率切換進場參數：牛市激進(多進場吃波段)、熊市保守(高門檻少進場)
+REGIME_SWITCH = os.getenv("INST_MOM_REGIME_SWITCH", "0") == "1"  # 預設關閉：借整窗最佳的參數雙窗驗證未達標，需專屬調參後再啟用
+REGIME_BULL_FISH_DAYS = int(os.getenv("INST_MOM_REGIME_BULL_FISH_DAYS", "90"))
+REGIME_BULL_BUY_RATIO = float(os.getenv("INST_MOM_REGIME_BULL_BUY_RATIO", "0.05"))
 BUY_COST = 0.001425
 SELL_COST = 0.004425
 PROFIT_ROLL_MONTHS = int(os.getenv("PROFIT_ROLL_MONTHS", "0"))
@@ -185,6 +190,26 @@ def build_quarterly_pool(historical: dict, all_data: dict, top_n: int = 150) -> 
                 mcap[sid] = shares * px
         pools[qp] = sorted(mcap, key=mcap.get, reverse=True)[:top_n]
     return pools
+
+
+# ─── 牛熊適應（0050 年線斜率，參照全輪替 auto_momentum）────
+
+def build_regime_state(market_df, ma_days: int = 200, slope_days: int = 40,
+                       slope_threshold: float = 0.002) -> pd.Series:
+    """回傳以日期為索引的牛市判定 Series（True=牛市，可進場）。
+
+    牛市定義：收盤 > MA200 且 MA200 斜率 > threshold（與全輪替 auto_momentum 一致）。
+    MA 熱身期（資料不足）回填 True（不限制進場）。
+    """
+    df = market_df.copy()
+    df["date"] = pd.to_datetime(df["date"])
+    df = df.sort_values("date").set_index("date")
+    ma = df["close"].rolling(ma_days).mean()
+    ma_before = ma.shift(slope_days)
+    slope = (ma - ma_before) / ma_before
+    bull = (df["close"] > ma) & (slope > slope_threshold)
+    warmup = ma.isna() | slope.isna()
+    return bull.where(~warmup, True)
 
 
 # ─── 動能進場檢查 ──────────────────────────────────

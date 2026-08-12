@@ -296,6 +296,22 @@ class InstitutionalMomentumStrategy:
 
         return df
 
+    def _detect_bull_regime(self) -> bool:
+        """0050 年線斜率牛市判定（與回測 build_regime_state 一致）；失敗預設牛市（不限制）。"""
+        try:
+            dl = self._get_dataloader()
+            end = date.today()
+            df, _src = inst_data.get_price_data(
+                dl, "0050", end - timedelta(days=420), end,
+                cache_path=self._price_cache_dir / "0050.pkl",
+                max_stale_days=5, sources=("finmind", "twse"))
+            if df.empty:
+                return True
+            state = inst_core.build_regime_state(df)
+            return bool(state.iloc[-1])
+        except Exception:
+            return True
+
     def get_candidates(self) -> tuple:
         """
         篩選出符合條件的候選股票，依法人買超佔比排序。
@@ -327,6 +343,14 @@ class InstitutionalMomentumStrategy:
         fish_enabled = os.getenv("INST_MOM_FISH_FILTER", "true").lower() == "true"
         fish_days = int(os.getenv("INST_MOM_FISH_DAYS", "120"))
         fish_min = float(os.getenv("INST_MOM_FISH_MIN_SCORE", "7.0"))
+
+        # 牛熊適應：0050 年線斜率切換進場參數（與回測一致）
+        if inst_core.REGIME_SWITCH:
+            if self._detect_bull_regime():
+                fish_days = inst_core.REGIME_BULL_FISH_DAYS
+                inst_core.BUY_RATIO_THRESHOLD = inst_core.REGIME_BULL_BUY_RATIO
+            else:
+                inst_core.BUY_RATIO_THRESHOLD = self.buy_ratio
 
         all_data = {}
         for stock_id in all_ids:
