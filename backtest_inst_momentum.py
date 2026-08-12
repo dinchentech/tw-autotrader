@@ -128,7 +128,6 @@ INITIAL_CAPITAL = float(os.getenv("INITIAL_CAPITAL", os.getenv("TOTAL_CAPITAL", 
 TOP_N = 3
 MIN_VOLUME_SHARES = 2000        # 張
 BUY_RATIO_THRESHOLD = float(os.getenv("INST_MOM_BUY_RATIO", "0.08"))
-BUY_RATIO_BASE = BUY_RATIO_THRESHOLD  # 熊市/盤整基準值（牛市切換用 INST_MOM_REGIME_BULL_BUY_RATIO）
 LOOKBACK = int(os.getenv("INST_MOM_LOOKBACK", "10"))
 STOP_LOSS = 0.10
 TRAILING_PERIOD = 10
@@ -309,8 +308,7 @@ def simulate(all_data: dict, candidates: dict = None,
              profit_roll_percentage: float = 1.0,
              all_dates: list = None,
              price_cache_prebuilt: dict = None,
-             quarterly_pool: dict = None,
-             regime_state=None) -> dict:
+             quarterly_pool: dict = None) -> dict:
     """
     模擬交易。
 
@@ -453,9 +451,6 @@ def simulate(all_data: dict, candidates: dict = None,
         # ── 低吃模式：每日檢查觀察池動能訊號 ──
         if fish_mode and current_qualified:
             pool = pool_for_month(quarterly_pool, d)
-            if regime_state is not None:
-                bull = bool(regime_state.asof(pd.Timestamp(d)))
-                inst_core.BUY_RATIO_THRESHOLD = inst_core.REGIME_BULL_BUY_RATIO if bull else BUY_RATIO_BASE
             for sid in sorted(current_qualified):
                 if pool is not None and sid not in pool:
                     continue
@@ -979,19 +974,6 @@ def main():
 
     print(f"✅ 價格資料: {len(all_data)} 檔股票有交易資料")
 
-    # 牛熊適應：0050 年線斜率狀態（參照全輪替 auto_momentum）
-    regime_state = None
-    if inst_core.REGIME_SWITCH:
-        mkt_start = (pd.Timestamp(START_DATE) - timedelta(days=400)).strftime("%Y-%m-%d")
-        mkt_df, _mkt_src = _data_get_price_data(
-            dl, "0050", mkt_start, END_DATE,
-            cache_path=PRICE_CACHE_DIR / "0050.pkl",
-            max_stale_days=7, ref_date=pd.Timestamp(END_DATE).date(),
-            sources=("finmind", "yfinance"), min_start=mkt_start)
-        if not mkt_df.empty:
-            regime_state = inst_core.build_regime_state(mkt_df)
-            print(f"✅ 牛熊適應: 0050 年線斜率狀態已建立 ({int(regime_state.sum())}/{len(regime_state)} 日牛市)")
-
     if historical:
         quarterly_pool = inst_core.build_quarterly_pool(historical, all_data, TOP_N_STOCKS)
         print(f"✅ 逐季當時市值候選池: {len(quarterly_pool)} 季點, 每季前 {TOP_N_STOCKS} 大")
@@ -1032,12 +1014,8 @@ def main():
         fish_qualified = {}
         for i, fd in enumerate(fridays):
             screening_ts = pd.Timestamp(fd)
-            fish_days_now = FISH_DAYS
-            if regime_state is not None:
-                bull = bool(regime_state.asof(screening_ts))
-                fish_days_now = inst_core.REGIME_BULL_FISH_DAYS if bull else FISH_DAYS
             qualified = screen_fish_qualified(
-                all_data, screening_ts, fish_scores, fish_days_now, FISH_MIN_SCORE
+                all_data, screening_ts, fish_scores, FISH_DAYS, FISH_MIN_SCORE
             )
             if qualified:
                 fish_qualified[fd] = qualified
@@ -1086,8 +1064,7 @@ def main():
                       auto_cap_ratio=AUTO_CAP_RATIO,
                       profit_roll_months=PROFIT_ROLL_MONTHS,
                       profit_roll_percentage=PROFIT_ROLL_PERCENTAGE,
-                      all_dates=all_dates, quarterly_pool=quarterly_pool,
-                      regime_state=regime_state)
+                      all_dates=all_dates, quarterly_pool=quarterly_pool)
     metrics = compute_metrics(result)
     monthly = generate_monthly_breakdown(result["equity_curve"], INITIAL_CAPITAL)
 
