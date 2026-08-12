@@ -12,11 +12,20 @@ from datetime import date, timedelta
 INITIAL_CAPITAL = float(os.getenv("INITIAL_CAPITAL", os.getenv("TOTAL_CAPITAL", "500000")))
 TOP_N = int(os.getenv("INST_MOM_TOP_N", "3"))
 MIN_VOLUME_SHARES = 2000
-BUY_RATIO_THRESHOLD = 0.03
-LOOKBACK = 20
-STOP_LOSS = 0.07
+BUY_RATIO_THRESHOLD = float(os.getenv("INST_MOM_BUY_RATIO", "0.08"))
+LOOKBACK = int(os.getenv("INST_MOM_LOOKBACK", "10"))
+STOP_LOSS = 0.10
 TRAILING_PERIOD = 10
 LOSER_BAN_DAYS = int(os.getenv("INST_MOM_LOSER_BAN_DAYS", "0"))
+# 進場價格離法人成本（fish 觸發日收盤）的最大允許距離，超過則判定為護盤而非逢低布局
+# 0 = 停用此過濾器
+MAX_DIST_FROM_ACCUM = float(os.getenv("INST_MOM_MAX_DIST_FROM_ACCUM", "0.15"))
+# ── 拉抬確認（區分護盤 vs 真拉抬，2026-08-11 導入）──
+# 護盤特徵：貼著法人成本橫盤、買超單日偶發、縮量防守 → 跟進等不到上拉
+# 真拉抬特徵：已離開成本區、法人連續買超、放量攻擊
+MIN_BREAKOUT_FROM_ACCUM = float(os.getenv("INST_MOM_MIN_BREAKOUT", "0.02"))   # 進場時需已離開法人成本 ≥2%（0=停用）
+BUY_STREAK_DAYS = int(os.getenv("INST_MOM_BUY_STREAK_DAYS", "1"))             # 法人淨買超天數（進場日需為買超日，1 日已足夠；0=停用）
+VOLUME_CONFIRM = float(os.getenv("INST_MOM_VOLUME_CONFIRM", "0"))             # 量能確認（雙窗實測為負貢獻，預設停用；0=停用）
 BUY_COST = 0.001425
 SELL_COST = 0.004425
 PROFIT_ROLL_MONTHS = int(os.getenv("PROFIT_ROLL_MONTHS", "0"))
@@ -118,7 +127,7 @@ def precompute_fish_scores(all_data: dict) -> dict:
             )
             d = dates[idx]
             d_str = d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d)[:10]
-            scores[d_str] = score
+            scores[d_str] = (score, float(close_arr[idx]))
         fish_scores[sid] = scores
     return fish_scores
 
@@ -127,8 +136,12 @@ def precompute_fish_scores(all_data: dict) -> dict:
 def screen_fish_qualified(
     all_data: dict, screening_date, fish_scores: dict,
     fish_days: int, fish_min_score: float
-) -> set:
-    qualified = set()
+) -> dict:
+    """
+    回傳 { stock_id: accum_price }，
+    accum_price 為最近一次 fish ≥ min_score 那天的收盤價。
+    """
+    qualified = {}
     sd_str = screening_date.strftime("%Y-%m-%d") if hasattr(screening_date, "strftime") else str(screening_date)[:10]
     lookback_start = (pd.Timestamp(sd_str) - timedelta(days=fish_days)).strftime("%Y-%m-%d")
 
@@ -136,19 +149,20 @@ def screen_fish_qualified(
         if df.empty or len(df) < 30:
             continue
         stock_fish = fish_scores.get(stock_id, {})
-        max_score = 0.0
-        for d_str, sc in stock_fish.items():
-            if lookback_start <= d_str < sd_str and sc > max_score:
-                max_score = sc
-                if max_score >= fish_min_score:
-                    break
-        if max_score >= fish_min_score:
-            qualified.add(stock_id)
+        most_recent_close = None
+        for d_str, val in stock_fish.items():
+            sc = val[0] if isinstance(val, tuple) else val
+            close_price = val[1] if isinstance(val, tuple) else None
+            if lookback_start <= d_str < sd_str and sc >= fish_min_score:
+                most_recent_close = close_price
+        if most_recent_close is not None:
+            qualified[stock_id] = most_recent_close
     return qualified
 
 
 # ─── 動能進場檢查 ──────────────────────────────────
-def check_momentum_entry(all_data: dict, stock_id: str, check_date) -> tuple:
+def check_momentum_entry(all_data: dict, stock_id: str, check_date,
+                         accum_price: float = None) -> tuple:
     df = all_data.get(stock_id)
     if df is None or df.empty or len(df) < LOOKBACK + 5:
         return False, 0
@@ -164,6 +178,31 @@ def check_momentum_entry(all_data: dict, stock_id: str, check_date) -> tuple:
     latest_close = latest["close"]
     if latest_close <= 0 or math.isnan(latest_close):
         return False, 0
+
+    if accum_price is not None and MAX_DIST_FROM_ACCUM > 0:
+        dist = (latest_close - accum_price) / accum_price
+        if dist > MAX_DIST_FROM_ACCUM:
+            return False, 0
+
+    # ── 拉抬確認：過濾「護盤」進場（貼成本橫盤 / 買超不連續 / 縮量）──
+    if accum_price is not None and accum_price > 0:
+        if MIN_BREAKOUT_FROM_ACCUM > 0 and latest_close < accum_price * (1 + MIN_BREAKOUT_FROM_ACCUM):
+            return False, 0
+        if BUY_STREAK_DAYS > 0:
+            streak = 0
+            for row in reversed(recent.to_dict("records")):
+                if row["inst_buy"] > row["inst_sell"]:
+                    streak += 1
+                    if streak >= BUY_STREAK_DAYS:
+                        break
+                else:
+                    break
+            if streak < BUY_STREAK_DAYS:
+                return False, 0
+        if VOLUME_CONFIRM > 0:
+            vol20 = df[date_mask].tail(21)["volume"].iloc[:-1].mean()
+            if vol20 > 0 and latest["volume"] < vol20 * VOLUME_CONFIRM:
+                return False, 0
 
     vol_5 = recent.tail(5)["volume"].mean()
     if vol_5 / 1000 < MIN_VOLUME_SHARES:
