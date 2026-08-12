@@ -25,14 +25,6 @@ MAX_DIST_FROM_ACCUM = float(os.getenv("INST_MOM_MAX_DIST_FROM_ACCUM", "0.15"))
 # 真拉抬特徵：已離開成本區、法人連續買超、放量攻擊
 MIN_BREAKOUT_FROM_ACCUM = float(os.getenv("INST_MOM_MIN_BREAKOUT", "0.02"))   # 進場時需已離開法人成本 ≥2%（0=停用）
 BUY_STREAK_DAYS = int(os.getenv("INST_MOM_BUY_STREAK_DAYS", "1"))             # 法人淨買超天數（進場日需為買超日，1 日已足夠；0=停用）
-VOLUME_CONFIRM = float(os.getenv("INST_MOM_VOLUME_CONFIRM", "0"))             # 量能確認（雙窗實測為負貢獻，預設停用；0=停用）
-# ── 出場：法人出貨前兆（2026-08-11 導入，與 MA10 停利並行）──
-# 目標：在法人拋售前一起賣出，取代純反應式跌破 MA10 出場
-EXIT_REVERSAL = int(os.getenv("INST_MOM_EXIT_REVERSAL", "0"))                 # 近5日累計淨買超但當日淨賣超（法人轉折）即出場（0=停用）
-EXIT_STALL_VOL = float(os.getenv("INST_MOM_EXIT_STALL_VOL", "0"))             # 高檔放量滯漲：量能 ≥N 倍 20日均量（0=停用）
-EXIT_STALL_MIN_GAIN = float(os.getenv("INST_MOM_EXIT_STALL_MIN_GAIN", "0.05"))  # 滯漲訊號需獲利 ≥5% 才啟用
-EXIT_STALL_MAX_CHG = float(os.getenv("INST_MOM_EXIT_STALL_MAX_CHG", "0.005"))   # 當日漲幅 ≤0.5% 判定滯漲
-MARKET_FILTER_DAYS = int(os.getenv("INST_MOM_MARKET_FILTER_DAYS", "0"))         # 大盤 MA N 濾網：指數站上 MA(N) 才准進場（0=停用）
 BUY_COST = 0.001425
 SELL_COST = 0.004425
 PROFIT_ROLL_MONTHS = int(os.getenv("PROFIT_ROLL_MONTHS", "0"))
@@ -169,9 +161,7 @@ def screen_fish_qualified(
 
 # ─── 動能進場檢查 ──────────────────────────────────
 def check_momentum_entry(all_data: dict, stock_id: str, check_date,
-                         accum_price: float = None, market_ok: bool = True) -> tuple:
-    if not market_ok:
-        return False, 0
+                         accum_price: float = None) -> tuple:
     df = all_data.get(stock_id)
     if df is None or df.empty or len(df) < LOOKBACK + 5:
         return False, 0
@@ -193,7 +183,7 @@ def check_momentum_entry(all_data: dict, stock_id: str, check_date,
         if dist > MAX_DIST_FROM_ACCUM:
             return False, 0
 
-    # ── 拉抬確認：過濾「護盤」進場（貼成本橫盤 / 買超不連續 / 縮量）──
+    # ── 拉抬確認：過濾「護盤」進場（貼成本橫盤 / 買超不連續）──
     if accum_price is not None and accum_price > 0:
         if MIN_BREAKOUT_FROM_ACCUM > 0 and latest_close < accum_price * (1 + MIN_BREAKOUT_FROM_ACCUM):
             return False, 0
@@ -207,10 +197,6 @@ def check_momentum_entry(all_data: dict, stock_id: str, check_date,
                 else:
                     break
             if streak < BUY_STREAK_DAYS:
-                return False, 0
-        if VOLUME_CONFIRM > 0:
-            vol20 = df[date_mask].tail(21)["volume"].iloc[:-1].mean()
-            if vol20 > 0 and latest["volume"] < vol20 * VOLUME_CONFIRM:
                 return False, 0
 
     vol_5 = recent.tail(5)["volume"].mean()
@@ -257,23 +243,12 @@ def check_position_exit(
         sell_price = current_price
         reason = f"硬性停損 {loss_pct:.1%}"
     elif loss_pct > 0:
-        reason = None
-        if EXIT_REVERSAL > 0 and price_info.get("inst_net5", 0) > 0 \
-                and price_info.get("inst_buy", 0) < price_info.get("inst_sell", 0):
-            reason = "法人買超反轉出場"
-        elif EXIT_STALL_VOL > 0 and loss_pct >= EXIT_STALL_MIN_GAIN:
-            vol_avg20 = price_info.get("vol_avg20", 0) or 0
-            chg = price_info.get("chg", 0) or 0
-            if vol_avg20 > 0 and price_info.get("volume", 0) >= vol_avg20 * EXIT_STALL_VOL \
-                    and chg <= EXIT_STALL_MAX_CHG:
-                reason = "高檔放量滯漲出場"
-        if reason is None:
-            ma10 = price_info.get("ma10")
-            if ma10 is not None and not math.isnan(ma10) and current_price < ma10:
-                reason = f"跌破 MA10({ma10:.0f})移動停利"
-            else:
-                return (0, 0, None)
-        sell_price = current_price
+        ma10 = price_info.get("ma10")
+        if ma10 is not None and not math.isnan(ma10) and current_price < ma10:
+            sell_price = current_price
+            reason = f"跌破 MA10({ma10:.0f})移動停利"
+        else:
+            return (0, 0, None)
     else:
         return (0, 0, None)
 

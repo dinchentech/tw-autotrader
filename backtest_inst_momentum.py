@@ -46,8 +46,6 @@ from core.inst_data import (
     get_price_data as _data_get_price_data,
     fetch_twse_inst_bulk as _data_fetch_twse_inst_bulk,
     get_all_stock_ids as _data_get_all_stock_ids,
-    fetch_taiex_history as _data_fetch_taiex_history,
-    taiex_ma_state as _data_taiex_ma_state,
 )
 
 
@@ -59,9 +57,8 @@ def screen_fish_qualified(all_data, screening_date, fish_scores, fish_days, fish
     return _core_screen_fish_qualified(all_data, screening_date, fish_scores, fish_days, fish_min_score)
 
 
-def check_momentum_entry(all_data, stock_id, check_date, accum_price=None, market_ok=True):
-    return _core_check_momentum_entry(all_data, stock_id, check_date,
-                                      accum_price=accum_price, market_ok=market_ok)
+def check_momentum_entry(all_data, stock_id, check_date, accum_price=None):
+    return _core_check_momentum_entry(all_data, stock_id, check_date, accum_price=accum_price)
 
 
 def screen_candidates(all_data, screening_date):
@@ -87,8 +84,6 @@ parser.add_argument("--lookback", type=int, default=None, help="創高/MA 回溯
 parser.add_argument("--trailing", type=int, default=None, help="移動停利 MA 期數（預設 10，對應 INST_MOM_TRAILING_PERIOD）")
 parser.add_argument("--max-dist-from-accum", type=float, default=None,
                     help="進場價離法人成本最大距離（預設 0.15=15%%，0=停用）")
-parser.add_argument("--market-filter-days", type=int, default=None,
-                    help="大盤 MA N 濾網：指數站上 MA(N) 才准進場（0=停用，預設依 INST_MOM_MARKET_FILTER_DAYS）")
 parser.add_argument("--no-fish-pre-filter", dest="fish_pre_filter", action="store_false",
                     help="停用法人低吃過濾（預設啟用）")
 parser.set_defaults(fish_pre_filter=True)
@@ -121,8 +116,6 @@ STOP_LOSS = 0.10
 TRAILING_PERIOD = 10
 LOSER_BAN_DAYS = int(os.getenv("INST_MOM_LOSER_BAN_DAYS", "0"))
 MAX_DIST_FROM_ACCUM = float(os.getenv("INST_MOM_MAX_DIST_FROM_ACCUM", "0.15"))
-MARKET_FILTER_DAYS = (args.market_filter_days if args.market_filter_days is not None
-                      else int(os.getenv("INST_MOM_MARKET_FILTER_DAYS", "0")))
 BUY_COST = 0.001425
 SELL_COST = 0.004425
 
@@ -275,11 +268,7 @@ def build_price_cache(all_data, all_dates):
     for stock_id, df in all_data.items():
         if df.empty:
             continue
-        df = df.sort_values("date").reset_index(drop=True)
-        inst_net = (df["inst_buy"] - df["inst_sell"]).fillna(0)
-        vol_avg20 = df["volume"].shift(1).rolling(20, min_periods=1).mean()
-        chg = df["close"].pct_change().fillna(0)
-        for i, row in df.iterrows():
+        for _, row in df.iterrows():
             d = row["date"].date()
             if d in price_cache:
                 price_cache[d][stock_id] = {
@@ -290,9 +279,6 @@ def build_price_cache(all_data, all_dates):
                     "volume": row["volume"],
                     "inst_buy": row.get("inst_buy", 0),
                     "inst_sell": row.get("inst_sell", 0),
-                    "inst_net5": inst_net.iloc[max(0, i - 4):i + 1].sum(),
-                    "vol_avg20": vol_avg20.iloc[i],
-                    "chg": chg.iloc[i],
                 }
     return price_cache
 
@@ -304,8 +290,7 @@ def simulate(all_data: dict, candidates: dict = None,
              auto_cap_ratio: float = 1.0, profit_roll_months: float = 0,
              profit_roll_percentage: float = 1.0,
              all_dates: list = None,
-             price_cache_prebuilt: dict = None,
-             market_state: dict = None) -> dict:
+             price_cache_prebuilt: dict = None) -> dict:
     """
     模擬交易。
 
@@ -356,11 +341,7 @@ def simulate(all_data: dict, candidates: dict = None,
         for stock_id, df in all_data.items():
             if df.empty:
                 continue
-            df = df.sort_values("date").reset_index(drop=True)
-            inst_net = (df["inst_buy"] - df["inst_sell"]).fillna(0)
-            vol_avg20 = df["volume"].shift(1).rolling(20, min_periods=1).mean()
-            chg = df["close"].pct_change().fillna(0)
-            for i, row in df.iterrows():
+            for _, row in df.iterrows():
                 d = row["date"].date()
                 if d in price_cache:
                     price_cache[d][stock_id] = {
@@ -371,9 +352,6 @@ def simulate(all_data: dict, candidates: dict = None,
                         "volume": row["volume"],
                         "inst_buy": row.get("inst_buy", 0),
                         "inst_sell": row.get("inst_sell", 0),
-                        "inst_net5": inst_net.iloc[max(0, i - 4):i + 1].sum(),
-                        "vol_avg20": vol_avg20.iloc[i],
-                        "chg": chg.iloc[i],
                     }
 
     # 一般模式：篩選日 → 下個交易日對應
@@ -454,9 +432,6 @@ def simulate(all_data: dict, candidates: dict = None,
 
         # ── 低吃模式：每日檢查觀察池動能訊號 ──
         if fish_mode and current_qualified:
-            market_ok = True
-            if market_state is not None:
-                market_ok = market_state.get(d.isoformat(), True)
             for sid in sorted(current_qualified):
                 if sid in positions:
                     continue
@@ -468,7 +443,6 @@ def simulate(all_data: dict, candidates: dict = None,
                 passes, score = check_momentum_entry(
                     all_data, sid, pd.Timestamp(d),
                     accum_price=current_qualified.get(sid),
-                    market_ok=market_ok,
                 )
                 if passes:
                     entry_date = next_trading_day.get(d)
@@ -987,17 +961,6 @@ def main():
         print(f"\n📥 階段 1d/4：預計算法人低吃分數（回溯 {FISH_DAYS} 天，門檻 ≥ {FISH_MIN_SCORE}）...")
         fish_scores = precompute_fish_scores(all_data)
 
-    # ── 1e. 大盤濾網狀態（選用） ──
-    market_state = None
-    if MARKET_FILTER_DAYS > 0:
-        print(f"\n📥 階段 1e/4：載入大盤 MA{MARKET_FILTER_DAYS} 濾網（TWSE 加權指數）...")
-        taiex_df = _data_fetch_taiex_history(
-            START_DATE, END_DATE, cache_path=CACHE_DIR / f"taiex_{START_DATE}_{END_DATE}.pkl")
-        market_state = _data_taiex_ma_state(
-            taiex_df, ma_days=MARKET_FILTER_DAYS, start=START_DATE, end=END_DATE)
-        above = sum(1 for v in market_state.values() if v)
-        print(f"✅ 大盤濾網: {len(market_state)} 個交易日中 {above} 日在 MA{MARKET_FILTER_DAYS} 之上")
-
     # ── 2. 篩選（一般模式每週/低吃模式兩階段） ──
     start_dt = datetime.strptime(START_DATE, "%Y-%m-%d").date()
     if DAILY_SCREENING:
@@ -1063,7 +1026,7 @@ def main():
                       auto_cap_ratio=AUTO_CAP_RATIO,
                       profit_roll_months=PROFIT_ROLL_MONTHS,
                       profit_roll_percentage=PROFIT_ROLL_PERCENTAGE,
-                      all_dates=all_dates, market_state=market_state)
+                      all_dates=all_dates)
     metrics = compute_metrics(result)
     monthly = generate_monthly_breakdown(result["equity_curve"], INITIAL_CAPITAL)
 

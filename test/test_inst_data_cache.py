@@ -15,7 +15,6 @@ from core.inst_data import (
     fetch_twse_inst_bulk,
     get_institutional_data,
     get_price_data,
-    taiex_ma_state,
 )
 
 
@@ -181,40 +180,6 @@ class TestCleanPrice(unittest.TestCase):
             self.assertEqual(src, "cache")
             self.assertEqual(len(df), 4)
             self.assertTrue((df["close"] > 0).all())
-
-
-class TestTaiexMaState(unittest.TestCase):
-
-    def _taiex_df(self, closes):
-        dates = pd.date_range("2025-01-01", periods=len(closes), freq="B")
-        return pd.DataFrame({"date": dates, "close": closes})
-
-    def test_uptrend_above_ma(self):
-        """多頭（收盤 > MA20）→ 末段狀態為 True"""
-        df = self._taiex_df(list(range(100, 160)))  # 穩定上升
-        state = taiex_ma_state(df, ma_days=20)
-        last_day = df["date"].iloc[-1].date().isoformat()
-        self.assertTrue(state[last_day])
-
-    def test_downtrend_below_ma(self):
-        """空頭（收盤 < MA20）→ 末段狀態為 False"""
-        df = self._taiex_df(list(range(160, 100, -1)))  # 穩定下跌
-        state = taiex_ma_state(df, ma_days=20)
-        last_day = df["date"].iloc[-1].date().isoformat()
-        self.assertFalse(state[last_day])
-
-    def test_ma_warmup_false(self):
-        """MA 熱身期（筆數 < MA 期數）→ False（視為未站上）"""
-        df = self._taiex_df(list(range(100, 110)))
-        state = taiex_ma_state(df, ma_days=20)
-        last_day = df["date"].iloc[-1].date().isoformat()
-        self.assertFalse(state[last_day])
-
-    def test_start_end_filter(self):
-        """start/end 範圍過濾：只回傳期間內日期"""
-        df = self._taiex_df(list(range(100, 160)))
-        state = taiex_ma_state(df, ma_days=20, start="2025-02-01", end="2025-02-28")
-        self.assertTrue(all("2025-02-" in d for d in state))
 
 
 class TestBulkCache(unittest.TestCase):

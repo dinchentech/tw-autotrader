@@ -347,22 +347,11 @@ class InstitutionalMomentumStrategy:
         candidates = []
         all_evaluated = []
 
-        # 大盤濾網：指數站上 MA(N) 才准進場（與回測一致）
-        market_ok = True
-        try:
-            mf_days = int(os.getenv("INST_MOM_MARKET_FILTER_DAYS", "0"))
-            if mf_days > 0:
-                from core.market_filter import MarketTrendFilter
-                market_ok = MarketTrendFilter(period=mf_days).is_above_ma()
-        except Exception:
-            market_ok = True
-
         for stock_id, accum_price in fish_qualified.items():
             try:
                 single = {stock_id: all_data[stock_id]}
                 ok, score = _core_check_momentum_entry(
-                    single, stock_id, check_date, accum_price=accum_price,
-                    market_ok=market_ok)
+                    single, stock_id, check_date, accum_price=accum_price)
                 all_evaluated.append((stock_id, score))
                 if ok:
                     candidates.append((stock_id, score))
@@ -481,9 +470,12 @@ class InstitutionalMomentumStrategy:
 
             # 移動停利需要 MA（共用資料層，與回測一致；抓不到時只做硬性停損）
             ma = None
-            df = pd.DataFrame()
             try:
-                df = self._build_core_dataframe(stock_id)
+                end = date.today()
+                df, _src = inst_data.get_price_data(
+                    dl, stock_id, end - timedelta(days=self.trailing_period + 20), end,
+                    cache_path=self._price_cache_dir / f"{stock_id}.pkl",
+                    max_stale_days=5, sources=("finmind", "twse"))
                 if not df.empty and len(df) >= self.trailing_period:
                     ma = df["close"].rolling(self.trailing_period).mean().iloc[-1]
             except Exception:
@@ -500,14 +492,6 @@ class InstitutionalMomentumStrategy:
             price_info = {"close": price}
             if ma is not None and not math.isnan(ma):
                 price_info["ma10"] = ma
-            if not df.empty:
-                inst_net = (df["inst_buy"] - df["inst_sell"]).fillna(0)
-                price_info["inst_net5"] = float(inst_net.rolling(5, min_periods=1).sum().iloc[-1])
-                price_info["vol_avg20"] = float(df["volume"].shift(1).rolling(20, min_periods=1).mean().iloc[-1])
-                price_info["chg"] = float(df["close"].pct_change().fillna(0).iloc[-1])
-                price_info["volume"] = float(df["volume"].iloc[-1])
-                price_info["inst_buy"] = float(df["inst_buy"].iloc[-1])
-                price_info["inst_sell"] = float(df["inst_sell"].iloc[-1])
             tmp_log = []
             proceeds, cost_basis, _ = _core_check_position_exit(
                 stock_id, core_positions, price_info, date.today(), 0, tmp_log

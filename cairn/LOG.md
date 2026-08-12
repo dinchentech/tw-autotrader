@@ -1,6 +1,14 @@
 # Project Cairn 日誌
 
-本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
+本檔案以倒序記錄實質進續——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
+
+## 2026-08-11 · 刪除失敗參數（B/C/量能確認）— 只留知識庫教訓
+
+- 依使用者決策，直接刪除而非「勿啟用」標註：`EXIT_REVERSAL/EXIT_STALL_*`（方案 B）、`MARKET_FILTER_DAYS`+`fetch_taiex_history/taiex_ma_state`（方案 C）、`VOLUME_CONFIRM`（量能確認）。
+- 還原：check_position_exit（純 MA10+硬停損）、check_momentum_entry（純拉抬確認）、live check_exit_signals（原 get_price_data）、market_filter.py（原 MA200）、backtest price_cache 補欄移除。
+- 測試 -15（46/46 綠）；.env/.env.example/三文件同步清除。
+- 驗證：2022-2026-07 重跑 **+303.74%/回撤 22.75% 完全重現**。
+- 教訓保留於 cairn/inst-mom-markup-confirmation.md（B/C 完整數據與根因），勿重複測試。
 
 ## 2026-08-11 · 現行最佳設定定案 + 文件全面更新
 
