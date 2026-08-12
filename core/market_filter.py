@@ -13,30 +13,36 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 class MarketTrendFilter:
-    def __init__(self):
+    def __init__(self, period: int = 200):
+        self.period = period
         self.cache = None
         self.cache_date = None
-    
+
     def is_above_ma200(self) -> bool:
         """回傳 True = 指數在年線之上（可以買），False = 指數跌破年線（跳過買進）"""
+        return self.is_above_ma(200)
+
+    def is_above_ma(self, period: int = None) -> bool:
+        """回傳 True = 指數在 MA(period) 之上（可以買），False = 指數跌破（跳過買進）"""
+        period = period or self.period
         try:
             index_data = self._fetch_tw_index()
-            if index_data is None or len(index_data) < 200:
-                print("⚠️  大盤過濾：資料不足 200 筆，跳過過濾")
+            if index_data is None or len(index_data) < period:
+                print(f"⚠️  大盤過濾：資料不足 {period} 筆，跳過過濾")
                 return True
-            
+
             close = index_data['close']
-            ma200 = close.rolling(200).mean().iloc[-1]
+            ma = close.rolling(period).mean().iloc[-1]
             current_close = close.iloc[-1]
-            above = current_close > ma200
-            
+            above = current_close > ma
+
             if above:
-                print(f"📈 大盤過濾：指數 {current_close:.0f} > MA200 {ma200:.0f}，允許買進")
+                print(f"📈 大盤過濾：指數 {current_close:.0f} > MA{period} {ma:.0f}，允許買進")
             else:
-                print(f"📉 大盤過濾：指數 {current_close:.0f} < MA200 {ma200:.0f}，跳過買進")
-            
+                print(f"📉 大盤過濾：指數 {current_close:.0f} < MA{period} {ma:.0f}，跳過買進")
+
             return above
-            
+
         except Exception as e:
             print(f"⚠️  大盤過濾異常 ({e})，跳過過濾")
             return True

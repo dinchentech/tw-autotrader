@@ -364,6 +364,72 @@ def get_institutional_data(dl, stock_id: str, start, end, cache_path=None,
     return pd.DataFrame(), "none", None
 
 
+# ─── 大盤濾網 ─────────────────────────────────────────
+
+def fetch_taiex_history(start_date, end_date, cache_path=None) -> pd.DataFrame:
+    """TWSE FMTQIK 加權指數日線（免 token），回傳 date/close DataFrame。
+
+    自動往前翻頁直到涵蓋 start_date 前 400 日曆天（MA200 熱身緩衝），版本化快取。
+    """
+    if cache_path is not None and cache_path.exists():
+        df, _meta = _load_cache(cache_path)
+        if df is not None and not df.empty:
+            return df
+    all_rows = []
+    seen = set()
+    end_dt = pd.Timestamp(end_date)
+    need_from = pd.Timestamp(start_date) - timedelta(days=400)
+    span_days = max((end_dt - need_from).days, 200)
+    pages = min(60, span_days // 40 + 2)
+    for i in range(pages):
+        d = end_dt - timedelta(days=i * 40)
+        dt = d.strftime("%Y%m%d")
+        try:
+            url = "https://www.twse.com.tw/en/exchangeReport/FMTQIK"
+            resp = requests.get(url, params={"response": "json", "date": dt},
+                                headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+            data = resp.json()
+            for row in data.get("data", []):
+                if row[0] not in seen:
+                    seen.add(row[0])
+                    all_rows.append(row)
+            dates_covered = [r[0] for r in all_rows]
+            if dates_covered and min(dates_covered) <= need_from.strftime("%Y/%m/%d"):
+                break
+        except Exception:
+            continue
+    if len(all_rows) < 20:
+        return pd.DataFrame()
+    df = pd.DataFrame(all_rows, columns=["date", "volume", "value", "trades", "TAIEX", "change"])
+    df["close"] = pd.to_numeric(df["TAIEX"].str.replace(",", ""), errors="coerce")
+    df = df.dropna(subset=["close"])
+    df["date"] = pd.to_datetime(df["date"], format="%Y/%m/%d")
+    df = df.sort_values("date").reset_index(drop=True)
+    if cache_path is not None:
+        _dump_cache(cache_path, df, meta={"source": "TWSE_FMTQIK",
+                                          "start": str(start_date), "end": str(end_date)})
+    return df
+
+
+def taiex_ma_state(taiex_df, ma_days=200, start=None, end=None) -> dict:
+    """回傳 { date_str: 指數收盤 > MA(ma_days) }。MA 熱身期視為 False。"""
+    if taiex_df is None or taiex_df.empty:
+        return {}
+    df = taiex_df.copy()
+    df["date"] = pd.to_datetime(df["date"])
+    df = df.sort_values("date").reset_index(drop=True)
+    df["ma"] = df["close"].rolling(ma_days).mean()
+    state = {}
+    for _, r in df.iterrows():
+        d = r["date"].date().isoformat()
+        if start and d < str(start)[:10]:
+            continue
+        if end and d > str(end)[:10]:
+            continue
+        state[d] = (not pd.isna(r["ma"])) and r["close"] > r["ma"]
+    return state
+
+
 # ─── 選股池 ───────────────────────────────────────────
 
 def get_all_stock_ids(dl, n: int, exclude_etf: bool = True, mcap_file=None) -> list:

@@ -32,6 +32,7 @@ EXIT_REVERSAL = int(os.getenv("INST_MOM_EXIT_REVERSAL", "0"))                 # 
 EXIT_STALL_VOL = float(os.getenv("INST_MOM_EXIT_STALL_VOL", "0"))             # 高檔放量滯漲：量能 ≥N 倍 20日均量（0=停用）
 EXIT_STALL_MIN_GAIN = float(os.getenv("INST_MOM_EXIT_STALL_MIN_GAIN", "0.05"))  # 滯漲訊號需獲利 ≥5% 才啟用
 EXIT_STALL_MAX_CHG = float(os.getenv("INST_MOM_EXIT_STALL_MAX_CHG", "0.005"))   # 當日漲幅 ≤0.5% 判定滯漲
+MARKET_FILTER_DAYS = int(os.getenv("INST_MOM_MARKET_FILTER_DAYS", "0"))         # 大盤 MA N 濾網：指數站上 MA(N) 才准進場（0=停用）
 BUY_COST = 0.001425
 SELL_COST = 0.004425
 PROFIT_ROLL_MONTHS = int(os.getenv("PROFIT_ROLL_MONTHS", "0"))
@@ -168,7 +169,9 @@ def screen_fish_qualified(
 
 # ─── 動能進場檢查 ──────────────────────────────────
 def check_momentum_entry(all_data: dict, stock_id: str, check_date,
-                         accum_price: float = None) -> tuple:
+                         accum_price: float = None, market_ok: bool = True) -> tuple:
+    if not market_ok:
+        return False, 0
     df = all_data.get(stock_id)
     if df is None or df.empty or len(df) < LOOKBACK + 5:
         return False, 0

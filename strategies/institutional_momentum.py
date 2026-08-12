@@ -347,11 +347,22 @@ class InstitutionalMomentumStrategy:
         candidates = []
         all_evaluated = []
 
+        # 大盤濾網：指數站上 MA(N) 才准進場（與回測一致）
+        market_ok = True
+        try:
+            mf_days = int(os.getenv("INST_MOM_MARKET_FILTER_DAYS", "0"))
+            if mf_days > 0:
+                from core.market_filter import MarketTrendFilter
+                market_ok = MarketTrendFilter(period=mf_days).is_above_ma()
+        except Exception:
+            market_ok = True
+
         for stock_id, accum_price in fish_qualified.items():
             try:
                 single = {stock_id: all_data[stock_id]}
                 ok, score = _core_check_momentum_entry(
-                    single, stock_id, check_date, accum_price=accum_price)
+                    single, stock_id, check_date, accum_price=accum_price,
+                    market_ok=market_ok)
                 all_evaluated.append((stock_id, score))
                 if ok:
                     candidates.append((stock_id, score))

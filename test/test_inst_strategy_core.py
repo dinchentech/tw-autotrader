@@ -113,6 +113,22 @@ class TestMarkupConfirmation(unittest.TestCase):
                                         accum_price=None)
         self.assertTrue(ok)
 
+    def test_market_filter_rejects(self):
+        """大盤濾網不過（market_ok=False）→ 拒絕進場"""
+        df = self._markup_df()
+        ok, _ = ic.check_momentum_entry({"2330": df}, "2330",
+                                        pd.Timestamp(df["date"].iloc[-1]),
+                                        accum_price=100.0, market_ok=False)
+        self.assertFalse(ok)
+
+    def test_market_filter_default_allows(self):
+        """未帶 market_ok（預設 True）→ 不影響既有行為"""
+        df = self._markup_df()
+        ok, _ = ic.check_momentum_entry({"2330": df}, "2330",
+                                        pd.Timestamp(df["date"].iloc[-1]),
+                                        accum_price=100.0)
+        self.assertTrue(ok)
+
 
 class TestExitDistributionSignals(unittest.TestCase):
     """方案 B：法人出貨前兆出場（買超反轉 / 高檔放量滯漲），與 MA10 並行"""
