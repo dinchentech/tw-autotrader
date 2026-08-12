@@ -163,7 +163,18 @@ class TwseDayCache:
 
 # ─── 股價 ─────────────────────────────────────────────
 
+def clean_price_df(df: pd.DataFrame) -> pd.DataFrame:
+    """剔除價格髒點（close<=0 或 OHLC 全零）。缺失日會使權益估值退回買入價，
+    避免單筆零價資料造成回測假崩盤（2025-07-30 鴻海 2317 零價事件）。"""
+    bad = (df["close"] <= 0) | ((df["open"] == 0) & (df["high"] == 0) & (df["low"] == 0))
+    n = int(bad.sum())
+    if n:
+        print(f"⚠️  剔除 {n} 筆無效價格（close<=0 或 OHLC 全零）")
+    return df[~bad].reset_index(drop=True)
+
+
 def _norm_price(df: pd.DataFrame) -> pd.DataFrame:
+    df = clean_price_df(df)
     rename = {"Trading_Volume": "volume", "Trading_money": "amount",
               "Trading_turnover": "turnover", "max": "high", "min": "low"}
     df = df.rename(columns={k: v for k, v in rename.items() if k in df.columns})

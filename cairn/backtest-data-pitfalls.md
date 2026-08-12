@@ -29,7 +29,8 @@ authoring_mode: ai_generated
   - 寫入採 tmp + `os.replace` 原子替換，避免中途寫壞的殘缺 pickle。
   - 覆蓋三個快取函式：`fetch_twse_inst_bulk` / `get_price_data` / `get_institutional_data`。
   - 初次升級後，所有舊格式快取會自動重建一次（預期行為）。
-- `test/test_inst_data_cache.py`：9 個案例鎖定「版本不符拒絕 / 過期拒絕 / 歷史深度不足拒絕 / 有效命中 / 版本不符自動重建」。
+- **零價髒點過濾**：`clean_price_df`（`core/inst_data.py`）剔除 `close<=0` 或 OHLC 全零的 row，載入與寫入快取前都過濾（july/bottomfish 同套）。
+- `test/test_inst_data_cache.py`：12 案例鎖定「版本不符拒絕 / 過期拒絕 / 歷史深度不足拒絕 / 有效命中 / 版本不符自動重建 / 零價髒點過濾」。
 - 主回測 `backtest_inst_momentum.py` 與實盤共用 `core/inst_data.py`，自動受惠。
 
 ## 已知未覆蓋
@@ -56,6 +57,7 @@ authoring_mode: ai_generated
 2. 檢查 cache_path 檔的 `schema_version` 與 meta（來源標籤、日期範圍）是否符合預期。
 3. 確認價格語義：原始價（`auto_adjust=False`）vs 還原價——兩者混用是最高頻陷阱。
 4. **兩套股價快取禁止共用/合併**：全輪替選股工具（`cache/selector_prices/`，還原價 `auto_adjust=True`，算動能/報酬率用）與法人動能（`cache/inst_momentum/price/`，原始價 `auto_adjust=False`，算進場價/損益用）語義不同；合併 = 重演 2026-08 假數字事件。市值排名（`mcap_ranking.pkl`）兩邊共用，一律 `load_cache_or_raw` 遷移式讀取（寫入者在外部/加密程式）。
-5. 快取資料語義改變（欄位/正規化/調整方式）時，**必須遞增 `CACHE_SCHEMA_VERSION`**。
-6. 新快取一律經 `dump_cache` 寫入，禁止直接 `pickle.dumps`。
-7. 數字異常時，可刪除 `cache/` 下可疑快取強制重建，交叉驗證數字是否改變。
+5. **權益單日暴崩 / 最大回撤異常大 → 檢查持倉股當日是否為零價髒點**（2025-07-30 鴻海 2317 事件：FinMind 短暫異常回傳全零 row，被舊快取凍結，回測權益當日 -52%、最大回撤 62.97%→22.68%，+114.96%→+142.71%）。新資料層已用 `clean_price_df` 過濾；懷疑時刪除該股 price cache 重抓即可。
+6. 快取資料語義改變（欄位/正規化/調整方式）時，**必須遞增 `CACHE_SCHEMA_VERSION`**。
+7. 新快取一律經 `dump_cache` 寫入，禁止直接 `pickle.dumps`。
+8. 數字異常時，可刪除 `cache/` 下可疑快取強制重建，交叉驗證數字是否改變。

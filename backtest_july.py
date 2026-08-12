@@ -32,6 +32,7 @@ from collections import defaultdict
 from dotenv import load_dotenv
 load_dotenv()
 from core.cache_io import load_cache, dump_cache, load_cache_or_raw
+from core.inst_data import clean_price_df
 from core.inst_strategy_core import (
     compute_fish_score as _core_compute_fish_score,
     precompute_fish_scores as _core_precompute_fish_scores,
@@ -203,6 +204,7 @@ def download_price_data(dl, stock_id: str) -> pd.DataFrame:
     cache_file = PRICE_CACHE_DIR / f"{stock_id}.pkl"
     if cache_file.exists():
         df, _ = load_cache(cache_file)
+        df = clean_price_df(df) if df is not None else None
         if df is not None and not df.empty and df["date"].max() >= pd.Timestamp(END_DATE) - timedelta(days=7):
             return df
     start_dt = datetime.strptime(START_DATE, "%Y-%m-%d") - timedelta(days=60)
@@ -222,6 +224,7 @@ def download_price_data(dl, stock_id: str) -> pd.DataFrame:
     df_price["ma20"] = df_price["close"].rolling(LOOKBACK).mean()
     df_price["ma10"] = df_price["close"].rolling(TRAILING_PERIOD).mean()
 
+    df_price = clean_price_df(df_price)
     dump_cache(cache_file, df_price, meta={"stock_id": stock_id, "source": "finmind/yfinance"})
     return df_price
 

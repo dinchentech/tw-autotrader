@@ -11,6 +11,7 @@ from core.inst_data import (
     CACHE_SCHEMA_VERSION,
     _dump_cache,
     _load_cache,
+    clean_price_df,
     fetch_twse_inst_bulk,
     get_institutional_data,
     get_price_data,
@@ -146,8 +147,42 @@ class TestInstCache(unittest.TestCase):
             self.assertEqual(latest, date(2026, 1, 10))
 
 
-class TestBulkCache(unittest.TestCase):
+class TestCleanPrice(unittest.TestCase):
 
+    def test_zero_close_row_dropped(self):
+        """close=0 或 OHLC 全零的髒點被剔除（2025-07-30 鴻海零價事件防護）"""
+        df = _price_df(days=5)
+        dirty = _price_df(days=5)
+        dirty.loc[2, ["open", "high", "low", "close", "volume"]] = 0.0
+        df2 = pd.concat([df, dirty.iloc[2:3]], ignore_index=True)
+        out = clean_price_df(df2)
+        self.assertEqual(len(out), 5)
+        self.assertTrue((out["close"] > 0).all())
+
+    def test_normal_df_unchanged(self):
+        """正常資料不受影響"""
+        df = _price_df(days=10)
+        out = clean_price_df(df)
+        pd.testing.assert_frame_equal(out.reset_index(drop=True), df.reset_index(drop=True))
+
+    def test_get_price_data_cache_hit_cleans(self):
+        """快取命中時髒點也被過濾（回測權益不會因零價日假崩盤）"""
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "price.pkl"
+            dirty = _price_df(days=5)
+            dirty.loc[0, ["open", "high", "low", "close", "volume"]] = 0.0
+            _dump_cache(p, dirty, meta={"source": "finmind"})
+            dl = _ExplodingDL()
+            df, src = get_price_data(
+                dl, "2330", "2026-01-01", "2026-01-31", cache_path=p,
+                max_stale_days=5, ref_date=date(2026, 1, 7),
+                sources=("finmind",))
+            self.assertEqual(src, "cache")
+            self.assertEqual(len(df), 4)
+            self.assertTrue((df["close"] > 0).all())
+
+
+class TestBulkCache(unittest.TestCase):
     def test_version_mismatch_rebuilds(self):
         """TWSE 法人快取版本不符 → 重新下載並寫入新版快取"""
         with tempfile.TemporaryDirectory() as td:

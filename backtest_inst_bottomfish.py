@@ -29,6 +29,7 @@ from pathlib import Path
 from collections import defaultdict
 
 from core.cache_io import load_cache, dump_cache, load_cache_or_raw
+from core.inst_data import clean_price_df
 
 # ─── 參數 ─────────────────────────────────────────────────
 parser = argparse.ArgumentParser(description="法人低接策略回測")
@@ -93,6 +94,7 @@ def download_price_data(dl, stock_id: str) -> pd.DataFrame:
     df = None
     if cache_file.exists():
         df, _ = load_cache(cache_file)
+        df = clean_price_df(df) if df is not None else None
         if df is not None and not df.empty and df["date"].max() >= pd.Timestamp(END_DATE):
             return df
     last_date = None
@@ -137,6 +139,7 @@ def download_price_data(dl, stock_id: str) -> pd.DataFrame:
     df_new["ma20"] = df_new["close"].rolling(20).mean()
     df_new["ma10"] = df_new["close"].rolling(LOOKBACK).mean()
     df_new["ma60"] = df_new["close"].rolling(60).mean()
+    df_new = clean_price_df(df_new)
     dump_cache(cache_file, df_new, meta={"stock_id": stock_id, "source": "finmind/yfinance"})
     return df_new
 
