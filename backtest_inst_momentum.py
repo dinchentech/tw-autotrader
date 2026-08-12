@@ -268,7 +268,11 @@ def build_price_cache(all_data, all_dates):
     for stock_id, df in all_data.items():
         if df.empty:
             continue
-        for _, row in df.iterrows():
+        df = df.sort_values("date").reset_index(drop=True)
+        inst_net = (df["inst_buy"] - df["inst_sell"]).fillna(0)
+        vol_avg20 = df["volume"].shift(1).rolling(20, min_periods=1).mean()
+        chg = df["close"].pct_change().fillna(0)
+        for i, row in df.iterrows():
             d = row["date"].date()
             if d in price_cache:
                 price_cache[d][stock_id] = {
@@ -279,6 +283,9 @@ def build_price_cache(all_data, all_dates):
                     "volume": row["volume"],
                     "inst_buy": row.get("inst_buy", 0),
                     "inst_sell": row.get("inst_sell", 0),
+                    "inst_net5": inst_net.iloc[max(0, i - 4):i + 1].sum(),
+                    "vol_avg20": vol_avg20.iloc[i],
+                    "chg": chg.iloc[i],
                 }
     return price_cache
 
@@ -341,7 +348,11 @@ def simulate(all_data: dict, candidates: dict = None,
         for stock_id, df in all_data.items():
             if df.empty:
                 continue
-            for _, row in df.iterrows():
+            df = df.sort_values("date").reset_index(drop=True)
+            inst_net = (df["inst_buy"] - df["inst_sell"]).fillna(0)
+            vol_avg20 = df["volume"].shift(1).rolling(20, min_periods=1).mean()
+            chg = df["close"].pct_change().fillna(0)
+            for i, row in df.iterrows():
                 d = row["date"].date()
                 if d in price_cache:
                     price_cache[d][stock_id] = {
@@ -352,6 +363,9 @@ def simulate(all_data: dict, candidates: dict = None,
                         "volume": row["volume"],
                         "inst_buy": row.get("inst_buy", 0),
                         "inst_sell": row.get("inst_sell", 0),
+                        "inst_net5": inst_net.iloc[max(0, i - 4):i + 1].sum(),
+                        "vol_avg20": vol_avg20.iloc[i],
+                        "chg": chg.iloc[i],
                     }
 
     # 一般模式：篩選日 → 下個交易日對應

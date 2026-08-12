@@ -114,5 +114,90 @@ class TestMarkupConfirmation(unittest.TestCase):
         self.assertTrue(ok)
 
 
+class TestExitDistributionSignals(unittest.TestCase):
+    """方案 B：法人出貨前兆出場（買超反轉 / 高檔放量滯漲），與 MA10 並行"""
+
+    def setUp(self):
+        self._saved = {k: getattr(ic, k) for k in (
+            "STOP_LOSS", "SELL_COST", "EXIT_REVERSAL", "EXIT_STALL_VOL",
+            "EXIT_STALL_MIN_GAIN", "EXIT_STALL_MAX_CHG")}
+        ic.STOP_LOSS = 0.10
+        ic.SELL_COST = 0.004425
+        ic.EXIT_REVERSAL = 0
+        ic.EXIT_STALL_VOL = 0
+        ic.EXIT_STALL_MIN_GAIN = 0.05
+        ic.EXIT_STALL_MAX_CHG = 0.005
+
+    def tearDown(self):
+        for k, v in self._saved.items():
+            setattr(ic, k, v)
+
+    def _call(self, price_info, close=110.0, buy_price=100.0):
+        positions = {"2330": {"buy_price": buy_price, "shares": 1000,
+                              "last_roll_date": None}}
+        info = {"close": close, "ma10": 108.0, "volume": 1000000,
+                "vol_avg20": 1000000, "chg": 0.01, "inst_net5": 0,
+                "inst_buy": 0, "inst_sell": 0}
+        info.update(price_info)
+        trade_log = []
+        proceeds, cost_basis, _ = ic.check_position_exit(
+            "2330", positions, info, pd.Timestamp("2026-01-15"), 0, trade_log)
+        return proceeds, trade_log
+
+    def test_reversal_exit(self):
+        """近5日累計淨買超但當日淨賣超（法人轉折第一天）→ 反轉出場"""
+        ic.EXIT_REVERSAL = 1
+        proceeds, log = self._call({"inst_net5": 50000, "inst_buy": 100, "inst_sell": 1000})
+        self.assertGreater(proceeds, 0)
+        self.assertIn("反轉", log[0]["reason"])
+
+    def test_stall_exit(self):
+        """獲利 10%、放量 2x、當日漲幅 0（高檔滯漲）→ 出場"""
+        ic.EXIT_STALL_VOL = 1.3
+        proceeds, log = self._call({"volume": 2000000, "chg": 0.0})
+        self.assertGreater(proceeds, 0)
+        self.assertIn("滯漲", log[0]["reason"])
+
+    def test_no_distribution_signal_holds(self):
+        """當日仍買超 + 量能正常 + 站上 MA10 → 續抱"""
+        ic.EXIT_REVERSAL = 1
+        ic.EXIT_STALL_VOL = 1.3
+        proceeds, log = self._call({"inst_net5": 50000, "inst_buy": 1000,
+                                    "inst_sell": 100, "volume": 800000})
+        self.assertEqual(proceeds, 0)
+        self.assertEqual(log, [])
+
+    def test_reversal_disabled_holds(self):
+        """反轉訊號停用（0）→ 回舊版行為：續抱"""
+        proceeds, log = self._call({"inst_net5": 50000, "inst_buy": 100, "inst_sell": 1000})
+        self.assertEqual(proceeds, 0)
+
+    def test_stall_below_min_gain_holds(self):
+        """獲利僅 2%（<5% 高檔門檻）→ 滯漲訊號不啟用（且站上 MA10 → 續抱）"""
+        ic.EXIT_STALL_VOL = 1.3
+        proceeds, log = self._call({"volume": 2000000, "chg": 0.0, "ma10": 101.0}, close=102.0)
+        self.assertEqual(proceeds, 0)
+
+    def test_stall_rising_day_holds(self):
+        """放量但當日上漲 2%（非滯漲）→ 續抱"""
+        ic.EXIT_STALL_VOL = 1.3
+        proceeds, log = self._call({"volume": 2000000, "chg": 0.02})
+        self.assertEqual(proceeds, 0)
+
+    def test_ma10_trailing_still_works(self):
+        """無出貨訊號但跌破 MA10 → 原移動停利仍生效"""
+        proceeds, log = self._call({}, close=107.0)
+        self.assertGreater(proceeds, 0)
+        self.assertIn("MA10", log[0]["reason"])
+
+    def test_hard_stop_takes_priority(self):
+        """虧損 -11% → 硬性停損優先於出貨訊號"""
+        ic.EXIT_REVERSAL = 1
+        ic.EXIT_STALL_VOL = 1.3
+        proceeds, log = self._call({"volume": 2000000, "chg": 0.0}, close=89.0)
+        self.assertGreater(proceeds, 0)
+        self.assertIn("停損", log[0]["reason"])
+
+
 if __name__ == "__main__":
     unittest.main()
