@@ -42,6 +42,7 @@ from core.inst_strategy_core import (
     log_capital_roll as _core_log_capital_roll,
 )
 import core.inst_strategy_core as inst_core
+from core.cache_io import load_cache_or_raw
 from core.inst_data import (
     get_price_data as _data_get_price_data,
     fetch_twse_inst_bulk as _data_fetch_twse_inst_bulk,
@@ -61,14 +62,30 @@ def check_momentum_entry(all_data, stock_id, check_date, accum_price=None):
     return _core_check_momentum_entry(all_data, stock_id, check_date, accum_price=accum_price)
 
 
-def screen_candidates(all_data, screening_date):
+def screen_candidates(all_data, screening_date, pool=None):
     candidates = []
     for stock_id in all_data:
+        if pool is not None and stock_id not in pool:
+            continue
         passes, score = _core_check_momentum_entry(all_data, stock_id, screening_date)
         if passes:
             candidates.append((stock_id, score))
     candidates.sort(key=lambda x: x[1], reverse=True)
     return candidates[:TOP_N]
+
+
+def pool_for_month(quarterly_pool: dict, check_date) -> list:
+    """回傳 check_date 所在月份適用的最近季點候選池（無則 None）。"""
+    if not quarterly_pool:
+        return None
+    month = check_date.strftime("%Y-%m") if hasattr(check_date, "strftime") else str(check_date)[:7]
+    pool = None
+    for q, p in quarterly_pool.items():
+        if q <= month:
+            pool = p
+        else:
+            break
+    return pool
 
 # ─── 參數 ─────────────────────────────────────────────────
 parser = argparse.ArgumentParser(description="法人抬轎動能策略回測")
@@ -290,7 +307,8 @@ def simulate(all_data: dict, candidates: dict = None,
              auto_cap_ratio: float = 1.0, profit_roll_months: float = 0,
              profit_roll_percentage: float = 1.0,
              all_dates: list = None,
-             price_cache_prebuilt: dict = None) -> dict:
+             price_cache_prebuilt: dict = None,
+             quarterly_pool: dict = None) -> dict:
     """
     模擬交易。
 
@@ -432,7 +450,10 @@ def simulate(all_data: dict, candidates: dict = None,
 
         # ── 低吃模式：每日檢查觀察池動能訊號 ──
         if fish_mode and current_qualified:
+            pool = pool_for_month(quarterly_pool, d)
             for sid in sorted(current_qualified):
+                if pool is not None and sid not in pool:
+                    continue
                 if sid in positions:
                     continue
                 if is_banned(sid, d):
@@ -928,7 +949,19 @@ def main():
     print("\n📥 階段 1a/4：讀取價格資料（快取）")
     dl = finmind_login()
 
-    stock_ids = get_all_stock_ids(dl)
+    # 歷史股本資料庫存在 → 下載聯集池（消除倖存者偏差：候選池逐季按當時市值重算）
+    historical = None
+    quarterly_pool = None
+    hpath = Path("cache/inst_momentum/historical_shares.pkl")
+    if hpath.exists():
+        historical, _ = load_cache_or_raw(hpath)
+        if not historical:
+            historical = None
+    if historical:
+        stock_ids = sorted({k[0] for k in historical})
+        print(f"   歷史股本庫: {len(stock_ids)} 檔（聯集池，逐季當時市值重算候選池）")
+    else:
+        stock_ids = get_all_stock_ids(dl)
     print(f"   共 {len(stock_ids)} 檔上市股票")
 
     all_data = {}
@@ -940,6 +973,10 @@ def main():
             print(f"   進度: {i+1}/{len(stock_ids)}（已載入 {len(all_data)} 檔有資料）")
 
     print(f"✅ 價格資料: {len(all_data)} 檔股票有交易資料")
+
+    if historical:
+        quarterly_pool = inst_core.build_quarterly_pool(historical, all_data, TOP_N_STOCKS)
+        print(f"✅ 逐季當時市值候選池: {len(quarterly_pool)} 季點, 每季前 {TOP_N_STOCKS} 大")
 
     # ── 1b. TWSE 法人資料 ──
     print("\n📥 階段 1b/4：下載三大法人資料（TWSE 公開 API）")
@@ -997,7 +1034,8 @@ def main():
         candidates = {}
         for i, fd in enumerate(fridays):
             screening_ts = pd.Timestamp(fd)
-            cands = screen_candidates(all_data, screening_ts)
+            cands = screen_candidates(all_data, screening_ts,
+                                      pool=pool_for_month(quarterly_pool, screening_ts))
             if cands:
                 candidates[fd] = cands
             if (i + 1) % 50 == 0 or (i + 1) == len(fridays):
@@ -1026,7 +1064,7 @@ def main():
                       auto_cap_ratio=AUTO_CAP_RATIO,
                       profit_roll_months=PROFIT_ROLL_MONTHS,
                       profit_roll_percentage=PROFIT_ROLL_PERCENTAGE,
-                      all_dates=all_dates)
+                      all_dates=all_dates, quarterly_pool=quarterly_pool)
     metrics = compute_metrics(result)
     monthly = generate_monthly_breakdown(result["equity_curve"], INITIAL_CAPITAL)
 

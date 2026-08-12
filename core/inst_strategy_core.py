@@ -159,6 +159,34 @@ def screen_fish_qualified(
     return qualified
 
 
+# ─── 逐季當時市值候選池（消除倖存者偏差）────────────
+
+def build_quarterly_pool(historical: dict, all_data: dict, top_n: int = 150) -> dict:
+    """回傳 { 'YYYY-MM': [sid 依當時市值排序取前 top_n] }。
+
+    當時市值 = 歷史股本（historical_shares.pkl）× 當季點月份最後交易日收盤價。
+    用於回測時取代「今天的市值排名套到過去」的固定池。
+    """
+    pools = {}
+    quarter_points = sorted({k[1] for k in historical})
+    for qp in quarter_points:
+        mcap = {}
+        month_end = pd.Timestamp(qp + "-01") + pd.offsets.MonthEnd(0)
+        for sid in {k[0] for k in historical if k[1] == qp}:
+            shares = historical.get((sid, qp))
+            df = all_data.get(sid)
+            if not shares or df is None or df.empty:
+                continue
+            mask = pd.to_datetime(df["date"]) <= month_end
+            if not mask.any():
+                continue
+            px = df.loc[mask, "close"].iloc[-1]
+            if px and px > 0:
+                mcap[sid] = shares * px
+        pools[qp] = sorted(mcap, key=mcap.get, reverse=True)[:top_n]
+    return pools
+
+
 # ─── 動能進場檢查 ──────────────────────────────────
 def check_momentum_entry(all_data: dict, stock_id: str, check_date,
                          accum_price: float = None) -> tuple:

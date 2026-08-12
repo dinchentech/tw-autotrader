@@ -104,5 +104,41 @@ class TestMarkupConfirmation(unittest.TestCase):
 
 
 
+class TestQuarterlyPool(unittest.TestCase):
+    """逐季當時市值候選池（消除倖存者偏差）"""
+
+    def _df(self, closes):
+        dates = pd.date_range("2018-01-01", periods=len(closes), freq="B")
+        return pd.DataFrame({"date": dates, "close": closes,
+                             "open": closes, "high": closes, "low": closes,
+                             "volume": [1000000] * len(closes)})
+
+    def test_rank_by_point_in_time_mcap(self):
+        """當季市值 = 股本 × 當月最後交易日收盤價，排序取前 N"""
+        historical = {("2330", "2018-02"): 1000, ("2317", "2018-02"): 500,
+                      ("2454", "2018-02"): 2000}
+        all_data = {"2330": self._df([50.0] * 40),   # 1000×50 = 50,000
+                    "2317": self._df([80.0] * 40),   # 500×80 = 40,000
+                    "2454": self._df([10.0] * 40)}   # 2000×10 = 20,000
+        pools = ic.build_quarterly_pool(historical, all_data, top_n=2)
+        self.assertEqual(pools["2018-02"], ["2330", "2317"])
+
+    def test_missing_price_skipped(self):
+        """無價格資料的股票不進池"""
+        historical = {("2330", "2018-02"): 1000, ("9999", "2018-02"): 5000}
+        all_data = {"2330": self._df([50.0] * 40)}
+        pools = ic.build_quarterly_pool(historical, all_data, top_n=10)
+        self.assertEqual(pools["2018-02"], ["2330"])
+
+    def test_multiple_quarters_separate_pools(self):
+        """不同季點各自獨立排序"""
+        historical = {("2330", "2018-02"): 1000, ("2330", "2018-05"): 1000,
+                      ("2317", "2018-02"): 500, ("2317", "2018-05"): 500}
+        all_data = {"2330": self._df([50.0] * 40), "2317": self._df([80.0] * 40)}
+        pools = ic.build_quarterly_pool(historical, all_data, top_n=1)
+        self.assertEqual(pools["2018-02"], ["2330"])
+        self.assertEqual(pools["2018-05"], ["2330"])
+
+
 if __name__ == "__main__":
     unittest.main()
