@@ -71,6 +71,105 @@ LOOKBACK_DAYS = int(os.getenv("SELECTOR_LOOKBACK_DAYS", "0"))  # 0=用 START_DAT
 _cache = {}
 _PRICE_CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "cache", "selector_prices")
 
+# ─── 法人籌碼資料（B 方案：法人確認濾網）────────────────────
+# 全市場 TWSE 法人資料快取：cache/inst_momentum/{2015,2022}/twse_inst_*.pkl
+# 2015 目錄: 2017-12-18~2021-12-30（908 檔/日）| 2022 目錄: 2022-01-03~2026-07-30（FULL）
+# 合併後覆蓋 2017-12-18 ~ 2026-07-30；2015-2017 前段無法人資料 → 該期間確認濾網 pass-through
+_INST_CACHE_GLOB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
+                                "cache", "inst_momentum", "*", "twse_inst_*.pkl")
+_inst_merged = None
+
+
+def load_twse_inst_merged(refresh_live: bool = False) -> dict:
+    """合併全部全市場法人快取 → {date_str: {sid: (inst_buy, inst_sell)}}（投信+外資）。
+
+    只合併「全市場」快取（單日 > 300 檔）；150 檔池子版（法人動能回測用）不混入，
+    避免候選池外的股票被誤判為「無法人資料」。回傳 dict 以 module 層快取。
+    refresh_live=True 時（實盤選股），若合併快取落後於今天 > 3 個交易日，
+    以 TWSE T86 API 補抓缺失交易日並寫回快取。
+    """
+    global _inst_merged
+    if _inst_merged is not None:
+        return _inst_merged
+    import glob as _glob
+    from core.cache_io import load_cache_or_raw
+    merged = {}
+    files = sorted(_glob.glob(_INST_CACHE_GLOB))
+    for f in files:
+        try:
+            data, _meta = load_cache_or_raw(f)
+        except Exception:
+            continue
+        if not isinstance(data, dict):
+            continue
+        # 判斷是否全市場：取前 3 個交易日樣本，單日檔數 > 300 才算
+        sample_days = [d for d in data if isinstance(d, str)][:3]
+        if not sample_days:
+            continue
+        if max(len(data[d]) for d in sample_days if isinstance(data.get(d), dict)) <= 300:
+            continue
+        for d, stocks in data.items():
+            if not isinstance(d, str) or not isinstance(stocks, dict):
+                continue
+            day = {}
+            for sid, val in stocks.items():
+                sid = str(sid).strip()
+                if isinstance(val, (tuple, list)) and len(val) >= 2:
+                    day[sid] = (int(val[0]), int(val[1]))
+            if day:
+                merged[d] = day
+    print(f"📥 法人資料合併完成: {len(merged)} 交易日（全市場快取）")
+    if refresh_live:
+        merged = _refresh_inst_live(merged)
+    _inst_merged = merged
+    return merged
+
+
+def _refresh_inst_live(merged: dict) -> dict:
+    """實盤用：合併快取落後時，以 TWSE T86 補抓缺失交易日（只補交易日曆上的日期）。"""
+    from core.inst_data import fetch_twse_day
+    if not merged:
+        return merged
+    latest = max(pd.Timestamp(d) for d in merged)
+    if (pd.Timestamp.now() - latest).days <= 3:
+        return merged
+    biz = [d for d in pd.bdate_range(latest + pd.Timedelta(days=1), pd.Timestamp.now().normalize())
+           if d.weekday() < 5]
+    added = 0
+    for d in biz:
+        day = fetch_twse_day(d.strftime("%Y%m%d"))
+        if not day:
+            continue
+        merged[d.strftime("%Y-%m-%d")] = {
+            sid: (v["外資"]["buy"] + v["投信"]["buy"], v["外資"]["sell"] + v["投信"]["sell"])
+            for sid, v in day.items()
+        }
+        added += 1
+    if added:
+        print(f"📥 TWSE 法人資料即時補抓: +{added} 交易日（至 {biz[-1].strftime('%Y-%m-%d')}）")
+    return merged
+
+
+def inst_net_buy(inst_data: dict, sid: str, end_date, days: int = 21) -> float:
+    """選股日前 N 個交易日的法人累計淨買超（投信+外資，張數）。
+
+    只使用 ≤ end_date 的資料（無前瞻）。該股在期間無資料時回傳 None（表未知）。
+    """
+    sid = str(sid)
+    end_ts = pd.Timestamp(end_date)
+    dates = sorted(d for d in inst_data if pd.Timestamp(d) <= end_ts)
+    if not dates:
+        return None
+    recent = dates[-days:]
+    total = 0.0
+    found = False
+    for d in recent:
+        row = inst_data[d].get(sid)
+        if row is not None:
+            total += row[0] - row[1]
+            found = True
+    return total if found else None
+
 def load_stock(symbol: str) -> pd.DataFrame:
     if symbol in _cache:
         return _cache[symbol]
@@ -343,8 +442,14 @@ def score_stock(sym, df, end_date, params):
     }
 
 
-def pick_top_stocks(data, end_date, params, top_n=4, exclude=None):
-    """從候選池選出最高分的 N 檔股票"""
+def pick_top_stocks(data, end_date, params, top_n=4, exclude=None,
+                    inst_conf=None, inst_days=21):
+    """從候選池選出最高分的 N 檔股票。
+
+    inst_conf: {date_str: {sid: (buy, sell)}} 法人資料（None=停用確認濾網）
+    inst_days: 法人淨買超回溯交易日數。通過確認 = 近 N 日法人累計淨買超 > 0；
+               期間無該股資料（未知）→ 不剔除（pass-through，避免 2015-2017 前段誤殺）。
+    """
     if exclude is None:
         exclude = set()
     scored = []
@@ -352,8 +457,13 @@ def pick_top_stocks(data, end_date, params, top_n=4, exclude=None):
         if sym in exclude:
             continue
         s = score_stock(sym, df, end_date, params)
-        if s is not None:
-            scored.append(s)
+        if s is None:
+            continue
+        if inst_conf is not None:
+            net = inst_net_buy(inst_conf, sym, end_date, inst_days)
+            if net is not None and net <= 0:
+                continue
+        scored.append(s)
     scored.sort(key=lambda x: x["total"], reverse=True)
     return scored[:top_n]
 
@@ -451,7 +561,7 @@ def _snap_date(df, target):
 
 def backtest_selector(data, params, top_n=4, verbose=False, mode="momentum", 
                        auto_momentum=False, market_data=None, quarter_months=None,
-                       quarterly_pool=None):
+                       quarterly_pool=None, inst_conf=None, inst_days=21):
     """
     回測每季選股績效。
     每季末用 params 選股 → 持有到下季末 → 計算報酬。
@@ -545,7 +655,8 @@ def backtest_selector(data, params, top_n=4, verbose=False, mode="momentum",
             adj_params = dict(params)
             if auto_momentum and market_data is not None and buy_date_q in market_data.index:
                 _detect_and_adjust(market_data, buy_date_q, adj_params, verbose)
-            selected = pick_top_stocks(data_q, buy_date_q, adj_params, top_n)
+            selected = pick_top_stocks(data_q, buy_date_q, adj_params, top_n,
+                                       inst_conf=inst_conf, inst_days=inst_days)
         if not selected:
             continue
 
@@ -796,13 +907,16 @@ def backtest_two_by_two(data, params, verbose=False, mode="momentum",
 
 def backtest_dual_quarterly(data, params, top_n=4, verbose=False, mode="momentum",
                             auto_momentum=False, market_data=None,
-                            qm_a=(2,5,8,11), qm_b=(3,6,9,12), quarterly_pool=None):
+                            qm_a=(2,5,8,11), qm_b=(3,6,9,12), quarterly_pool=None,
+                            inst_conf=None, inst_days=21):
     """兩段季度排程 50/50 資金各半並行回測。日期用 module 的 START_DATE/END_DATE。"""
     bt_a = backtest_selector(data, params, top_n, verbose, mode, auto_momentum,
-                              market_data, quarter_months=qm_a, quarterly_pool=quarterly_pool)
+                              market_data, quarter_months=qm_a, quarterly_pool=quarterly_pool,
+                              inst_conf=inst_conf, inst_days=inst_days)
     bt_b = backtest_selector(data, params, top_n, False, mode,
                               auto_momentum, market_data, quarter_months=qm_b,
-                              quarterly_pool=quarterly_pool)
+                              quarterly_pool=quarterly_pool,
+                              inst_conf=inst_conf, inst_days=inst_days)
     final_val = (bt_a["final_value"] + bt_b["final_value"]) / 2
     total_ret = (final_val - 500000) / 500000
     yearly = {}
@@ -840,14 +954,16 @@ DEFAULT_PARAMS = {
 }
 
 
-def _run_backtest(data, params, top_n, strategy, mode, auto_momentum, market_data, verbose=False, quarter_months=None):
+def _run_backtest(data, params, top_n, strategy, mode, auto_momentum, market_data, verbose=False, quarter_months=None,
+                  inst_conf=None, inst_days=21):
     """依 strategy 選擇回測函數"""
     if strategy == "two_by_two":
         return backtest_two_by_two(data, params, verbose=verbose, mode=mode,
                                     auto_momentum=auto_momentum, market_data=market_data)
     return backtest_selector(data, params, top_n=top_n, verbose=verbose, mode=mode,
                               auto_momentum=auto_momentum, market_data=market_data,
-                              quarter_months=quarter_months)
+                              quarter_months=quarter_months,
+                              inst_conf=inst_conf, inst_days=inst_days)
 
 
 def run_grid_search(data, top_n=4, auto_momentum=False, market_data=None, strategy="quarterly", quarter_months=(3,6,9,12)):
@@ -947,7 +1063,8 @@ def _catalyst_score(df, end_date):
 
 def recommend_next_quarter(data, params, top_n=4, mode="momentum",
                             auto_momentum=False, market_data=None,
-                            output_env=False, schedule_label="A"):
+                            output_env=False, schedule_label="A",
+                            inst_conf=None, inst_days=21):
     """用給定參數選出下一季推薦持股"""
     today = datetime.now()
     # 用最近有資料的日期
@@ -996,7 +1113,8 @@ def recommend_next_quarter(data, params, top_n=4, mode="momentum",
         adj_params = dict(params)
         if auto_momentum and market_data is not None and best_date in market_data.index:
             _detect_and_adjust(market_data, best_date, adj_params, verbose=True)
-        selected = pick_top_stocks(data, best_date, adj_params, top_n)
+        selected = pick_top_stocks(data, best_date, adj_params, top_n,
+                                   inst_conf=inst_conf, inst_days=inst_days)
 
     if not selected:
         print("❌ 無法選出推薦持股", file=sys.stderr)
@@ -1308,6 +1426,14 @@ def main():
         else:
             print(f"⚠️ 0050 資料載入失敗，auto_momentum 將不啟用")
 
+    # 法人確認濾網（INST_CONFIRM=1 啟用，INST_CONFIRM_DAYS 控制回溯交易日）
+    inst_conf = None
+    inst_days = int(os.getenv("INST_CONFIRM_DAYS", "15"))
+    if os.getenv("INST_CONFIRM") == "1":
+        inst_conf = load_twse_inst_merged(refresh_live=args.recommend)
+        covered = sorted(inst_conf.keys())
+        print(f"✅ 法人確認啟用（回溯 {inst_days} 交易日；{covered[0]} ~ {covered[-1]}）")
+
     # 季度排程解析
     ROTATE_QMAP = {1: (1,4,7,10), 2: (2,5,8,11), 3: (3,6,9,12)}
     rotate_mode = args.rotate_mode if args.rotate_mode > 0 else ROTATE_MODE
@@ -1325,7 +1451,8 @@ def main():
         if dual_mode:
             return backtest_dual_quarterly(data, DEFAULT_PARAMS, top_n=top_n, verbose=True,
                                             auto_momentum=args.auto_momentum, market_data=market_data,
-                                            qm_a=qm_a, qm_b=qm_b)
+                                            qm_a=qm_a, qm_b=qm_b,
+                                            inst_conf=inst_conf, inst_days=inst_days)
         return _run_backtest(data, DEFAULT_PARAMS, top_n=top_n, strategy=args.strategy,
                              mode=args.mode, auto_momentum=args.auto_momentum,
                              market_data=market_data, verbose=True, quarter_months=quarter_months)
@@ -1347,7 +1474,8 @@ def main():
                              quarter_months=quarter_months)
         recommend_next_quarter(data, best_params, top_n=top_n, mode=args.mode,
                                 auto_momentum=args.auto_momentum, market_data=market_data,
-                                output_env=args.output_env, schedule_label=args.schedule_label)
+                                output_env=args.output_env, schedule_label=args.schedule_label,
+                                inst_conf=inst_conf, inst_days=inst_days)
 
     if args.grid:
         results = run_grid_search(data, top_n=top_n, auto_momentum=args.auto_momentum,
@@ -1362,7 +1490,8 @@ def main():
                              quarter_months=quarter_months)
         recommend_next_quarter(data, best_params, top_n=top_n, mode=args.mode,
                                 auto_momentum=args.auto_momentum, market_data=market_data,
-                                output_env=args.output_env, schedule_label=args.schedule_label)
+                                output_env=args.output_env, schedule_label=args.schedule_label,
+                                inst_conf=inst_conf, inst_days=inst_days)
 
     if args.backtest:
         bt = _do_backtest()
@@ -1390,7 +1519,8 @@ def main():
                 adj_p = dict(DEFAULT_PARAMS)
                 if args.auto_momentum and market_data is not None and buy_date in market_data.index:
                     _detect_and_adjust(market_data, buy_date, adj_p, verbose=True)
-                selected = pick_top_stocks(data, buy_date, adj_p, top_n)
+                selected = pick_top_stocks(data, buy_date, adj_p, top_n,
+                                           inst_conf=inst_conf, inst_days=inst_days)
                 if args.output_env:
                     sched_label = label.replace("排程", "")
                     alloc = round(50.0 / top_n, 1)
@@ -1409,7 +1539,8 @@ def main():
         else:
             recommend_next_quarter(data, DEFAULT_PARAMS, top_n=top_n, mode=args.mode,
                                    auto_momentum=args.auto_momentum, market_data=market_data,
-                                   output_env=args.output_env, schedule_label=args.schedule_label)
+                                   output_env=args.output_env, schedule_label=args.schedule_label,
+                                   inst_conf=inst_conf, inst_days=inst_days)
 
 
 if __name__ == "__main__":

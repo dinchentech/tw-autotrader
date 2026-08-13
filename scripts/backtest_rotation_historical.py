@@ -61,10 +61,20 @@ mode = os.getenv("MODE", "momentum")
 auto_mom = os.getenv("AUTO", "1") == "1"
 if os.getenv("MOM_DAYS"):
     params["momentum_days"] = int(os.getenv("MOM_DAYS"))
+
+# 法人確認濾網（B 方案）：INST_CONFIRM=1 啟用，INST_DAYS 控制回溯交易日
+inst_conf = None
+if os.getenv("INST_CONFIRM") == "1":
+    inst_conf = ssg.load_twse_inst_merged()
+    covered = sorted(inst_conf.keys())
+    print(f"法人確認啟用: {len(covered)} 交易日 ({covered[0]} ~ {covered[-1]})；2015-2017 前段 pass-through")
+inst_days = int(os.getenv("INST_DAYS", "21"))
+
 bt = ssg.backtest_dual_quarterly(data, params, top_n=TOP_N, mode=mode,
                                  auto_momentum=auto_mom, market_data=mkt,
                                  qm_a=(2, 5, 8, 11), qm_b=(3, 6, 9, 12),
-                                 quarterly_pool=pools)
+                                 quarterly_pool=pools,
+                                 inst_conf=inst_conf, inst_days=inst_days)
 import math
 years = (pd.Timestamp(END) - pd.Timestamp(START)).days / 365.25
 ann = (bt["total_return"] + 1) ** (1 / years) - 1 if bt["total_return"] > -1 else -1
