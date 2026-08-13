@@ -1,7 +1,8 @@
 """全輪替歷史池回測（消除倖存者偏差）— 2026-08-11 建立
 
-用法: python scripts/backtest_rotation_historical.py <start> <end> [pool_n]
-例:   python scripts/backtest_rotation_historical.py 2015-01-01 2021-12-31 150
+用法: python scripts/backtest_rotation_historical.py <start> <end> [pool_n] [top_n]
+例:   python scripts/backtest_rotation_historical.py 2015-01-01 2021-12-31 150 4
+評分參數覆寫(環境變數): MW=momentum_weight TW=technical_weight SW=stability_weight MAF=use_ma_filter MP=min_price
 
 以 historical_shares.pkl（今天前 300 大的歷史股本）重建「逐季當時市值前 N」候選池，
 取代 stock_selector_grid 原生的固定池（今天市值排名，含倖存者偏差）。
@@ -18,6 +19,7 @@ import stock_selector_grid as ssg
 
 START, END = sys.argv[1], sys.argv[2]
 POOL_N = int(sys.argv[3]) if len(sys.argv) > 3 else 150
+TOP_N = int(sys.argv[4]) if len(sys.argv) > 4 else 4
 ssg.START_DATE = START
 ssg.END_DATE = END
 
@@ -50,11 +52,24 @@ mkt = ssg.load_stock("0050")
 mkt = mkt.rename(columns={"close": "close"}) if "close" not in mkt.columns else mkt
 
 params = dict(ssg.DEFAULT_PARAMS)
-bt = ssg.backtest_dual_quarterly(data, params, top_n=4, mode="momentum",
-                                 auto_momentum=True, market_data=mkt,
+if os.getenv("MW"): params["momentum_weight"] = float(os.getenv("MW"))
+if os.getenv("TW"): params["technical_weight"] = float(os.getenv("TW"))
+if os.getenv("SW"): params["stability_weight"] = float(os.getenv("SW"))
+if os.getenv("MAF"): params["use_ma_filter"] = os.getenv("MAF") == "1"
+if os.getenv("MP"): params["min_price"] = float(os.getenv("MP"))
+mode = os.getenv("MODE", "momentum")
+auto_mom = os.getenv("AUTO", "1") == "1"
+if os.getenv("MOM_DAYS"):
+    params["momentum_days"] = int(os.getenv("MOM_DAYS"))
+bt = ssg.backtest_dual_quarterly(data, params, top_n=TOP_N, mode=mode,
+                                 auto_momentum=auto_mom, market_data=mkt,
                                  qm_a=(2, 5, 8, 11), qm_b=(3, 6, 9, 12),
                                  quarterly_pool=pools)
-print(json.dumps({"final_value": round(bt["final_value"]),
+import math
+years = (pd.Timestamp(END) - pd.Timestamp(START)).days / 365.25
+ann = (bt["total_return"] + 1) ** (1 / years) - 1 if bt["total_return"] > -1 else -1
+print(json.dumps({"pool_n": POOL_N, "top_n": TOP_N, "final_value": round(bt["final_value"]),
                    "total_return": round(bt["total_return"], 4),
+                   "annualized": round(ann, 4),
                    "yearly": {k: round(v["total_ret"], 4) for k, v in bt["yearly"].items()}},
                   ensure_ascii=False))
