@@ -832,10 +832,10 @@ DEFAULT_PARAMS = {
     "momentum_days": 21,
     "momentum_weight": 2.0,
     "technical_weight": 0.3,
-    "stability_weight": 0.0,
+    "stability_weight": 0.5,
     "catalyst_weight": 0.0,
     "auto_momentum": 1,
-    "use_ma_filter": False,
+    "use_ma_filter": True,
     "min_price": 5,
 }
 
