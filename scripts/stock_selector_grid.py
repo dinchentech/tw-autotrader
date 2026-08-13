@@ -362,7 +362,11 @@ def pick_top_stocks(data, end_date, params, top_n=4, exclude=None):
 # 季度回測
 # ══════════════════════════════════════════════════════════════
 
-def quarter_end_dates(start="2022-01-01", end="2025-12-31", quarter_months=None):
+def quarter_end_dates(start=None, end=None, quarter_months=None):
+    if start is None:
+        start = START_DATE
+    if end is None:
+        end = END_DATE
     from pandas.tseries.offsets import QuarterEnd
     """季度末日期。quarter_months: (1,4,7,10) / (2,5,8,11) / (3,6,9,12) 預設 (3,6,9,12)"""
     if quarter_months is None:
@@ -382,7 +386,11 @@ def quarter_end_dates(start="2022-01-01", end="2025-12-31", quarter_months=None)
     return result
 
 
-def month_end_dates(start="2022-01-01", end="2025-12-31"):
+def month_end_dates(start=None, end=None):
+    if start is None:
+        start = START_DATE
+    if end is None:
+        end = END_DATE
     """回測期間內每個月最後交易日"""
     all_dates = pd.bdate_range(start=start, end=end, freq="B")
     months = set()
@@ -442,7 +450,8 @@ def _snap_date(df, target):
 
 
 def backtest_selector(data, params, top_n=4, verbose=False, mode="momentum", 
-                       auto_momentum=False, market_data=None, quarter_months=None):
+                       auto_momentum=False, market_data=None, quarter_months=None,
+                       quarterly_pool=None):
     """
     回測每季選股績效。
     每季末用 params 選股 → 持有到下季末 → 計算報酬。
@@ -495,9 +504,20 @@ def backtest_selector(data, params, top_n=4, verbose=False, mode="momentum",
 
         # 選股日對齊到實際交易日
         buy_date_q = _snap_date(list(data.values())[0], qd) if data else qd
+        data_q = data
+        if quarterly_pool is not None:
+            month = buy_date_q.strftime("%Y-%m") if hasattr(buy_date_q, "strftime") else str(buy_date_q)[:7]
+            pool = None
+            for q, p in quarterly_pool.items():
+                if q <= month:
+                    pool = p
+                else:
+                    break
+            if pool is not None:
+                data_q = {k: v for k, v in data.items() if k in pool}
         if mode == "catalyst":
             scored = []
-            for sym, df in data.items():
+            for sym, df in data_q.items():
                 if buy_date_q not in df.index:
                     continue
                 cs = _catalyst_score(df, buy_date_q)
@@ -508,10 +528,10 @@ def backtest_selector(data, params, top_n=4, verbose=False, mode="momentum",
             selected = scored[:top_n]
         elif mode == "core-satellite":
             core_n = max(top_n - 1, 1)
-            core = pick_top_stocks(data, buy_date_q, params, core_n)
+            core = pick_top_stocks(data_q, buy_date_q, params, core_n)
             core_syms = {s["symbol"] for s in core}
             sat = []
-            for sym, df in data.items():
+            for sym, df in data_q.items():
                 if sym in core_syms or buy_date_q not in df.index:
                     continue
                 cs = _catalyst_score(df, buy_date_q)
@@ -525,7 +545,7 @@ def backtest_selector(data, params, top_n=4, verbose=False, mode="momentum",
             adj_params = dict(params)
             if auto_momentum and market_data is not None and buy_date_q in market_data.index:
                 _detect_and_adjust(market_data, buy_date_q, adj_params, verbose)
-            selected = pick_top_stocks(data, buy_date_q, adj_params, top_n)
+            selected = pick_top_stocks(data_q, buy_date_q, adj_params, top_n)
         if not selected:
             continue
 
@@ -776,12 +796,13 @@ def backtest_two_by_two(data, params, verbose=False, mode="momentum",
 
 def backtest_dual_quarterly(data, params, top_n=4, verbose=False, mode="momentum",
                             auto_momentum=False, market_data=None,
-                            qm_a=(2,5,8,11), qm_b=(3,6,9,12)):
+                            qm_a=(2,5,8,11), qm_b=(3,6,9,12), quarterly_pool=None):
     """兩段季度排程 50/50 資金各半並行回測。日期用 module 的 START_DATE/END_DATE。"""
     bt_a = backtest_selector(data, params, top_n, verbose, mode, auto_momentum,
-                              market_data, quarter_months=qm_a)
+                              market_data, quarter_months=qm_a, quarterly_pool=quarterly_pool)
     bt_b = backtest_selector(data, params, top_n, False, mode,
-                              auto_momentum, market_data, quarter_months=qm_b)
+                              auto_momentum, market_data, quarter_months=qm_b,
+                              quarterly_pool=quarterly_pool)
     final_val = (bt_a["final_value"] + bt_b["final_value"]) / 2
     total_ret = (final_val - 500000) / 500000
     yearly = {}
