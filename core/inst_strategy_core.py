@@ -15,7 +15,7 @@ MIN_VOLUME_SHARES = 2000
 BUY_RATIO_THRESHOLD = float(os.getenv("INST_MOM_BUY_RATIO", "0.08"))
 LOOKBACK = int(os.getenv("INST_MOM_LOOKBACK", "10"))
 STOP_LOSS = 0.10
-TRAILING_PERIOD = 10
+TRAILING_PERIOD = 20
 LOSER_BAN_DAYS = int(os.getenv("INST_MOM_LOSER_BAN_DAYS", "0"))
 # 進場價格離法人成本（fish 觸發日收盤）的最大允許距離，超過則判定為護盤而非逢低布局
 # 0 = 停用此過濾器

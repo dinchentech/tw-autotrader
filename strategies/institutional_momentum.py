@@ -58,7 +58,7 @@ class InstitutionalMomentumStrategy:
         self.buy_ratio = float(os.getenv("INST_MOM_BUY_RATIO", "0.08"))         # 8%（2026-08 walk-forward 全天候預設）
         self.lookback = int(os.getenv("INST_MOM_LOOKBACK", "10"))               # 天（2026-08 walk-forward 全天候預設）
         self.stop_loss = float(os.getenv("INST_MOM_STOP_LOSS", "0.10"))         # -10%
-        self.trailing_period = int(os.getenv("INST_MOM_TRAILING_PERIOD", "10")) # MA10
+        self.trailing_period = int(os.getenv("INST_MOM_TRAILING_PERIOD", "20")) # MA20（誠實池雙窗驗證：等久一點讓低吃發酵，2026-08-11）
         self.exclude_etf = os.getenv("INST_MOM_EXCLUDE_ETF", "true").lower() == "true"  # 預設排除 ETF
         self.daily_screening = os.getenv("INST_MOM_DAILY_SCREENING", "false").lower() == "true"  # 每日篩選
 
