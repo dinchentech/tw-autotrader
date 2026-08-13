@@ -762,6 +762,8 @@ def compute_metrics(result: dict) -> dict:
             "max_drawdown_pct": 0.0,
             "total_return": round((final_eq - INITIAL_CAPITAL) / INITIAL_CAPITAL, 4),
             "final_equity": round(final_eq, 0),
+            "avg_deployed": 0,
+            "deployed_return": 0.0,
         }
 
     buys = [t for t in trades if t["action"] == "BUY"]
@@ -789,6 +791,11 @@ def compute_metrics(result: dict) -> dict:
             max_drawdown = dd
             max_drawdown_pct = dd_pct
 
+    final_equity = result["final_cash"] + result.get("general_cash", 0)
+    avg_deployed = float(np.mean([e["position_value"] for e in equity])) if equity else 0
+    deployed_return = ((final_equity - INITIAL_CAPITAL) / avg_deployed
+                       if avg_deployed > 0 else 0.0)
+
     return {
         "total_trades": total_trades,
         "buy_trades": len(buys),
@@ -802,6 +809,8 @@ def compute_metrics(result: dict) -> dict:
         "profit_factor": round(profit_factor, 2),
         "max_drawdown": round(max_drawdown, 0),
         "max_drawdown_pct": round(max_drawdown_pct, 4),
+        "avg_deployed": round(avg_deployed, 0),
+        "deployed_return": round(deployed_return, 4),
         "total_return": round(result["total_return"], 4),
         "final_equity": round(result["final_cash"] + result.get("general_cash", 0), 0),
     }
@@ -882,6 +891,8 @@ def generate_report(result: dict, metrics: dict, monthly: list):
     lines.append("|------|------|")
     lines.append(f"| **最終權益** | NT${metrics['final_equity']:,.0f} |")
     lines.append(f"| **總報酬率** | {metrics['total_return']:+.2%} |")
+    lines.append(f"| **平均動用資金** | NT${metrics['avg_deployed']:,.0f}（佔總資金 {metrics['avg_deployed']/max(metrics['final_equity'],1)*100:.0f}%） |")
+    lines.append(f"| **動用資金報酬率** | {metrics['deployed_return']:+.2%}（以平均動用資金為分母） |")
     general_cash = result.get("general_cash", 0)
     if general_cash > 0:
         lines.append(f"| **滾入資金池** | NT${general_cash:,.0f} |")
