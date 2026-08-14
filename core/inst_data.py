@@ -265,8 +265,21 @@ def get_price_data(dl, stock_id: str, start, end, cache_path=None,
         df, _meta = _load_cache(cache_path)
         if df is not None and isinstance(df, pd.DataFrame) and not df.empty:
             latest = pd.Timestamp(df["date"].max())
-            history_ok = (min_start is None
-                          or pd.Timestamp(df["date"].min()) <= pd.Timestamp(min_start))
+            if min_start is not None:
+                # 歷史深度檢查：快取最早日期需 ≤ 要求起點。但「股票上市晚於起點」
+                # 不算深度不足（2019 上市的股票 2014 本來就無資料）——只拒絕
+                # 「快取被截斷」的情形（最早日期遠晚於該股真實上市日）。
+                # 判別：快取覆蓋 ≥ 1 年即視為上市晚、允許命中；< 1 年（如 2026-08
+                # 事件的 90 天截斷）判定深度不足、重新下載。
+                depth_days = (latest - pd.Timestamp(df["date"].min())).days
+                span_ok = depth_days >= 365
+                start_ok = pd.Timestamp(df["date"].min()) <= pd.Timestamp(min_start)
+                if not start_ok and not span_ok:
+                    history_ok = False
+                else:
+                    history_ok = True
+            else:
+                history_ok = True
             if history_ok and (ref_ts - latest).days <= max_stale_days:
                 return _norm_price(df), "cache"
 

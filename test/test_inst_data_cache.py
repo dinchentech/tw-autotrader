@@ -117,6 +117,20 @@ class TestPriceCache(unittest.TestCase):
                 sources=("finmind",), min_start="2025-06-01")
             self.assertNotEqual(src, "cache")
 
+    def test_late_listed_cache_hit(self):
+        """上市晚的股票（快取覆蓋 ≥1 年但最早日期晚於 min_start）→ 命中，
+        避免每次回測都重新下載（2026-08-14 11 年窗死鎖 bug 的迴歸測試）"""
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "price.pkl"
+            _dump_cache(p, _price_df(days=900, start="2024-06-01"),
+                        meta={"source": "finmind"})
+            dl = _ExplodingDL()
+            df, src = get_price_data(
+                dl, "1623", "2014-06-05", "2025-12-31", cache_path=p,
+                max_stale_days=30, ref_date=date(2025, 12, 31),
+                sources=("finmind",), min_start="2014-06-05")
+            self.assertEqual(src, "cache")
+
     def test_version_mismatch_cache_rejected(self):
         """版本不符的快取 → get_price_data 拒絕，不當作 cache 使用"""
         with tempfile.TemporaryDirectory() as td:
