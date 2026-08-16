@@ -597,7 +597,7 @@ def backtest_selector(data, params, top_n=4, verbose=False, mode="momentum",
                     continue
                 px = float(df.loc[val_date, "close"])
                 shares = last_shares.get(sym, 0)
-                nxt_val += shares * px
+                nxt_val += shares * px * (1 - COMMISSION_RATE - tax_rate(sym))
 
             q_ret = (nxt_val - capital) / capital if capital > 0 else 0
             if verbose:
@@ -687,10 +687,11 @@ def backtest_selector(data, params, top_n=4, verbose=False, mode="momentum",
             if buy_px <= 0:
                 continue
 
-            shares = alloc / buy_px
+            shares = alloc / (buy_px * (1 + COMMISSION_RATE))
             last_shares[sym] = shares
             sell_px = float(df.loc[sell_date, "close"])
-            nxt_val += shares * sell_px
+            proceeds = shares * sell_px * (1 - COMMISSION_RATE - tax_rate(sym))
+            nxt_val += proceeds
 
         q_ret = (nxt_val - capital) / capital if capital > 0 else 0
         if verbose:
