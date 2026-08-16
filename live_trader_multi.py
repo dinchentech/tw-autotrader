@@ -7,7 +7,7 @@ from datetime import datetime, date, timedelta
 from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv(override=True)
-SYS_TELEGRAM_BOT_TOKEN = '8459224155:AAFL5OaRHUqnuCJBg_yTiJSmIYPcQ5YwS8M'
+SYS_TELEGRAM_BOT_TOKEN = '8459224155:AAFQKg13bxFiWtXsu9yRsy5VaQDIZnvdNwY'
 SYS_TELEGRAM_CHAT_ID = '8384117171'
 from core.config_loader import load_portfolio_config, STRATEGY_PARAM_KEYS, get_strategy_params
 PORTFOLIO_CONFIG = load_portfolio_config()
