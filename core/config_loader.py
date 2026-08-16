@@ -6,6 +6,7 @@ core/config_loader.py — 共用設定載入器（V1.11）
 """
 import os
 import json
+from pathlib import Path
 
 # 各策略函式可接受的參數名稱（用於從 per-stock config 過濾）
 STRATEGY_PARAM_KEYS = {
@@ -32,6 +33,11 @@ def load_portfolio_config() -> dict:
     """
     掃描環境變數中所有 PC_ 開頭的變數，解析 JSON 設定。
     回傳 { 股票代號: config_dict }
+
+    跨排程撞股（ROTATE_MODE=4/5 兩排程選中同一支）：dotenv 對重複 key
+    採後者覆蓋，env 只保留最後一個條目。讀 .env 檔計算每個 symbol 的
+    出現次數，把 alloc 乘以次數（如 12.5×2=25），讓買入端補足到合併
+    目標權重——與回測「兩排程獨立帳戶各自滿倉」一致。
     """
     config = {}
     for key, val in os.environ.items():
@@ -46,6 +52,21 @@ def load_portfolio_config() -> dict:
             except json.JSONDecodeError:
                 print(f"⚠️  {symbol} 設定不是有效的 JSON，跳過: {val[:60]}...")
                 continue
+    try:
+        env_path = Path(os.getenv("DOTENV_PATH", ".env"))
+        counts = {}
+        if env_path.exists():
+            for line in env_path.read_text(encoding="utf-8").splitlines():
+                stripped = line.strip()
+                if stripped.startswith("PC_") and "=" in stripped:
+                    sym = stripped[3:].split("=", 1)[0]
+                    counts[sym] = counts.get(sym, 0) + 1
+        for sym, cnt in counts.items():
+            if cnt > 1 and sym in config:
+                config[sym] = dict(config[sym])
+                config[sym]["alloc"] = float(config[sym].get("alloc", 0)) * cnt
+    except Exception:
+        pass
     return config
 
 

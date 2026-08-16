@@ -305,18 +305,26 @@ def main():
     if (daily_symbol_trades_date != today_str):
       daily_symbol_trades = {}
       daily_symbol_trades_date = today_str
+      _rot_day_buys = set()
       save_daily_trades(daily_symbol_trades, today_str)
       if (now.weekday() == 6):
         ltt = {}
         save_last_trade_times(ltt)
         print(f'🧹 每週自動清空冷卻紀錄 (last_trade_times.json)')
-    # ── 開盤 09:00-09:05：清倉不在 PORTFOLIO_CONFIG 的舊持股 ──
+    # ── 開盤 09:00-09:05：清倉不在 PORTFOLIO_CONFIG 的舊持股 + 全輪替超額 trim ──
     if (is_weekday and (h == 9) and (m < 5)):
       _cd_key = '_cleanup_date'
       if globals().get(_cd_key) != today_str:
+        try:
+          _rot_pending = load_json('logs/rotation_pending.json', {})
+          _is_rotation_day = (_rot_pending.get('buy_date') == today_str)
+        except Exception:
+          _is_rotation_day = False
         for old_sym in list(holdings.keys()):
-          if old_sym not in PORTFOLIO_CONFIG and holdings.get(old_sym, 0) > 0:
-            old_shares = holdings[old_sym]
+          old_shares = holdings.get(old_sym, 0)
+          if old_shares <= 0:
+            continue
+          if old_sym not in PORTFOLIO_CONFIG:
             try:
               old_px = broker.get_current_price(old_sym)
               if old_px <= 0:
@@ -337,6 +345,31 @@ def main():
                 save_monthly_budget(budget_spent)
             except Exception as _e:
               print(f'⚠️ 清倉 {old_sym} 失敗: {_e}')
+          elif (_is_rotation_day and (float(PORTFOLIO_CONFIG[old_sym].get('max_entry_price', 0)) == -1)):
+            try:
+              _cfg_r = PORTFOLIO_CONFIG[old_sym]
+              _alloc_pct = float(_cfg_r.get('alloc', 25))
+              _target_amount = (TOTAL_CAPITAL * _alloc_pct) / 100.0
+              _px_r = broker.get_current_price(old_sym)
+              if _px_r <= 0:
+                continue
+              _target_shares = max(1, int(_target_amount / _px_r))
+              _excess = old_shares - _target_shares
+              if _excess > 0:
+                broker.place_order(old_sym, 'sell', _excess)
+                rm.log_trade(old_sym, -1, _px_r, _excess)
+                send_trade_alert(old_sym, 'SELL', _px_r, _excess, 'ROTATE_TRIM')
+                holdings[old_sym] = old_shares - _excess
+                save_holdings(holdings)
+                if (old_sym in stock_alloc) and (stock_alloc[old_sym].get('total_buy_shares', 0) > 0):
+                  _ad = stock_alloc[old_sym]
+                  _avg = (_ad['total_buy_cost'] / _ad['total_buy_shares'])
+                  _ad['total_buy_cost'] = max(0.0, (_ad['total_buy_cost'] - (_avg * _excess)))
+                  _ad['total_buy_shares'] = max(0, (_ad['total_buy_shares'] - _excess))
+                  save_stock_allocation(stock_alloc)
+                print(f'✂️ 全輪替 trim {old_sym}: 超額 {_excess} 股 @ {_px_r:.0f}（目標 {_target_shares} 股）')
+            except Exception as _e:
+              print(f'⚠️ 全輪替 trim {old_sym} 失敗: {_e}')
         globals()[_cd_key] = today_str
 
     if (is_weekday and (((h == 8) and (m >= 45)) or ((h >= 9) and (h < 13)) or ((h == 13) and (m <= 30)))):
@@ -378,28 +411,41 @@ def main():
           if (sn == 'keep_wait'):
             kw_max_entry_price = float(cfg.get('max_entry_price', 0))
             
-            # 全輪替模式：max_entry_price=-1，一次性買入、不操作、等換季時清倉
+            # 全輪替模式：max_entry_price=-1，依合併權重補足到目標股數（撞股加倍，與回測一致）
             if kw_max_entry_price == -1:
-              existing = holdings.get(symbol, 0)
-              if existing > 0:
-                signal = 0
-                continue
-              # TWO_BY_TWO / 全輪替：依 alloc% × TOTAL_CAPITAL 計算股數
               alloc_pct = float(cfg.get('alloc', 25))
               target_amount = (TOTAL_CAPITAL * alloc_pct) / 100.0
-              position_size = max(1, int(target_amount / px)) if px > 0 else int(cfg.get('initial_shares', 12))
+              target_shares = max(1, int(target_amount / px)) if px > 0 else int(cfg.get('initial_shares', 12))
+              existing = holdings.get(symbol, 0)
               if (symbol not in pyramid_tracker):
                 pyramid_tracker[symbol] = {'buy_count': 0, 'last_buy_price': 0.0, 'total_cost': 0.0, 'total_shares': 0, 'sold_date': None}
               trk = pyramid_tracker[symbol]
               kw_pre_state = {'buy_count': trk['buy_count'], 'last_buy_price': trk['last_buy_price'], 'total_cost': trk['total_cost'], 'total_shares': trk['total_shares'], 'sold_date': trk['sold_date']}
-              if trk['buy_count'] == 0:
-                signal = 1
-                trk['buy_count'] = 1
-                print(f'📥 {symbol} 全輪替 初始進場 {position_size} 股 @ {px:.0f}')
-              else:
+              try:
+                _rot_pending = load_json('logs/rotation_pending.json', {})
+                _is_rotation_day = (_rot_pending.get('buy_date') == today_str)
+              except Exception:
+                _is_rotation_day = False
+              if (trk['buy_count'] > 0) and (not _is_rotation_day):
                 signal = 0
-              if (signal == 0):
                 continue
+              if symbol in _rot_day_buys:
+                signal = 0
+                continue
+              position_size = max(0, target_shares - existing)
+              if position_size <= 0:
+                signal = 0
+                continue
+              if trk['buy_count'] == 0:
+                trk['buy_count'] = 1
+                trk['total_cost'] = px * position_size
+                trk['total_shares'] = position_size
+              else:
+                trk['total_cost'] += px * position_size
+                trk['total_shares'] += position_size
+              trk['last_buy_price'] = px
+              print(f'📥 {symbol} 全輪替 進場 {position_size} 股 @ {px:.0f}（目標 {target_shares} 股，既有 {existing} 股）')
+              signal = 1
             if kw_max_entry_price != -1:
             
               kw_initial = int(cfg.get('initial_shares', 12))
@@ -618,6 +664,8 @@ def main():
             else:
               holdings[symbol] = max(0, (holdings.get(symbol, 0) - position_size))
             save_holdings(holdings)
+            if ((action == 'BUY') and (sn == 'keep_wait') and (kw_max_entry_price == -1)):
+              _rot_day_buys.add(symbol)
             if (MAX_DAILY_TRADES_PER_SYMBOL > 0):
               daily_symbol_trades[symbol] = (daily_symbol_trades.get(symbol, 0) + 1)
               save_daily_trades(daily_symbol_trades, daily_symbol_trades_date)
@@ -707,6 +755,13 @@ def main():
                         if pc_lines:
                             backup_env('.env', 'backups')
                             update_env_section('.env', schedule, pc_lines)
+                            # v3.9: 排定次日為全輪替買賣日（撞股補足/超額 trim 的開關）
+                            try:
+                              _next_buy_date = _next_market_open(now).strftime('%Y-%m-%d')
+                              save_json({'buy_date': _next_buy_date}, 'logs/rotation_pending.json')
+                              print(f'📅 全輪替買賣日已排定: {_next_buy_date}')
+                            except Exception as _e:
+                              print(f'⚠️ 排定買賣日失敗: {_e}')
                             # v3.5: 換季換股成功後，重置分帳本讓新一季從零開始
                             for _s in list(stock_alloc.keys()):
                               stock_alloc[_s] = {'total_buy_cost': 0, 'total_buy_shares': 0}
