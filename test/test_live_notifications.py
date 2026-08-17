@@ -52,6 +52,17 @@ class TestHoldingsMessagePrices(unittest.TestCase):
         self.assertIn("參考市價 996", msg)
         self.assertIn("未實現損益 +18,414", msg)
 
+    def test_closing_summary_uses_real_market_price(self):
+        from core.live_notifications import send_closing_summary
+        captured = {}
+        with patch("core.inst_data._fetch_price_twse",
+                   side_effect=self._fake_twse), \
+             patch("core.live_notifications.notify_all",
+                   side_effect=lambda m: captured.setdefault("msg", m)):
+            send_closing_summary(pd, "3.9")
+        self.assertIn("參考市價 996", captured["msg"])
+        self.assertIn("未實現損益 +18,414", captured["msg"])
+
     def test_sleep_report_fallback_when_fetch_fails(self):
         from core.live_notifications import _build_holdings_message
         with patch("core.inst_data._fetch_price_twse",

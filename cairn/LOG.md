@@ -6,8 +6,9 @@
 
 - 根因：`core/live_notifications._build_holdings_message` 以 performance.csv 最後一筆成交價當市價（未平倉部位=買進價）→ 參考市價恆等於成本、未實現損益 +0（與儀表板同根源）。
 - 修復：`core/inst_data.py` 新增共用 `fetch_latest_closes()`（TWSE STOCK_DAY 本月+上月取最後收盤；失敗回退 CSV 價）；`_build_holdings_message` 優先使用真實收盤價；`scripts/generate_dashboard.fetch_current_prices` 改委派共用函式（消除重複）。
-- 回歸測試 +2（test/test_live_notifications.py，67/67 全綠）；真實 API 驗證 4 檔全部取得市價（未實現 +44,660）。
-- 影響範圍：睡前報告、啟動報告、儀表板共用同一抓價邏輯。
+- **追加**：`send_closing_summary` 內聯了一份相同的舊邏輯（收盤報告仍顯示舊價）→ 重構委派 `_build_holdings_message`，刪除 ~50 行重複。
+- 回歸測試 +3（test/test_live_notifications.py，68/68 全綠）；真實 API 驗證 4 檔全部取得市價（未實現 +44,660）。
+- 影響範圍：睡前報告、啟動報告、收盤報告、儀表板共用同一抓價邏輯。
 
 ## 2026-08-16 · 實盤撞股改為與回測一致：跨排程權重合併 + 補足/超額 trim
 

@@ -225,80 +225,12 @@ def send_startup_holdings(pd, app_version):
 
 
 def send_closing_summary(pd, app_version):
-    import json
-    from pathlib import Path
+    import os
     from datetime import datetime
     try:
-        holdings_path = Path("logs/holdings.json")
-        alloc_path = Path("logs/stock_allocation.json")
-        csv_path = Path("logs/performance.csv")
-
-        if not holdings_path.exists():
+        msg = _build_holdings_message(pd, app_version, "📋", "收盤持倉報告")
+        if msg is None:
             return
-
-        with open(holdings_path) as f:
-            holdings = json.load(f)
-        if not holdings:
-            return
-
-        alloc = {}
-        if alloc_path.exists():
-            with open(alloc_path) as f:
-                alloc = json.load(f)
-
-        date_str = datetime.now().strftime("%Y-%m-%d")
-
-        msg = f"📋 *收盤持倉報告 ({date_str})* V{app_version}\n"
-        msg += "─" * 20 + "\n"
-
-        total_cost = 0
-        total_value = 0
-        total_unrealized = 0
-
-        for sym in sorted(holdings.keys()):
-            shares = holdings.get(sym, 0)
-            if isinstance(shares, dict):
-                # New format
-                qty = shares.get("qty", 0)
-                if qty <= 0: continue
-                avg_cost = shares.get("avg_price", 0)
-                shares = qty
-            else:
-                # Old format
-                if shares <= 0: continue
-                avg_cost = 0
-                alloc_data = alloc.get(sym, {})
-                if isinstance(alloc_data, dict) and alloc_data.get("total_buy_shares", 0) > 0:
-                    avg_cost = alloc_data["total_buy_cost"] / alloc_data["total_buy_shares"]
-
-            current_price = avg_cost
-            if csv_path.exists():
-                try:
-                    df = pd.read_csv(csv_path, on_bad_lines='skip')
-                    sym_df = df[df["symbol"] == str(sym)]
-                    if not sym_df.empty:
-                        current_price = sym_df["price"].iloc[-1]
-                except Exception:
-                    pass
-
-            cost_basis = avg_cost * shares if avg_cost > 0 else 0
-            market_value = current_price * shares
-            unrealized = market_value - cost_basis
-            pct = (current_price - avg_cost) / avg_cost * 100 if avg_cost > 0 else 0
-
-            total_cost += cost_basis
-            total_value += market_value
-            total_unrealized += unrealized
-
-            emoji = "🟢" if unrealized >= 0 else "🔴"
-            msg += f"{emoji} {sym}: {shares}股\n"
-            msg += f"   成本均價 {avg_cost:,.0f} | 參考市價 {current_price:,.0f}\n"
-            msg += f"   未實現損益 {unrealized:+,.0f} ({pct:+.2f}%)\n"
-
-        msg += "─" * 20 + "\n"
-        msg += f"總成本: NT${total_cost:,.0f}\n"
-        msg += f"總市值: NT${total_value:,.0f}\n"
-        msg += f"未實現損益: {'+' if total_unrealized >= 0 else ''}{total_unrealized:,.0f}\n"
 
         # 法人抬轎動能篩選結果
         inst_msg = _build_inst_screening_msg()
