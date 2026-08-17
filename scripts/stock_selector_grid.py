@@ -925,7 +925,8 @@ def backtest_dual_quarterly(data, params, top_n=4, verbose=False, mode="momentum
         ya = bt_a["yearly"].get(yr, {})
         yb = bt_b["yearly"].get(yr, {})
         yearly[yr] = {"total_ret": (ya.get("total_ret", 0) + yb.get("total_ret", 0)) / 2}
-    return {"final_value": final_val, "total_return": total_ret, "yearly": yearly}
+    return {"final_value": final_val, "total_return": total_ret, "yearly": yearly,
+            "records_a": bt_a["records"], "records_b": bt_b["records"]}
 
 
 # ══════════════════════════════════════════════════════════════

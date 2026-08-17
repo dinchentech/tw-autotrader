@@ -78,8 +78,121 @@ bt = ssg.backtest_dual_quarterly(data, params, top_n=TOP_N, mode=mode,
 import math
 years = (pd.Timestamp(END) - pd.Timestamp(START)).days / 365.25
 ann = (bt["total_return"] + 1) ** (1 / years) - 1 if bt["total_return"] > -1 else -1
+
+
+# ── 日頻權益曲線重建（供 Sharpe / MDD 計算）─────────────────────
+def schedule_daily_curve(records, data, commission=ssg.COMMISSION_RATE, initial=500000.0):
+    """依每季 records 重建單一排程的日頻帳戶價值曲線（含交易成本）。
+
+    backtest_selector 的 records[i] = {date: 選股日 q_i, holdings: 本季持股,
+    value: 下個季末賣出後的帳戶價值}——所以 record i 的「部署資本」是
+    前一筆 record 的 value（i=0 為 initial），segment 涵蓋 [q_i, q_{i+1})，
+    季末以次筆 value 為稅後基準；最後一筆 record 直接取官方終值。
+    段內多檔同日期先 groupby 加總；換股日 snap 早於季末日期時，
+    重疊日以新股持倉為準（keep=last），與回測「同日賣舊買新」一致。
+    """
+    segs = []
+    for i, rec in enumerate(records):
+        qd, chosen = rec["date"], rec["holdings"]
+        if i == len(records) - 1:
+            segs.append(pd.Series({qd: rec["value"]}))
+            continue
+        nxt = records[i + 1]["date"]
+        capital = records[i - 1]["value"] if i > 0 else initial
+        alloc = capital / len(chosen) if chosen else 0.0
+        parts = []
+        for sym in chosen:
+            if sym not in data:
+                continue
+            df = data[sym]
+            buy_date = ssg._snap_date(df, qd)
+            if buy_date is None:
+                continue
+            buy_px = float(df.loc[buy_date, "close"])
+            if buy_px <= 0:
+                continue
+            shares = alloc / (buy_px * (1 + commission))
+            sub = df.loc[buy_date:nxt, "close"] * shares
+            sub = sub[sub.index < nxt]
+            parts.append(sub)
+        if parts:
+            segs.append(pd.concat(parts).groupby(level=0).sum())
+    if not segs:
+        return pd.Series(dtype=float)
+    curve = pd.concat(segs).sort_index()
+    return curve[~curve.index.duplicated(keep="last")]
+
+
+def benchmark_curve(mkt, start, end, capital=500000.0):
+    """0050 買入持有（與策略同資料源/同區間，yfinance auto_adjust=True 含息）。"""
+    idx = mkt.index[(mkt.index >= pd.Timestamp(start)) & (mkt.index <= pd.Timestamp(end))]
+    if len(idx) == 0:
+        return pd.Series(dtype=float)
+    t0 = idx[0]
+    b0 = float(mkt.loc[t0, "close"])
+    return mkt.loc[idx, "close"] * (capital / b0)
+
+
+def sharpe_mdd(curve, rf=0.0, periods=252):
+    """年化 Sharpe（日頻, rf=0 預設）與最大回撤（負值）。"""
+    curve = curve.dropna()
+    rets = curve.pct_change().dropna()
+    if len(rets) < 3:
+        return None, None
+    ex = rets - rf / periods
+    sd = ex.std(ddof=1)
+    sharpe = float(ex.mean() / sd * math.sqrt(periods)) if sd > 0 else float("nan")
+    run_max = curve.cummax()
+    mdd = float(((curve - run_max) / run_max).min())
+    return sharpe, mdd
+
+
+def yearly_from_curve(curve):
+    return {int(yr): float(grp.iloc[-1] / grp.iloc[0] - 1)
+            for yr, grp in curve.groupby(curve.index.year)}
+
+
+# 組合曲線 = 兩排程各 500k 帳戶的平均（與 final_val=(A+B)/2 語義一致）
+ca = schedule_daily_curve(bt.get("records_a", []), data)
+cb = schedule_daily_curve(bt.get("records_b", []), data)
+idx = ca.index.union(cb.index)
+
+
+def padded(s, idx, initial=500000.0):
+    """對齊到共同日期軸：起始前視為現金 initial，之後 ffill 續抱（含尾部）。"""
+    if len(s) == 0:
+        return pd.Series(initial, index=idx)
+    r = s.reindex(idx)
+    r.loc[r.index < s.index[0]] = initial
+    return r.ffill()
+
+
+comb = (padded(ca, idx) + padded(cb, idx)) / 2.0
+comb = comb.loc[comb.first_valid_index():].ffill().dropna()
+bench = benchmark_curve(mkt, START, END)
+
+sharpe, mdd = sharpe_mdd(comb)
+b_sharpe, b_mdd = sharpe_mdd(bench)
+comb_yearly = yearly_from_curve(comb)
+bench_yearly = yearly_from_curve(bench)
+bench_ann = (bench.iloc[-1] / 500000.0) ** (1 / years) - 1
+
+# 存檔供稽核（日頻權益曲線）
+import os
+os.makedirs("results", exist_ok=True)
+pd.DataFrame({"equity_rotate5": comb, "equity_0050": bench.reindex(comb.index).ffill()}) \
+    .to_csv("results/rotate_mode5_2015_2025_daily_equity.csv")
+
 print(json.dumps({"pool_n": POOL_N, "top_n": TOP_N, "final_value": round(bt["final_value"]),
                    "total_return": round(bt["total_return"], 4),
                    "annualized": round(ann, 4),
-                   "yearly": {k: round(v["total_ret"], 4) for k, v in bt["yearly"].items()}},
+                   "sharpe_annualized": round(sharpe, 2) if sharpe is not None else None,
+                   "max_drawdown": round(mdd, 4) if mdd is not None else None,
+                   "benchmark_0050": {"final_value": round(bench.iloc[-1]),
+                                      "annualized": round(bench_ann, 4),
+                                      "sharpe_annualized": round(b_sharpe, 2) if b_sharpe is not None else None,
+                                      "max_drawdown": round(b_mdd, 4) if b_mdd is not None else None},
+                   "yearly": {k: round(v["total_ret"], 4) for k, v in bt["yearly"].items()},
+                   "yearly_curve": {k: round(v, 4) for k, v in comb_yearly.items()},
+                   "benchmark_yearly_curve": {k: round(v, 4) for k, v in bench_yearly.items()}},
                   ensure_ascii=False))
