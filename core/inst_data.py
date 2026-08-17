@@ -228,6 +228,40 @@ def _fetch_price_twse(stock_id: str, start: str, end: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+def fetch_latest_closes(symbols) -> dict:
+    """抓取標的最新收盤價（TWSE STOCK_DAY），回傳 {symbol: close}。
+
+    抓「本月 + 上個月」兩個月資料取最後一個交易日的收盤價，
+    避免月初邊界（當月尚無資料）導致抓不到價格。
+    個別標的失敗時略過；全部失敗回傳空 dict，由呼叫端自行回退。
+    """
+    prices = {}
+    if not symbols:
+        return prices
+    today = pd.Timestamp(date.today())
+    month_starts = [today.strftime("%Y-%m-01")]
+    prev = (today.replace(day=1) - pd.Timedelta(days=1)).replace(day=1)
+    month_starts.append(prev.strftime("%Y-%m-01"))
+    end_s = today.strftime("%Y-%m-%d")
+    for sym in symbols:
+        frames = []
+        for ms in month_starts:
+            try:
+                df = _fetch_price_twse(sym, ms, end_s)
+            except Exception:
+                continue
+            if df is not None and not df.empty:
+                frames.append(df)
+        if not frames:
+            continue
+        merged = pd.concat(frames).drop_duplicates("date").sort_values("date")
+        merged = merged[merged["close"] > 0]
+        if merged.empty:
+            continue
+        prices[sym] = float(merged.iloc[-1]["close"])
+    return prices
+
+
 def _fetch_price_yfinance(stock_id: str, start: str, end: str) -> pd.DataFrame:
     try:
         import yfinance as yf

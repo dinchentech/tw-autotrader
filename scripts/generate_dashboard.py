@@ -65,39 +65,11 @@ def load_stock_allocation() -> dict:
 def fetch_current_prices(symbols: list) -> dict:
     """抓取標的最新收盤價（TWSE STOCK_DAY），回傳 {symbol: close}。
 
-    抓「本月 + 上個月」兩個月資料取最後一個交易日的收盤價，
-    避免月初邊界（當月尚無資料）導致抓不到價格。
-    個別標的失敗時略過；全部失敗回傳空 dict，讓呼叫端回退到
-    performance.csv 最後成交價（既有行為），不中斷儀表板產出。
+    委派 core.inst_data.fetch_latest_closes（共用資料層）；
+    失敗時回傳空 dict，讓呼叫端回退到 performance.csv 最後成交價。
     """
-    from core.inst_data import _fetch_price_twse
-
-    prices = {}
-    if not symbols:
-        return prices
-    today = pd.Timestamp(datetime.now().date())
-    month_starts = [today.strftime("%Y-%m-01")]
-    prev_month = (today.replace(day=1) - pd.Timedelta(days=1)).replace(day=1)
-    month_starts.append(prev_month.strftime("%Y-%m-01"))
-    end_s = today.strftime("%Y-%m-%d")
-
-    for sym in symbols:
-        frames = []
-        for ms in month_starts:
-            try:
-                df = _fetch_price_twse(sym, ms, end_s)
-            except Exception:
-                continue
-            if df is not None and not df.empty:
-                frames.append(df)
-        if not frames:
-            continue
-        merged = pd.concat(frames).drop_duplicates("date").sort_values("date")
-        merged = merged[merged["close"] > 0]
-        if merged.empty:
-            continue
-        prices[sym] = float(merged.iloc[-1]["close"])
-    return prices
+    from core.inst_data import fetch_latest_closes
+    return fetch_latest_closes(symbols)
 
 
 def compute_positions(df: pd.DataFrame, holdings: dict, stock_alloc: dict, current_prices: dict = None) -> list:

@@ -98,6 +98,13 @@ def _build_holdings_message(pd, app_version, title_emoji, title):
     msg = f"{title_emoji} *{title} ({date_str})* V{app_version}\n"
     msg += "─" * 20 + "\n"
 
+    market_prices = {}
+    try:
+        from core.inst_data import fetch_latest_closes
+        market_prices = fetch_latest_closes([str(s) for s in holdings.keys()])
+    except Exception:
+        pass
+
     total_cost = 0
     total_value = 0
     total_unrealized = 0
@@ -118,17 +125,19 @@ def _build_holdings_message(pd, app_version, title_emoji, title):
             if isinstance(alloc_data, dict) and alloc_data.get("total_buy_shares", 0) > 0:
                 avg_cost = alloc_data["total_buy_cost"] / alloc_data["total_buy_shares"]
 
-        current_price = avg_cost
-        if csv_path.exists():
-            try:
-                df = pd.read_csv(csv_path, on_bad_lines='skip')
-                sym_df = df[df["symbol"] == str(sym)]
-                if not sym_df.empty:
-                    current_price = sym_df["price"].iloc[-1]
-                    if avg_cost == 0:
-                        avg_cost = current_price
-            except Exception:
-                pass
+        current_price = market_prices.get(str(sym))
+        if current_price is None:
+            current_price = avg_cost
+            if csv_path.exists():
+                try:
+                    df = pd.read_csv(csv_path, on_bad_lines='skip')
+                    sym_df = df[df["symbol"] == str(sym)]
+                    if not sym_df.empty:
+                        current_price = sym_df["price"].iloc[-1]
+                        if avg_cost == 0:
+                            avg_cost = current_price
+                except Exception:
+                    pass
 
         cost_basis = avg_cost * shares if avg_cost > 0 else 0
         market_value = current_price * shares
