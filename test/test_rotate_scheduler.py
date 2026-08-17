@@ -67,6 +67,14 @@ class TestTradingCalendar(unittest.TestCase):
         result = self.calendar.get_nth_trading_day(2026, 2, 20)
         self.assertIsNone(result, 'Month with fewer than 20 trading days should return None')
 
+    def test_get_last_trading_day_month_end(self):
+        r = self.calendar.get_nth_trading_day(2026, 8, -1)
+        self.assertEqual(str(r), '2026-08-31',
+                         'n=-1 should return the last trading day of the month')
+        r9 = self.calendar.get_nth_trading_day(2026, 9, -1)
+        self.assertEqual(str(r9), '2026-09-30',
+                         'Sep 2026 last trading day should be 9/30 (holidays 9/25, 9/28)')
+
 
 if __name__ == '__main__':
     unittest.main()
@@ -107,7 +115,7 @@ class TestRotateScheduler(unittest.TestCase):
         self.assertEqual(result, {'A': (2, 5, 8, 11), 'B': (3, 6, 9, 12)})
 
     def test_should_rotate_mode5_august_first_trading_day(self):
-        result = self.should_rotate_today(date(2026, 8, 3), 5, self.calendar)
+        result = self.should_rotate_today(date(2026, 8, 3), 5, self.calendar, nth_trading_day=1)
         self.assertEqual(result, 'A',
                          'Aug 3 2026 should be 1st trading day, ROTATE_MODE=5 schedule A')
 
@@ -126,13 +134,16 @@ class TestRotateScheduler(unittest.TestCase):
         self.assertIsNone(result,
                           'Aug 3 is 1st trading day, not 2nd — should not trigger for N=2')
 
-    def test_should_rotate_nth_trading_day_default_is_first(self):
+    def test_should_rotate_nth_trading_day_default_is_month_end(self):
         result = self.should_rotate_today(date(2026, 8, 4), 5, self.calendar)
         self.assertIsNone(result,
-                          'Default N=1 means only 1st trading day triggers, not 2nd')
+                          'Default N=-1 means only last trading day triggers, not 2nd trading day')
+        result = self.should_rotate_today(date(2026, 8, 31), 5, self.calendar)
+        self.assertEqual(result, 'A',
+                         'Default N=-1 should trigger on the last trading day of Aug 2026 (8/31)')
 
     def test_should_rotate_mode5_september_first_trading_day(self):
-        result = self.should_rotate_today(date(2026, 9, 1), 5, self.calendar)
+        result = self.should_rotate_today(date(2026, 9, 1), 5, self.calendar, nth_trading_day=1)
         self.assertEqual(result, 'B',
                          'Sep 1 2026 should be 1st trading day, ROTATE_MODE=5 schedule B')
 

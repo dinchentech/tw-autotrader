@@ -36,7 +36,8 @@ def get_rotate_months(rotate_mode):
     return {cfg['label']: cfg['months']}
 
 
-def should_rotate_today(today, rotate_mode, calendar, nth_trading_day=1):
+def should_rotate_today(today, rotate_mode, calendar, nth_trading_day=-1):
+    """是否為選股日。nth_trading_day=-1 = 每月最後交易日（預設，2026-08-18 起）。"""
     from core.trading_calendar import TradingCalendar
     if rotate_mode == 0:
         return None

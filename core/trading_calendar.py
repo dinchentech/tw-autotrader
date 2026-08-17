@@ -38,11 +38,19 @@ class TradingCalendar:
         return True
 
     def get_nth_trading_day(self, year, month, n):
+        """回傳該月第 n 個交易日；n=-1 時回傳該月最後交易日（月尾）。"""
         d = date(year, month, 1)
         if month == 12:
             end = date(year + 1, 1, 1)
         else:
             end = date(year, month + 1, 1)
+        if n == -1:
+            last = None
+            while d < end:
+                if self.is_trading_day(d):
+                    last = d
+                d += timedelta(days=1)
+            return last
         count = 0
         while d < end:
             if self.is_trading_day(d):
