@@ -97,7 +97,10 @@ def nth_trading_dates(start, end, quarter_months, n):
     out = []
     for (yr, mo), days in sorted(months.items()):
         if mo in quarter_months and days:
-            out.append(days[-1] if n == -1 else days[n - 1])
+            if n == -1:
+                out.append(days[-1])
+            elif n <= len(days):
+                out.append(days[n - 1])
     return out
 
 # ── 日頻權益曲線（同 backtest_rotation_historical.py，複製）─────────

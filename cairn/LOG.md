@@ -2,6 +2,27 @@
 
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
 
+## 2026-08-18 · MIN_DRAW_BACK 實盤整合（定案 20、最多延長一季）
+
+- 新增 `core/rotation_hold.py`：資產 = `TOTAL_CAPITAL + 已實現損益(performance.csv 買賣差額) + 持股市值`（不需成本基礎，避開分帳本重置干擾）；`should_hold` 狀態機（首次超標延後、仍超標強制換股、恢復即換股）；峰值/延長狀態持久化 `logs/equity_peak.json`/`logs/rotation_hold.json`；fail-open（股價抓取失敗或任何異常 → 照常換股）。
+- live_trader_multi.py：換股日 13:31~13:35 觸發後先跑 `check_rotation_hold(MIN_DRAW_BACK, ...)`，超標則跳過選股、TG 通知、續抱（用旗標 `_rotation_held` 包住選股區塊，避免 continue 跳過 sleep 空轉）；`MIN_DRAW_BACK` env 每日 08:40 熱重載生效。
+- 測試：`test/test_rotation_hold.py` 10 個（狀態機/資產計算/整合 fail-open），全 82 tests OK。`.env` 定案 `MIN_DRAW_BACK=20`；使用手冊/策略說明已更新（實盤整合狀態）。
+- 部署：root + plans 同步（identical），deploy.sh 會自動加密上 VM。
+
+## 2026-08-18 · MIN_DRAW_BACK 無限期延後模式對照測試
+
+- `backtest_selector` 新增 `min_drawback_unlimited`（True=回撤未恢復就一直續抱；False=最多延長一季）；官方腳本 `MIN_DRAW_BACK_UNLIMITED=1` env；sweep 改跑 7 組合。
+- 2015-2025 結果：**無限期全面劣於延長一季** — MDB=10 無限期跳過 50 次（B 排程 2015-12 起連續 34 季凍結，+408.6% 遠遜基線）；MDB=20 無限期 +2539.2% < 延長一季 +3228.3%（連續 6 季錯過 2019 反彈）；**MDB=30 兩模式等價**（4 次跳過後一季內必恢復，強制換股未觸發）。
+- 結論：強制換股是必要安全閥；「無限期延後」在低門檻下可能策略凍結。MDD 同樣未改善（-45~-51% vs 基線 -42.3%）。已更新策略說明對照表。
+
+## 2026-08-18 · 全輪替新增 MIN_DRAW_BACK 重大回撤保護 + 2015-2025 門檻測試
+
+- 規格：換股日帳戶總回撤（自歷史峰值）> MIN_DRAW_BACK% → 該季不賣不買續抱；下一季仍超標 → 照常換股（最多延長一季）；0=停用。
+- 實作：`backtest_selector` 新增 min_drawback（extended_once 狀態機；跳過季沿用 last_shares、不計買入成本）；`backtest_dual_quarterly`/`backtest_rotation_historical`（MIN_DRAW_BACK env）透傳；工具 `scripts/backtest_mindrawback_sweep.py`。
+- 2015-2025 測試（月尾、誠實池100、法人21d、含成本）：**MDB=20 最佳 +3228.3%（年化37.5%、夏普1.23、跳過12次）**；MDB=30 +2993.3%（4次）；MDB=10 大傷 +1191.0%（25次過度干預）。
+- ⚠️ 三者 MDD 皆比基線深（-48.2~-50.1% vs -42.3%，谷底移至 2025-04-09）：機制改善報酬（躲換股摩擦）、**不改善回撤**（跳過=不執行 63d 防禦切換、重新平衡延後一季）— 與「解決災情回撤」初衷相反，已誠實寫入策略說明。
+- 陷阱：官方回測腳本 `INST_CONFIRM=1` env 才啟用法確認；shell 乾淨時為無法人基線（MDB=20 6,990,657 vs 有法人 16,641,369）→ 加 env 後精確吻合。實盤整合待辦（需權益峰值追蹤）。
+
 ## 2026-08-18 · 沉澱 deploy.sh 加密/備份流程至知識庫
 
 - 建立 `cairn/deploy-pipeline.md`：完整紀錄 deploy.sh 13 步流程（源碼備份→plans 自動 commit/push→**pyarmor 加密（輸入=plans 備份）**→docker build→GCS→VM 重啟→**EXIT trap 還原 root**）。

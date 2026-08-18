@@ -3,6 +3,8 @@
 用法: python scripts/backtest_rotation_historical.py <start> <end> [pool_n] [top_n]
 例:   python scripts/backtest_rotation_historical.py 2015-01-01 2021-12-31 150 4
 評分參數覆寫(環境變數): MW=momentum_weight TW=technical_weight SW=stability_weight MAF=use_ma_filter MP=min_price
+其他: INST_CONFIRM=1 啟用法確認濾網（生產基線，預設停用）；INST_DAYS=法人回溯交易日(預設21)；
+      MIN_DRAW_BACK=換股日總回撤門檻百分比(0=停用，>0 時該季不賣不買續抱、最多延長一季)
 
 以 historical_shares.pkl（今天前 300 大的歷史股本）重建「逐季當時市值前 N」候選池，
 取代 stock_selector_grid 原生的固定池（今天市值排名，含倖存者偏差）。
@@ -69,12 +71,18 @@ if os.getenv("INST_CONFIRM") == "1":
     covered = sorted(inst_conf.keys())
     print(f"法人確認啟用: {len(covered)} 交易日 ({covered[0]} ~ {covered[-1]})；2015-2017 前段 pass-through")
 inst_days = int(os.getenv("INST_DAYS", "21"))
+# MIN_DRAW_BACK：換股日總回撤超標時該季不換股（0=停用，>0=門檻百分比）
+min_drawback = float(os.getenv("MIN_DRAW_BACK", "0"))
+# MIN_DRAW_BACK_UNLIMITED=1：無限期延後換股（回撤未恢復就一直續抱）；預設=最多延長一季
+min_drawback_unlimited = os.getenv("MIN_DRAW_BACK_UNLIMITED", "0") == "1"
 
 bt = ssg.backtest_dual_quarterly(data, params, top_n=TOP_N, mode=mode,
                                  auto_momentum=auto_mom, market_data=mkt,
                                  qm_a=(2, 5, 8, 11), qm_b=(3, 6, 9, 12),
                                  quarterly_pool=pools,
-                                 inst_conf=inst_conf, inst_days=inst_days)
+                                 inst_conf=inst_conf, inst_days=inst_days,
+                                 min_drawback=min_drawback,
+                                 min_drawback_unlimited=min_drawback_unlimited)
 import math
 years = (pd.Timestamp(END) - pd.Timestamp(START)).days / 365.25
 ann = (bt["total_return"] + 1) ** (1 / years) - 1 if bt["total_return"] > -1 else -1
@@ -183,11 +191,18 @@ os.makedirs("results", exist_ok=True)
 pd.DataFrame({"equity_rotate5": comb, "equity_0050": bench.reindex(comb.index).ffill()}) \
     .to_csv("results/rotate_mode5_2015_2025_daily_equity.csv")
 
-print(json.dumps({"pool_n": POOL_N, "top_n": TOP_N, "final_value": round(bt["final_value"]),
+def skipped_dates(records):
+    return [r["date"].strftime("%Y-%m-%d") for r in records if r.get("skipped")]
+
+print(json.dumps({"pool_n": POOL_N, "top_n": TOP_N, "min_drawback": min_drawback,
+                   "min_drawback_unlimited": min_drawback_unlimited,
+                   "final_value": round(bt["final_value"]),
                    "total_return": round(bt["total_return"], 4),
                    "annualized": round(ann, 4),
                    "sharpe_annualized": round(sharpe, 2) if sharpe is not None else None,
                    "max_drawdown": round(mdd, 4) if mdd is not None else None,
+                   "skipped_quarters": {"A": skipped_dates(bt.get("records_a", [])),
+                                        "B": skipped_dates(bt.get("records_b", []))},
                    "benchmark_0050": {"final_value": round(bench.iloc[-1]),
                                       "annualized": round(bench_ann, 4),
                                       "sharpe_annualized": round(b_sharpe, 2) if b_sharpe is not None else None,

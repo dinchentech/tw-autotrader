@@ -561,7 +561,8 @@ def _snap_date(df, target):
 
 def backtest_selector(data, params, top_n=4, verbose=False, mode="momentum", 
                        auto_momentum=False, market_data=None, quarter_months=None,
-                       quarterly_pool=None, inst_conf=None, inst_days=21):
+                       quarterly_pool=None, inst_conf=None, inst_days=21, min_drawback=0,
+                       min_drawback_unlimited=False):
     """
     回測每季選股績效。
     每季末用 params 選股 → 持有到下季末 → 計算報酬。
@@ -570,10 +571,17 @@ def backtest_selector(data, params, top_n=4, verbose=False, mode="momentum",
     auto_momentum: True = 依市場狀態自動切換 momentum_days（21/63）
     market_data: 0050 或大盤指數 DataFrame，用於判讀市場狀態
     quarter_months: (1,4,7,10) / (2,5,8,11) / (3,6,9,12)，預設 (3,6,9,12)
+    min_drawback: 全輪替重大回撤保護（0=停用）。>0 時，若換股日帳戶總回撤
+        （自歷史峰值）> 此百分比，該季不賣不買、續抱原持股。
+    min_drawback_unlimited: True = 無限期延後換股（回撤未恢復到門檻內就一直續抱）；
+        False（預設）= 最多延長一季，下一季回撤仍超標則照常換股。
     """
     import math
     quarter_dates = quarter_end_dates(quarter_months=quarter_months)
     capital = 500000.0
+    peak = capital
+    extended_once = False
+    last_shares = {}
     records = []
     holdings_list = []
     year_vals = {}
@@ -603,6 +611,7 @@ def backtest_selector(data, params, top_n=4, verbose=False, mode="momentum",
             if verbose:
                 print(f"  {qd.strftime('%Y-%m-%d')} → 評價 {chosen} → 報酬 {q_ret:+.2%} (終值 NT${nxt_val:,.0f})")
             capital = nxt_val
+            peak = max(peak, capital)
             records.append({"date": qd, "holdings": chosen, "return": q_ret, "value": capital})
             yr = qd.year
             if yr not in year_vals:
@@ -611,6 +620,53 @@ def backtest_selector(data, params, top_n=4, verbose=False, mode="momentum",
             if qd.month == 12:
                 year_vals[yr]["end"] = capital
             break
+
+        # ── MIN_DRAW_BACK：換股日總回撤超標 → 該季不賣不買、續抱 ──
+        skip_rotation = False
+        if min_drawback > 0 and current_holdings:
+            dd = capital / peak - 1.0
+            if dd < -min_drawback / 100.0:
+                if min_drawback_unlimited:
+                    skip_rotation = True
+                elif not extended_once:
+                    skip_rotation = True
+                    extended_once = True
+                else:
+                    extended_once = False
+            else:
+                extended_once = False
+
+        if skip_rotation:
+            chosen = current_holdings
+            nxt_val = 0.0
+            nq_idx = qi + 1
+            end_target = quarter_dates[nq_idx]
+            for sym in chosen:
+                if sym not in data:
+                    continue
+                df = data[sym]
+                sell_date = _snap_date(df, end_target)
+                if sell_date is None:
+                    continue
+                shares = last_shares.get(sym, 0)
+                if shares <= 0:
+                    continue
+                sell_px = float(df.loc[sell_date, "close"])
+                nxt_val += shares * sell_px * (1 - COMMISSION_RATE - tax_rate(sym))
+            q_ret = (nxt_val - capital) / capital if capital > 0 else 0
+            if verbose:
+                print(f"  {qd.strftime('%Y-%m-%d')} → ⚠️ 回撤{dd:+.1%} 超標，跳過換股續抱 {chosen} → 報酬 {q_ret:+.2%}")
+            capital = nxt_val
+            peak = max(peak, capital)
+            records.append({"date": qd, "holdings": chosen, "return": q_ret,
+                            "value": capital, "skipped": True})
+            yr = qd.year
+            if yr not in year_vals:
+                year_vals[yr] = {"start": last_val, "end": capital, "records": []}
+            year_vals[yr]["records"].append(q_ret)
+            year_vals[yr]["end"] = capital
+            last_val = capital
+            continue
 
         # 選股日對齊到實際交易日
         buy_date_q = _snap_date(list(data.values())[0], qd) if data else qd
@@ -698,6 +754,7 @@ def backtest_selector(data, params, top_n=4, verbose=False, mode="momentum",
             print(f"  {qd.strftime('%Y-%m-%d')} → 持有 {chosen} → 報酬 {q_ret:+.2%} (終值 NT${nxt_val:,.0f})")
 
         capital = nxt_val
+        peak = max(peak, capital)
 
         records.append({
             "date": qd,
@@ -909,15 +966,18 @@ def backtest_two_by_two(data, params, verbose=False, mode="momentum",
 def backtest_dual_quarterly(data, params, top_n=4, verbose=False, mode="momentum",
                             auto_momentum=False, market_data=None,
                             qm_a=(2,5,8,11), qm_b=(3,6,9,12), quarterly_pool=None,
-                            inst_conf=None, inst_days=21):
+                            inst_conf=None, inst_days=21, min_drawback=0,
+                            min_drawback_unlimited=False):
     """兩段季度排程 50/50 資金各半並行回測。日期用 module 的 START_DATE/END_DATE。"""
     bt_a = backtest_selector(data, params, top_n, verbose, mode, auto_momentum,
                               market_data, quarter_months=qm_a, quarterly_pool=quarterly_pool,
-                              inst_conf=inst_conf, inst_days=inst_days)
+                              inst_conf=inst_conf, inst_days=inst_days, min_drawback=min_drawback,
+                              min_drawback_unlimited=min_drawback_unlimited)
     bt_b = backtest_selector(data, params, top_n, False, mode,
                               auto_momentum, market_data, quarter_months=qm_b,
                               quarterly_pool=quarterly_pool,
-                              inst_conf=inst_conf, inst_days=inst_days)
+                              inst_conf=inst_conf, inst_days=inst_days, min_drawback=min_drawback,
+                              min_drawback_unlimited=min_drawback_unlimited)
     final_val = (bt_a["final_value"] + bt_b["final_value"]) / 2
     total_ret = (final_val - 500000) / 500000
     yearly = {}
