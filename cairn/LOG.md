@@ -2,6 +2,19 @@
 
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
 
+## 2026-08-18 · 沉澱 deploy.sh 加密/備份流程至知識庫
+
+- 建立 `cairn/deploy-pipeline.md`：完整紀錄 deploy.sh 13 步流程（源碼備份→plans 自動 commit/push→**pyarmor 加密（輸入=plans 備份）**→docker build→GCS→VM 重啟→**EXIT trap 還原 root**）。
+- 關鍵陷阱：git HEAD 的 root `live_trader_multi.py` = 混淆版（3 行/179KB/變數改名），`plans/live_trader_multi.py` = 源碼（806 行）；deploy 被硬殺時 root 會留混淆版（檢查 `wc -l`，`cp plans/... root` 還原）；plans 若被備份成混淆版會二次加密。AGENTS.md 閱讀順序加入導覽指標。
+
+## 2026-08-18 · 修復 _rot_day_buys UnboundLocalError（VM 全輪替買入全部失敗）
+
+- 症狀：VM log 每分鐘重複 `❌ 3653/2395/3231/2357 錯誤: cannot access local variable '_rot_day_buys' where it is not associated with a value` — 4 檔全輪替持股的買入判斷全部拋錯。
+- 根因：`_rot_day_buys = set()` 原寫在 `if (daily_symbol_trades_date != today_str):` 區塊內（每日初始化）。但 `main()` 啟動時 `load_daily_trades()` 若讀到「今天」的紀錄（當天重啟/熱更新），`daily_symbol_trades_date == today` → 該區塊被跳過 → 買入迴圈 `if symbol in _rot_day_buys`（L432）UnboundLocalError。**只要程式在當天有過一次紀錄後重啟就會觸發**（11:01 deploy 重啟即中）。
+- 修復（最小改動）：`_rot_day_buys = set()` 移至迴圈層級無條件執行（每輪重新初始化；雙重買入防護由 `position_size = max(0, target_shares - existing)` 把關，語義安全）。
+- 回歸測試：`test/test_rot_day_buys.py`（AST 靜態檢查：初始化不得只寫在 if 區塊內；先 RED 後 GREEN），全 72 tests OK。
+- 陷阱：deploy.sh 的 pyarmor 流程會在 exit trap 把 root `live_trader_multi.py` 從 plans/ 還原；本次 10:49 的 deploy 中斷留下混淆檔在 root（「deploy 沒發生」的來源），11:01 的 deploy 有還原但**內容是未修復源碼** → 修正後須把 plans 修正版複製回 root 再重跑 deploy.sh。
+
 ## 2026-08-18 · ROTATE_TRADING_DAY_N=-1（月尾選股日）改為預設 + 11 年全期 N 掃描
 
 - 承上筆掃描結論（月尾選股日 11 年 +1981.7% 遠勝 N=1 舊預設 +337.4%），實盤預設從 N=1 改為 **-1 = 每月最後交易日**。
