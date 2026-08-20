@@ -2,6 +2,12 @@
 
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
 
+## 2026-08-20 · 換股買入獨立路徑（ROTATION_BUY_DIRECT=1）— 貼近回測買入條件
+
+- 問題：全輪替買入走 Group 1 風控通道（每日虧損/交易次數/漲跌停/大盤年線/預算/冷卻），大跌日換股會「賣了舊股卻買不進新股」→ 空手一季，與回測（無這些閘門）行為偏離。
+- 實作：`core/rotation_hold.is_rotation_buy(cfg, is_rotation_day)` 判斷換股買入（排定買入日 + keep_wait + max_entry_price=-1）；live_trader_multi.py 買入迴圈以 `_rot_buy` 旗標跳過 5 個閘門（每檔次數/30分鐘冷卻/check_trade_allowed/每月預算/大盤年線），保留 check_stock_cap（alloc 語義）與 _rot_day_buys 去重；`ROTATION_BUY_DIRECT` env（預設 1）可關回原通道。`_is_rotation_day` 上移到每檔迴圈頂部（rotation 分支內重複計算移除）。
+- 測試：test_rotation_hold +6（is_rotation_buy 判斷），全 88 tests OK。文件/使用手冊/.env 同步。
+
 ## 2026-08-18 · MIN_DRAW_BACK 實盤整合（定案 20、最多延長一季）
 
 - 新增 `core/rotation_hold.py`：資產 = `TOTAL_CAPITAL + 已實現損益(performance.csv 買賣差額) + 持股市值`（不需成本基礎，避開分帳本重置干擾）；`should_hold` 狀態機（首次超標延後、仍超標強制換股、恢復即換股）；峰值/延長狀態持久化 `logs/equity_peak.json`/`logs/rotation_hold.json`；fail-open（股價抓取失敗或任何異常 → 照常換股）。

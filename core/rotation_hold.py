@@ -71,6 +71,22 @@ def should_hold(min_drawback, equity, peak, state):
     return False, {"extended": False}
 
 
+def is_rotation_buy(cfg, is_rotation_day, strategy=None):
+    """換股買入判斷：排定買入日 + keep_wait + max_entry_price=-1（全輪替標記）。
+
+    換股買入走獨立路徑（跳過 Group 1 風控閘門），與回測買入條件一致。
+    """
+    if not is_rotation_day:
+        return False
+    if strategy is None:
+        strategy = str(cfg.get('strategy', ''))
+    try:
+        mep = float(cfg.get('max_entry_price', 0))
+    except (TypeError, ValueError):
+        return False
+    return strategy == 'keep_wait' and mep == -1
+
+
 def check_rotation_hold(min_drawback, total_capital, broker, holdings, today_str):
     """換股日回撤檢查。回傳 (hold, dd)。hold=True → 該次換股應跳過。
 

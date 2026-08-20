@@ -6,9 +6,35 @@ import unittest
 from unittest.mock import MagicMock
 
 from core.rotation_hold import (
-    compute_equity, realized_pnl, should_hold,
+    compute_equity, realized_pnl, should_hold, is_rotation_buy,
     PEAK_FILE, HOLD_FILE,
 )
+
+
+class TestIsRotationBuy(unittest.TestCase):
+    ROT_CFG = {'strategy': 'keep_wait', 'max_entry_price': -1, 'alloc': 12.5}
+
+    def test_rotation_day_keep_wait_mep_minus1(self):
+        self.assertTrue(is_rotation_buy(self.ROT_CFG, True))
+
+    def test_not_rotation_day(self):
+        self.assertFalse(is_rotation_buy(self.ROT_CFG, False))
+
+    def test_non_rotation_strategy(self):
+        cfg = {'strategy': 'bollinger', 'max_entry_price': -1}
+        self.assertFalse(is_rotation_buy(cfg, True))
+
+    def test_keep_wait_without_mep_minus1(self):
+        cfg = {'strategy': 'keep_wait', 'max_entry_price': 100}
+        self.assertFalse(is_rotation_buy(cfg, True))
+        self.assertFalse(is_rotation_buy({'strategy': 'keep_wait'}, True))
+
+    def test_mep_bad_value_safe(self):
+        self.assertFalse(is_rotation_buy({'strategy': 'keep_wait', 'max_entry_price': 'x'}, True))
+
+    def test_explicit_strategy_override(self):
+        self.assertTrue(is_rotation_buy(self.ROT_CFG, True, strategy='keep_wait'))
+        self.assertFalse(is_rotation_buy(self.ROT_CFG, True, strategy='vwap'))
 
 
 class TestShouldHold(unittest.TestCase):
