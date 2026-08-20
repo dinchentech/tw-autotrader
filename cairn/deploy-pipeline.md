@@ -41,6 +41,16 @@
 5. **deploy 失敗不會破壞源碼**：gcloud 認證過期 / VM 關機 / docker build 失敗都是 `exit 1`，EXIT trap 仍會還原 root——只有硬殺才會留混淆版。
 6. **deploy_crypted.sh 是另一條路**：給「沒有源碼、只有 .encrypted 檔」的使用者（上傳加密檔＋runtime），不涉及 plans 備份。
 
+## PyArmor 免費版（trial）限制（contains）
+
+> 2026-08-20 本機實測（PyArmor **8.5.12 trial**，deploy.sh 會自動把過期的 9.x 降級到 8.x）。
+
+1. **單檔源碼上限 ≈ 56KB**：55/56KB ✅ 可加密；57KB 起 ❌ 拒絕（`Can't obfuscate big script`）。官方文件只說「不能加密大型腳本」未給數字，以實測為準。
+2. **限制是「單檔」不是總和**：40KB+30KB 兩檔合計 70KB 一起 `pyarmor gen` ✅ 成功 → 主程式超過 ~56KB 時，**拆成多個 .py 模組 import 即可繞過**，不影響加密效果。
+3. **主程式現況**：源碼 43KB（2026-08-20，820 行）→ 限制內、餘裕約 13KB；加密產物 177KB 不受此限（只看源碼）。
+4. **trial 版其他限制**：BCC（綁定 C 裝置）/RFT（綁定函式）模式不可用；`License No.: pyarmor-vax-000000` 即 trial。要解除需 `pyarmor register` 買正式 license。
+5. **重測方法**（版本升級後）：`python3 -c "pathlib.Path('t.py').write_text('x = 1\n' * (N*1024//8))"` + `pyarmor gen -O out t.py`，二分找邊界。
+
 ## 2026-08-18 實例（本篇誕生原因）
 
 - 10:49 的 deploy 在步驟 6 後中斷 → root 停留在混淆版 → 誤判「deploy 沒發生」。
