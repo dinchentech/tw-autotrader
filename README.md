@@ -297,6 +297,7 @@ tw-autotrader/
 3. 利用本專案進行任何直接或間接獲取商業利益之行為。
 
 若有商業合作需求，請洽詢：frank@dinchen.com.tw
+購買源碼: https://www.ruten.com.tw/item/22634449704397/
 
 ## 📧 聯絡
 
