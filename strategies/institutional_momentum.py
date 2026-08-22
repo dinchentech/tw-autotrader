@@ -508,6 +508,35 @@ class InstitutionalMomentumStrategy:
     # ================================================================
     # 主流程 — 由 live_trader_multi.py 每分鐘呼叫
     # ================================================================
+    def debug_screen(self, now: datetime):
+        """IM_DEBUG=1 且法人動能未啟用（capital=0）時：仍於盤後 13:31-13:45 執行每日
+        篩選並寫入 logs/inst_momentum_screening.json，供睡前 TG 報告檢查
+        （只搜尋不交易、不主動發 TG；結果由 send_sleep_notification 帶出）。
+        """
+        is_weekday = now.weekday() < 5
+        today_str = now.strftime("%Y-%m-%d")
+        if not is_weekday:
+            return
+        if not (now.hour == 13 and 31 <= now.minute <= 45):
+            return
+        if not (self.daily_screening or now.weekday() == 4):
+            return
+        if self.state.get("last_screen_date") == today_str:
+            return
+        print(f"📡 [INST_MOM][DEBUG] 法人動能未啟用（capital=0），仍執行篩選（IM_DEBUG=1）...")
+        candidates, near_misses = self.get_candidates()
+        self.state["candidates"] = [{"stock_id": s, "score": sc} for s, sc in candidates]
+        self.state["last_screen_date"] = today_str
+        self._save_state()
+        if candidates:
+            names = ", ".join(f"{s}({sc:.2%})" for s, sc in candidates)
+            print(f"✅ [INST_MOM][DEBUG] 篩選結果: {names}")
+        elif near_misses:
+            names = ", ".join(f"{s}({sc:.2%})" for s, sc in near_misses)
+            print(f"⚠️ [INST_MOM][DEBUG] 無通過標的，前三候選: {names}")
+        else:
+            print(f"⚠️ [INST_MOM][DEBUG] 無符合標的")
+
     def run(self, broker, risk_manager, holdings: dict, now: datetime):
         """
         每分鐘執行一次（由主迴圈呼叫），根據時間觸發不同動作。

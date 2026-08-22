@@ -2,6 +2,12 @@
 
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
 
+## 2026-08-20 · IM_DEBUG 法人動能除錯模式（v3.12）
+
+- 需求：法人動能未啟用（INST_MOM_CAPITAL=0）時，逐日檢查市場是否產生合格股票。
+- 實作：`InstitutionalMomentumStrategy.debug_screen(now)` — 僅在盤後 13:31-13:45（每日或週五模式）執行 get_candidates（內部自動寫 logs/inst_momentum_screening.json，含 screen_date/qualified/near_misses），更新 state 但**不交易、不主動發 TG**；結果由既有 `send_sleep_notification` → `_build_inst_screening_msg` 於睡前報告帶出（✅入選 / ⚠️未達標前三）。live_trader_multi.py 兩處呼叫改為 `INST_MOM_CAPITAL>0 or IM_DEBUG=='1'` 分支。`IM_DEBUG` env 預設 1。
+- 測試：test/test_inst_debug.py 6 個（時窗/同日去重/週末/週模式/capital=0 run 早退），全 94 tests OK。策略說明（主文+附錄）與 .env 同步；版本 3.11→3.12。
+
 ## 2026-08-20 · README/策略說明/使用手冊更新為含 MIN_DRAW_BACK 的 11 年數據
 
 - 以與 README 基線相同的設定（N=100、15d 法人確認、含成本）重跑：基線 12,572,830/+2414.6%/34.1%/1.17/-39.2% 精確重現 ✓；**加 MIN_DRAW_BACK=20 → 終值 16,843,503、+3,268.7%、年化 37.7%、夏普 1.24、MDD -49.7%(@2025-04-09)、跳過換股 11 次**（A:2015-08/2016-02/2017-11/2018-05/11/2019-05/2022-11/2025-05、B:2020-03/2022-06/2025-03）。
