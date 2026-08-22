@@ -45,3 +45,6 @@ node_modules/
 .vscode/
 .idea/
 # pyarmor_runtime_000000/ is needed inside the image (imported by obfuscated script)
+
+# Course materials (submodule, not needed at runtime — shrinks image ~2GB)
+plans/
