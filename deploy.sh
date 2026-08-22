@@ -184,6 +184,11 @@ gcloud_as_user compute ssh "${VM_NAME}" --zone="${ZONE}" --ssh-flag=-o --ssh-fla
   --command="sudo docker system prune -a -f 2>&1 | tail -1"
 stty sane 2>/dev/null
 
+echo "清理 VM 回測專用快取（實盤只需近期法人資料 + 選股快取）..."
+gcloud_as_user compute ssh "${VM_NAME}" --zone="${ZONE}" --ssh-flag=-o --ssh-flag=ServerAliveInterval=60 \
+  --command="cd ~/tw-autotrader && rm -f cache/inst_momentum/historical_shares.pkl && rm -rf cache/inst_momentum/2015 cache/inst_momentum/2020 cache/inst_momentum/2021 cache/inst_momentum_2022 && find cache/inst_momentum -name 'twse_inst_*.pkl' | while read f; do end=\$(basename \"\$f\" | sed 's/twse_inst_[0-9-]*_//; s/\.pkl//'); if [[ \"\$end\" < \"\$(date -d '60 days ago' +%F)\" ]]; then rm -f \"\$f\"; fi; done; du -sh cache 2>/dev/null | sed 's/^/  快取現況: /'"
+stty sane 2>/dev/null
+
 echo ""
 echo " 部署完成！"
 echo " 查看 Log：gcloud compute ssh ${VM_NAME} --zone=${ZONE} --command='sudo docker logs tw_autotrader_bot --tail 20'"

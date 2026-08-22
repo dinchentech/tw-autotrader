@@ -41,6 +41,15 @@
 5. **deploy 失敗不會破壞源碼**：gcloud 認證過期 / VM 關機 / docker build 失敗都是 `exit 1`，EXIT trap 仍會還原 root——只有硬殺才會留混淆版。
 6. **deploy_crypted.sh 是另一條路**：給「沒有源碼、只有 .encrypted 檔」的使用者（上傳加密檔＋runtime），不涉及 plans 備份。
 
+## 回測 vs 實盤快取（VM 只需實盤用）（contains）
+
+> 2026-08-20：VM cache 110MB → 51MB 清理後；deploy.sh 每次部署自動執行下方清理。
+
+1. **實盤必須保留**：`cache/selector_prices/`（選股用，VM 上為 250d lookback 版）、`cache/inst_momentum/` 的 **rolling 法人檔**（`2022/twse_inst_2022-01-01_2026-08-10.pkl` 類，檔名 end ≥ 60 天前）、`price/`、`inst/`、`mcap_ranking.pkl`。
+2. **回測專用（VM 不需要）**：`historical_shares.pkl`（歷史股本池）、`2015/2020/2021/` 舊法人目錄（2017-2021 era）、舊年度 twse_inst 檔（end < 60 天前）、`inst_momentum_2022/`（舊版殘留目錄，無程式引用）。
+3. **清理規則**（deploy.sh 內建）：刪 `historical_shares.pkl` + `2015/2020/2021/` + `inst_momentum_2022/`；`find cache/inst_momentum -name 'twse_inst_*.pkl'` 檔名 end 日期 < 60 天前 → 刪。rolling 檔（end=今天附近）必定保留。
+4. **安全性**：實盤法人確認只查最近 21 交易日 → 只留 rolling 檔完全足夠；`.dockerignore` 已排除 cache/ → image 不會夾帶回測快取；舊檔刪除不影響 `load_twse_inst_merged`（缺檔自動略過）。
+
 ## PyArmor 免費版（trial）限制（contains）
 
 > 2026-08-20 本機實測（PyArmor **8.5.12 trial**，deploy.sh 會自動把過期的 9.x 降級到 8.x）。
