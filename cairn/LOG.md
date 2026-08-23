@@ -2,6 +2,12 @@
 
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
 
+## 2026-08-23 · 下單成交確認機制（resolve_fill）— 修正「委託成功≠成交」誤判
+
+- 問題：place_order 回傳即視為買到 — 漲停排隊未成交、E.Sun timeout 回傳 {"error":...} 都被誤判已持有；清倉部分成交會誤刪全部持股。
+- 實作：`core/live_utils.resolve_fill(broker, symbol, action, order_ret, requested)` — error dict→0、mock filled→requested、其餘走 `broker.check_fill()`（None=無法得知維持原行為）；三家 broker 加 check_fill（E.Sun 用 `get_transactions_by_date` 解析、格式不明回 None 防誤判；KGI real 未實作回 None；mock 全成交）。live 接線三處：買入(real 分支)/清倉賣出/超額 trim — 未成交→TG 警示+不計持股+每分鐘重試；部分成交→依實際股數計（清倉餘額續留隔日重試）。
+- 測試 +9（resolve_fill 各分支 + E.Sun 解析/格式不明安全），全 110 tests OK。策略說明新增「成交確認機制」說明。
+
 ## 2026-08-23 · 下單失敗 TG 警示（每檔每日一次）
 
 - 缺口：買入/清倉/trim 失敗只有 console log，無 TG 通知。

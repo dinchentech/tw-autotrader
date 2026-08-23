@@ -376,3 +376,34 @@ class EsunProvider:
         if "error" in result_holder:
             return {"error": result_holder["error"]}
         return result_holder.get("result")
+
+    def check_fill(self, symbol, action, order_ret, requested):
+        """查詢今日成交回報，回傳實際成交股數（0=未成交）。
+
+        成交資料格式不明時回傳 None（維持原行為視為全成交，避免誤判少買）。
+        """
+        try:
+            today = datetime.now().strftime("%Y-%m-%d")
+            txs = self._trade_sdk.get_transactions_by_date(today, today)
+            if txs is None:
+                return None
+            total = 0
+            parsed_any = False
+            for tx in txs:
+                d = tx if isinstance(tx, dict) else {}
+                sid = d.get("stock_no") if isinstance(tx, dict) else getattr(tx, "stock_no", None)
+                if sid is None:
+                    return None
+                parsed_any = True
+                if str(sid).strip() != str(symbol).strip():
+                    continue
+                qty = d.get("match_quantity") if isinstance(tx, dict) else getattr(tx, "match_quantity", None)
+                if qty is None:
+                    qty = d.get("quantity") if isinstance(tx, dict) else getattr(tx, "quantity", None)
+                if qty is None:
+                    return None
+                total += int(qty)
+            return total if parsed_any else None
+        except Exception as e:
+            print(f"⚠️ E.Sun 成交查詢失敗: {e}")
+            return None

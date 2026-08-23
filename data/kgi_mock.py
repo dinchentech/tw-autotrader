@@ -41,3 +41,6 @@ class KGIMockAPI:
         price = self.get_current_price(symbol)
         print(f"📦 模擬下單 #{self.order_count}: {action} {symbol} {quantity} 股 @ {price:.2f}")
         return {"order_id": self.order_count, "status": "filled", "price": price}
+    def check_fill(self, symbol, action, order_ret, requested):
+        """模擬：一律全數成交"""
+        return requested

@@ -53,3 +53,60 @@ class TestNotifyOrderFailure(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestResolveFill(unittest.TestCase):
+    def test_error_dict_means_zero(self):
+        from core.live_utils import resolve_fill
+        r = resolve_fill(MagicMock(), "2330", "buy", {"error": "timeout"}, 100)
+        self.assertEqual(r, 0)
+
+    def test_mock_filled_dict(self):
+        from core.live_utils import resolve_fill
+        r = resolve_fill(MagicMock(), "2330", "buy", {"status": "filled", "order_id": 1}, 100)
+        self.assertEqual(r, 100)
+
+    def test_broker_check_fill_partial(self):
+        from core.live_utils import resolve_fill
+        broker = MagicMock()
+        broker.check_fill.return_value = 40
+        r = resolve_fill(broker, "2330", "buy", {"order_id": 1}, 100)
+        self.assertEqual(r, 40)
+
+    def test_broker_check_fill_zero(self):
+        from core.live_utils import resolve_fill
+        broker = MagicMock()
+        broker.check_fill.return_value = 0
+        self.assertEqual(resolve_fill(broker, "2330", "buy", {}, 100), 0)
+
+    def test_no_check_fill_returns_none(self):
+        from core.live_utils import resolve_fill
+        r = resolve_fill(MagicMock(spec=[]), "2330", "buy", {}, 100)
+        self.assertIsNone(r)
+
+    def test_check_fill_returns_none(self):
+        from core.live_utils import resolve_fill
+        broker = MagicMock()
+        broker.check_fill.return_value = None
+        self.assertIsNone(resolve_fill(broker, "2330", "buy", {}, 100))
+
+    def test_check_fill_raises_returns_none(self):
+        from core.live_utils import resolve_fill
+        broker = MagicMock()
+        broker.check_fill.side_effect = Exception("query down")
+        self.assertIsNone(resolve_fill(broker, "2330", "buy", {}, 100))
+
+    def test_esun_check_fill_parses_transactions(self):
+        from data.esun_provider import EsunProvider
+        p = EsunProvider.__new__(EsunProvider)
+        p._trade_sdk = MagicMock()
+        tx = {"stock_no": "2330", "match_quantity": 50}
+        p._trade_sdk.get_transactions_by_date.return_value = [tx, {"stock_no": "2317", "match_quantity": 30}]
+        self.assertEqual(p.check_fill("2330", "buy", {}, 100), 50)
+
+    def test_esun_check_fill_unknown_format_safe(self):
+        from data.esun_provider import EsunProvider
+        p = EsunProvider.__new__(EsunProvider)
+        p._trade_sdk = MagicMock()
+        p._trade_sdk.get_transactions_by_date.return_value = [{"foo": 1}]
+        self.assertIsNone(p.check_fill("2330", "buy", {}, 100), '格式不明 → None 維持原行為')

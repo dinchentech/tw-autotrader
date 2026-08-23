@@ -96,3 +96,6 @@ class KGIRealAPI:
     def get_account_info(self):
         """取得帳戶資訊（用於風險控管）"""
         return self._make_request("GET", "/account/info")
+    def check_fill(self, symbol, action, order_ret, requested):
+        """KGI 真實 API 尚未實作委託/成交查詢（需向凱基確認規格）→ 回傳 None 維持原行為"""
+        return None

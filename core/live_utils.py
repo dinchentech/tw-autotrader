@@ -63,3 +63,27 @@ def notify_order_failure(symbol, error, notified, today_str, notify_fn, action="
     except Exception:
         pass
     return notified
+
+
+def resolve_fill(broker, symbol, action, order_ret, requested):
+    """解析實際成交股數（下單後確認，避免「委託成功≠成交」誤判持股）。
+
+    - order_ret 為含 error 的 dict → 0（委託失敗）
+    - order_ret 為 mock 的 filled → requested（模擬全成交）
+    - 其餘 → 呼叫 broker.check_fill() 查詢；無法查詢（None）→ 維持原行為視為全成交
+    回傳: 實際成交股數（int）或 None（無法得知）。
+    """
+    if isinstance(order_ret, dict):
+        if order_ret.get("error"):
+            return 0
+        if order_ret.get("status") == "filled":
+            return requested
+    check = getattr(broker, "check_fill", None)
+    if check is not None:
+        try:
+            filled = check(symbol, action, order_ret, requested)
+            if filled is not None:
+                return int(filled)
+        except Exception:
+            pass
+    return None
