@@ -87,3 +87,30 @@ def resolve_fill(broker, symbol, action, order_ret, requested):
         except Exception:
             pass
     return None
+
+
+def run_inst_momentum(capital, inst_momentum, broker, rm, holdings, now):
+    """法人動能執行：啟用時 run()；未啟用但 IM_DEBUG=1 時僅 debug_screen()。"""
+    if capital > 0 or os.getenv("IM_DEBUG", "1") == "1":
+        try:
+            if capital > 0:
+                inst_momentum.run(broker, rm, holdings, now)
+            else:
+                inst_momentum.debug_screen(now)
+        except Exception as e:
+            print(f"❌ [INST_MOM] 執行錯誤: {e}")
+
+
+def sell_with_fill_check(broker, symbol, shares, notified, today_str, notify_fn, action_label):
+    """賣出 + 成交確認。回傳 (實際賣出股數, 更新後 notified)。
+    未成交 → 警示且回傳 0；部分成交 → 回傳實際數；無法確認 → 視為全成交。"""
+    order_ret = broker.place_order(symbol, "sell", shares)
+    filled = resolve_fill(broker, symbol, "sell", order_ret, shares)
+    if filled is not None and filled <= 0:
+        notified = notify_order_failure(symbol, "委託未成交（排隊中）", notified, today_str,
+                                        notify_fn, action=action_label)
+        return 0, notified
+    if filled is not None and filled < shares:
+        print(f"⚠️ {symbol} {action_label}部分成交 {filled}/{shares} 股，餘額續留")
+        return filled, notified
+    return shares, notified

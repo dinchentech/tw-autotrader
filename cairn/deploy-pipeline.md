@@ -54,7 +54,7 @@
 
 > 2026-08-20 本機實測（PyArmor **8.5.12 trial**，deploy.sh 會自動把過期的 9.x 降級到 8.x）。
 
-1. **單檔源碼上限 ≈ 56KB**：55/56KB ✅ 可加密；57KB 起 ❌ 拒絕（`Can't obfuscate big script`）。官方文件只說「不能加密大型腳本」未給數字，以實測為準。
+1. **單檔源碼上限 ≈ 56KB**（dummy 檔實測）；但**真實執行碼的有效臨界更低（~45.5KB，2026-08-23 實測）**——限制看的是「可執行內容」（混淆後大小），註解/空白不計。live_trader_multi.py 曾 46.9KB 觸發 out of license，瘦身至 45.5KB 後恢復（margin 僅 ~1KB）。**維護原則：新增功能時把邏輯搬進 core/ 模組（不加密、不占額度），或購買正式 license**；deploy 前可先跑 `pyarmor gen -O /tmp/t plans/live_trader_multi.py` 預檢。
 2. **限制是「單檔」不是總和**：40KB+30KB 兩檔合計 70KB 一起 `pyarmor gen` ✅ 成功 → 主程式超過 ~56KB 時，**拆成多個 .py 模組 import 即可繞過**，不影響加密效果。
 3. **主程式現況**：源碼 43KB（2026-08-20，820 行）→ 限制內、餘裕約 13KB；加密產物 177KB 不受此限（只看源碼）。
 4. **trial 版其他限制**：BCC（綁定 C 裝置）/RFT（綁定函式）模式不可用；`License No.: pyarmor-vax-000000` 即 trial。要解除需 `pyarmor register` 買正式 license。

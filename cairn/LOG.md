@@ -294,3 +294,12 @@
 - 建立 Project Cairn 結構（AGENTS.md 合併版、CLAUDE.md、`.cairn/config.yaml`、`cairn/LOG.md`、`cairn/ROADMAP.md`）。
 - 歷史遷移模式：`start_fresh`。
 - 詳情：見 `AGENTS.md` 與 `.cairn/config.yaml`。
+
+## 2026-08-23 · deploy 失敗：pyarmor trial「out of license」— 真實執行碼臨界 ~45.5KB
+
+- 症狀：deploy.sh 加密階段 ERROR out of license（先前同檔 43-45KB 皆可）。
+- 診斷：trial 限制**不是原始位元組**（48KB 註解填充可過），而是「可執行內容」（混淆後大小）— 實測臨界：vD(43,862B) 過、+1KB 執行碼 44,065B 爆；現版 46,943B 爆、瘦身後 45,473B 過（margin ~1KB）。
+- 修復：live_trader_multi.py 瘦身 ~1.5KB 執行碼 — ① 兩處重複 inst-momentum 呼叫區塊 → core/live_utils.run_inst_momentum()；② 清倉/trim 賣出+成交確認 → sell_with_fill_check()；③ 5 處內聯 import → top-level。全 110 tests OK。
+- ⚠️ 教訓：trial 對「真實執行碼」的額度極窄（~45.5KB 臨界），檔案只會隨功能增長 → **長期必須購買 PyArmor license** 或持續搬移邏輯到 core/ 模組（不加密、不占額度）。
+
+## 2026-08-23 · 下單成交確認機制（resolve_fill）— 修正「委託成功≠成交」誤判
