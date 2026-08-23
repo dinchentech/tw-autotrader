@@ -41,3 +41,25 @@ def get_next_market_open(now: datetime) -> datetime:
             next_day += timedelta(days=1)
         next_open = next_day.replace(hour=9, minute=0, second=0, microsecond=0)
         return next_open.astimezone(now.tzinfo) if now.tzinfo else next_open.replace(tzinfo=None)
+
+
+def notify_order_failure(symbol, error, notified, today_str, notify_fn, action="交易", retry_hint=None):
+    """交易失敗的 TG 警示 — 每檔每日只發一次（避免每分鐘重試洗版）。
+
+    notified: {symbol: 'YYYY-MM-DD'} 已警示紀錄（由呼叫端持有）
+    retry_hint: 後續處理說明（預設依買/賣動作給出）
+    回傳更新後的 notified dict。
+    """
+    if notified.get(symbol) == today_str:
+        return notified
+    notified[symbol] = today_str
+    if retry_hint is None:
+        if "賣出" in action or "清倉" in action or "trim" in action:
+            retry_hint = "系統將於下一個交易日 09:00 自動重試。"
+        else:
+            retry_hint = "系統會自動重試至收盤；若當日無法成交，該季將少持此檔。"
+    try:
+        notify_fn(f"⚠️ *{symbol}* {action}失敗：{error}\n{retry_hint}")
+    except Exception:
+        pass
+    return notified

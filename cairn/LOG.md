@@ -2,6 +2,13 @@
 
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
 
+## 2026-08-23 · 下單失敗 TG 警示（每檔每日一次）
+
+- 缺口：買入/清倉/trim 失敗只有 console log，無 TG 通知。
+- 實作：`core/live_utils.notify_order_failure(symbol, error, notified, today_str, notify_fn, action, retry_hint)` — 每檔每日一次去重（避免每分鐘重試洗版），依買/賣動作給對應重試提示；接線三處 except（買入、清倉賣出、超額 trim）。測試 test_order_fail_notify 7 個，全 101 tests OK。
+- 策略說明新增「下單失敗的處理與 TG 警示」表（情境/機率/系統行為/使用者建議）。
+- 順帶修正：main() 內 daily_symbol_trades 初始化區 3 空格縮排與主體 2 空格不一致（歷史遺留，compile 隱性通過後才暴露）→ 統一 2 空格。
+
 ## 2026-08-20 · IM_DEBUG 法人動能除錯模式（v3.12）
 
 - 需求：法人動能未啟用（INST_MOM_CAPITAL=0）時，逐日檢查市場是否產生合格股票。
