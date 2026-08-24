@@ -188,7 +188,7 @@ def _build_inst_screening_msg() -> str:
             parts.append(f"⚠️ 未達標前三: {names}")
         if parts:
             return "\n📡 *法人動能篩選*\n" + "\n".join(parts) + "\n"
-        return "\n📡 *法人動能篩選*\n❌ 今日無符合標的\n"
+        return "\n📡 *法人動能篩選*\n❌ 今日無符合標的（且無可列舉候選 — 法人/價格資料可能異常）\n"
     except Exception:
         return ""
 

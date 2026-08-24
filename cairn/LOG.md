@@ -312,3 +312,12 @@
 - 教訓：搬移 import/呼叫後必須用「實際載入模組」的回歸測試，不能只靠 py_compile。
 
 ## 2026-08-23 · deploy 失敗：pyarmor trial「out of license」— 真實執行碼臨界 ~45.5KB
+
+## 2026-08-24 · 法人動能收盤報告「無符合標的」也要列前三名（備援排名）
+
+- 症狀：IM_DEBUG 收盤/睡前報告只顯示「❌ 今日無符合標的」，前三名沒列出。
+- 根因：VM 首次 debug 搜尋時**法人資料抓取全失敗**（json health: stocks_with_inst=0、inst_source={}；FinMind token 有設，疑限流）→ fish/momentum 全無 → all_evaluated 空 → near_misses 空 → 報告 ❌。
+- 修復：`inst_strategy_core.rank_by_price_return(all_data, days=5, top_n)` — 法人資料全失敗時退回「近 5 日漲幅」前三，保證有價格資料時 near_misses 必有值；`_build_inst_screening_msg` 全空時提示資料可能異常。測試 +3（排序/短歷史/空資料），全 117 tests OK。
+- 註：合格判定仍需法人資料 — 若 FinMind 限流持續，需等配額或改用 TWSE 備援。
+
+## 2026-08-24 · 修復 deploy 後 VM 崩潰（瘦身引入兩缺漏）

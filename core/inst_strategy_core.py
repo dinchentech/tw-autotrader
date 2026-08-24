@@ -336,3 +336,25 @@ def log_capital_roll(action: str, stock_id: str, amount: float,
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
     with open(log_path, "a") as f:
         f.write(f"{timestamp}, {action}, {stock_id}, {amount:+.0f}, capital={new_capital:.0f}\n")
+
+
+def rank_by_price_return(all_data, days=5, top_n=3):
+    """法人資料失敗時的最終備援：依近 days 日收盤漲幅排序，回傳 [(sid, ret)] 前 top_n。
+
+    保證「無法人資料日」收盤/睡前報告仍有前三名可列（價格資料存在即可）。
+    all_data: {sid: df}，df 需有 date 索引與 close 欄位。
+    """
+    ranked = []
+    for sid, df in all_data.items():
+        try:
+            closes = df["close"].dropna()
+            if len(closes) < 2:
+                continue
+            ref = closes.iloc[-min(len(closes), days + 1)]
+            cur = closes.iloc[-1]
+            if ref > 0:
+                ranked.append((sid, cur / ref - 1.0))
+        except Exception:
+            continue
+    ranked.sort(key=lambda x: x[1], reverse=True)
+    return ranked[:top_n]

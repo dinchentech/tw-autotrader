@@ -387,6 +387,11 @@ class InstitutionalMomentumStrategy:
             # 取前 3 名作為 near_misses（momentum_score=0 代表未通過動能檢查）
             all_evaluated = [(s, 0.0) for s, _ in fish_ranked[:self.top_n]]
 
+        # 最終備援：法人資料全失敗時，依近 5 日漲幅列出前三（價格存在即可）
+        # 確保收盤/睡前報告「無符合標的」時仍有前三名可看
+        if not all_evaluated and all_data:
+            all_evaluated = inst_core.rank_by_price_return(all_data, top_n=self.top_n)
+
         self._save_screening_summary(candidates, all_evaluated, fish_scores, check_date.isoformat())
 
         # 資料降級警報：FinMind 失敗改用 TWSE 備援、或法人資料缺損過多時通知（一天一次）

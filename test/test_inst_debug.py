@@ -68,3 +68,35 @@ class TestDebugScreen(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestRankByPriceReturn(unittest.TestCase):
+    def _df(self, closes):
+        import pandas as pd
+        import numpy as np
+        idx = pd.date_range("2026-08-01", periods=len(closes))
+        return pd.DataFrame({"close": closes}, index=idx)
+
+    def test_ranks_by_recent_return(self):
+        from core.inst_strategy_core import rank_by_price_return
+        data = {
+            "1111": self._df([100, 100, 100, 100, 110, 120]),   # 20%
+            "2222": self._df([100, 100, 100, 100, 100, 90]),    # -10%
+            "3333": self._df([100, 100, 100, 100, 100, 105]),   # 5%
+            "4444": self._df([50, 50, 50, 50, 50, 60]),         # 20%
+        }
+        r = rank_by_price_return(data, days=5, top_n=3)
+        self.assertEqual(len(r), 3)
+        self.assertEqual(r[0][0], "1111", '1111 漲幅最高應排第一')
+        self.assertIn("4444", [s for s, _ in r])
+        self.assertNotIn("2222", [s for s, _ in r])
+
+    def test_short_history_still_ranks(self):
+        from core.inst_strategy_core import rank_by_price_return
+        data = {"1111": self._df([100, 110])}   # 只有兩天
+        r = rank_by_price_return(data, top_n=3)
+        self.assertEqual([s for s, _ in r], ["1111"])
+
+    def test_empty_data(self):
+        from core.inst_strategy_core import rank_by_price_return
+        self.assertEqual(rank_by_price_return({}), [])
