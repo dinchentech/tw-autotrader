@@ -321,3 +321,12 @@
 - 註：合格判定仍需法人資料 — 若 FinMind 限流持續，需等配額或改用 TWSE 備援。
 
 ## 2026-08-24 · 修復 deploy 後 VM 崩潰（瘦身引入兩缺漏）
+
+## 2026-08-24 · deploy 失敗：pyarmor UTF-8 嗅探窗解碼錯誤（首 80 bytes 內 3-byte 字元跨界）
+
+- 症狀：`ERROR 'utf-8' codec can't decode byte 0xef in position 78: unexpected end of data`（位置隨檔案偏移變動：78 / 77-78 / 55-56）。
+- 根因：pyarmor 8.5.12 對檔首約 80 bytes 的嗅探窗做 UTF-8 解碼；若 3-byte CJK 字元剛好跨越窗口邊界 → 解碼失敗。使用者新增的長免責聲明（全 CJK 首行 225B）與近期改動讓某字元落在邊界。
+- 修復（決定性）：**首行改為 ≥80 bytes 純 ASCII 註解**（版本/網址行）→ 嗅探窗內全是 ASCII、永不跨字元，CJK 全部推到窗後。`pyarmor gen -O /tmp/t plans/live_trader_multi.py` 通過。
+- 教訓：live_trader_multi.py 檔首不要放長 CJK 行；維護時若 pyarmor 報 utf-8 decode 錯誤，檢查檔首 80 bytes 是否含跨越邊界的多字元序列（插入/移除 ASCII 可驗證）。
+
+## 2026-08-24 · 法人動能收盤報告「無符合標的」也要列前三名（備援排名）
