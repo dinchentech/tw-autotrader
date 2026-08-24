@@ -132,13 +132,24 @@ def schedule_daily_curve(records, data, commission=ssg.COMMISSION_RATE, initial=
 
 
 def benchmark_curve(mkt, start, end, capital=500000.0):
-    """0050 買入持有（與策略同資料源/同區間，yfinance auto_adjust=True 含息）。"""
+    """0050 買入持有（與策略同資料源/同區間，yfinance auto_adjust=True 含息）。
+
+    2026-08-24 起公平扣除費用：
+    - 買入手續費 0.1425%（一次）
+    - 管理費 ~0.32%/年（逐交易日複利扣除）
+    - 賣出手續費 0.1425% + 證交稅 0.1%（ETF 稅率，一次）
+    """
     idx = mkt.index[(mkt.index >= pd.Timestamp(start)) & (mkt.index <= pd.Timestamp(end))]
     if len(idx) == 0:
         return pd.Series(dtype=float)
     t0 = idx[0]
     b0 = float(mkt.loc[t0, "close"])
-    return mkt.loc[idx, "close"] * (capital / b0)
+    curve = mkt.loc[idx, "close"] * (capital / b0)
+    curve = curve * (1 - ssg.COMMISSION_RATE)
+    daily_fee = 0.0032 / 252.0
+    curve = curve * ((1 - daily_fee) ** __import__("numpy").arange(len(curve)))
+    curve = curve * (1 - ssg.COMMISSION_RATE - ssg.ETF_TAX)
+    return curve
 
 
 def sharpe_mdd(curve, rf=0.0, periods=252):

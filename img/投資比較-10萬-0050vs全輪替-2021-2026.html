@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NT$10 萬投資比較 — 0050 vs 全輪替（2021-07 ~ 2026-07）</title>
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: hsl(220, 18%, 10%); }
+  body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans TC', sans-serif; color: #e8e8e8; user-select: none; }
+
+  #stage { position: relative; width: 100vw; height: 100vh; display: flex; flex-direction: column; padding: 2.2vh 3vw 1.6vh; }
+
+  header { display: flex; align-items: baseline; gap: 1.2em; }
+  h1 { font-size: clamp(1.1rem, 2.2vw, 1.7rem); font-weight: 700; letter-spacing: 0.04em; color: #f5f5f5; }
+  header .sub { font-size: clamp(0.72rem, 1.25vw, 0.95rem); color: hsl(180, 25%, 65%); }
+
+  #chart-wrap { flex: 1; position: relative; min-height: 0; }
+  #chart { width: 100%; height: 100%; display: block; }
+  .axis-label { font-size: clamp(0.6rem, 0.95vw, 0.8rem); fill: hsl(220, 12%, 55%); }
+  .grid-line { stroke: hsl(220, 15%, 22%); stroke-width: 1; }
+  .time-line { stroke: hsl(220, 20%, 40%); stroke-width: 1; stroke-dasharray: 3 5; }
+  .series-label { font-size: clamp(0.66rem, 1.05vw, 0.85rem); font-weight: 600; }
+  .value-label { font-size: clamp(0.62rem, 1vw, 0.8rem); font-weight: 700; }
+
+  #time-strip { display: flex; justify-content: space-between; padding: 0.4vh 0 0.2vh; font-size: clamp(0.62rem, 1vw, 0.8rem);
+    color: hsl(220, 12%, 55%); font-variant-numeric: tabular-nums; }
+  #time-strip .current { color: #f5f5f5; font-weight: 700; }
+
+  #legend { position: absolute; top: 0.5vh; right: 0.4vw; display: flex; flex-direction: column; gap: 0.5em;
+    background: hsla(220, 18%, 12%, 0.72); border: 1px solid hsl(220, 15%, 24%); border-radius: 8px; padding: 0.7em 0.9em; }
+  .legend-item { display: flex; align-items: center; gap: 0.55em; font-size: clamp(0.62rem, 1vw, 0.82rem); }
+  .legend-swatch { width: 1.6em; height: 3px; border-radius: 2px; }
+
+  #controls { display: flex; align-items: center; gap: 1.2em; margin-top: 0.8vh; }
+  button { background: hsl(220, 16%, 20%); color: #e8e8e8; border: 1px solid hsl(220, 14%, 32%);
+    border-radius: 6px; padding: 0.45em 1.1em; font-size: clamp(0.68rem, 1vw, 0.85rem); cursor: pointer; }
+  button:hover { background: hsl(220, 16%, 26%); }
+  #progress { flex: 1; -webkit-appearance: none; appearance: none; height: 4px; border-radius: 2px;
+    background: hsl(220, 15%, 22%); outline: none; }
+  #progress::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #0D9488; cursor: pointer; }
+  #speed-btn { font-variant-numeric: tabular-nums; }
+
+  #summary { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2.6vh; background: hsla(220, 18%, 8%, 0.9); z-index: 5; }
+  #summary .card { display: flex; gap: 5vw; background: hsla(220, 18%, 13%, 0.85);
+    border: 1px solid hsl(220, 16%, 32%); border-radius: 12px; padding: 2.2em 3.5em; }
+  #summary .title { font-size: clamp(1.05rem, 1.8vw, 1.5rem); font-weight: 700; color: #f5f5f5; letter-spacing: 0.08em; text-align: center; }
+  .sum-item { text-align: center; min-width: 14vw; }
+  .sum-item .name { font-size: clamp(0.78rem, 1.3vw, 1.05rem); color: hsl(220, 12%, 68%); margin-bottom: 0.6em; }
+  .sum-item .final { font-size: clamp(1.35rem, 2.6vw, 2.1rem); font-weight: 800; }
+  .sum-item .ret { font-size: clamp(0.95rem, 1.6vw, 1.3rem); font-weight: 700; margin-top: 0.4em; }
+  .sum-item .ann { font-size: clamp(0.72rem, 1.15vw, 0.95rem); color: hsl(220, 12%, 64%); margin-top: 0.25em; }
+  #summary .close-note { position: absolute; bottom: 6vh; font-size: clamp(0.62rem, 1vw, 0.8rem); color: hsl(220, 12%, 55%); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <header>
+    <h1>NT$10 萬投資比較 — 0050 vs 全輪替</h1>
+    <span class="sub">2021-08 起 · 獲利滾入複利 · 對數尺度</span>
+  </header>
+
+  <div id="chart-wrap">
+    <svg id="chart" viewBox="0 0 1000 620" preserveAspectRatio="none"></svg>
+    <div id="legend">
+      <div class="legend-item"><span class="legend-swatch" style="background:#0D9488"></span><span style="color:#2dd4bf">全輪替</span><span style="color:hsl(220,12%,55%)">（含 MIN_DRAW_BACK=20）</span></div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#60a5fa"></span><span style="color:#93c5fd">0050 買入持有</span></div>
+    </div>
+    <div id="summary">
+      <div class="card" id="sum-card"></div>
+      <div class="close-note">點「重播」可再看一次 · 本圖為歷史回測，不代表未來績效</div>
+    </div>
+  </div>
+
+  <div id="time-strip"></div>
+
+  <div id="controls" class="no-record">
+    <button id="play-btn">⏸ 暫停</button>
+    <button id="restart-btn">↻ 重播</button>
+    <input type="range" id="progress" min="0" max="6100" value="0" step="1">
+    <span id="speed-btn" style="cursor:pointer;color:hsl(220,12%,60%);font-size:0.85em">速度 1×</span>
+  </div>
+</div>
+
+<script>
+/* 資料：2021-07 起（首點=NT$10萬=1.0）至 2026-06 月底（資料涵蓋 2026-07 前的完整區間）
+   來源：backtest_rotation_historical.py（INST_CONFIRM=1, INST_DAYS=15, MIN_DRAW_BACK=20, N=100）
+   全輪替 = 每月底權益 ÷ 50 萬本金；0050 = 同源重算買入持有 */
+const DATA = {"months": ["2021-08", "2021-08", "2021-09", "2021-10", "2021-11", "2021-12", "2022-01", "2022-02", "2022-03", "2022-04", "2022-05", "2022-06", "2022-07", "2022-08", "2022-09", "2022-10", "2022-11", "2022-12", "2023-01", "2023-02", "2023-03", "2023-04", "2023-05", "2023-06", "2023-07", "2023-08", "2023-09", "2023-10", "2023-11", "2023-12", "2024-01", "2024-02", "2024-03", "2024-04", "2024-05", "2024-06", "2024-07", "2024-08", "2024-09", "2024-10", "2024-11", "2024-12", "2025-01", "2025-02", "2025-03", "2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06", "2026-07", "2026-08"], "rot": [1.0, 0.9993, 1.0154, 1.0708, 1.0731, 1.0877, 0.969, 1.0275, 1.0197, 0.9931, 0.967, 0.8472, 0.8672, 0.9211, 0.8537, 0.7963, 0.8928, 0.836, 0.8712, 0.9154, 0.9981, 0.9966, 1.144, 1.2353, 1.4921, 1.4945, 1.4407, 1.495, 1.6723, 1.7892, 1.7189, 1.8721, 2.0684, 2.1844, 2.0885, 2.27, 2.0718, 2.1474, 2.0082, 1.9912, 2.0316, 2.0656, 2.0478, 1.9605, 1.6686, 1.5324, 1.6987, 1.7804, 2.1827, 2.3279, 2.1378, 2.6085, 2.6819, 3.0819, 3.566, 3.7674, 3.2923, 3.7251, 3.7858, 3.682, 3.326, 3.5892], "b50": [1.0, 1.0136, 0.9895, 0.9802, 0.9958, 1.0497, 1.0433, 1.0206, 1.0174, 0.9483, 0.9558, 0.8524, 0.8822, 0.8806, 0.7745, 0.7413, 0.8706, 0.8243, 0.9047, 0.9083, 0.9294, 0.8971, 0.9637, 0.986, 0.9978, 0.9736, 0.9497, 0.9378, 1.0165, 1.048, 1.0634, 1.134, 1.2485, 1.2517, 1.3126, 1.474, 1.4366, 1.4402, 1.4605, 1.5224, 1.4859, 1.553, 1.6187, 1.5476, 1.3885, 1.3548, 1.444, 1.5535, 1.6672, 1.6975, 1.8683, 2.0925, 2.0144, 2.1188, 2.3774, 2.6569, 2.3682, 2.9615, 3.4482, 3.5258, 3.3833, 3.508]};
+
+const SERIES = [
+  { key:'rot', name:'全輪替', color:'#0D9488', bright:'#2dd4bf', data:DATA.rot,
+    final:'NT$35.9 萬', ret:'+258.9%', ann:'含 MIN_DRAW_BACK=20' },
+  { key:'b50', name:'0050 買入持有', color:'#60a5fa', bright:'#93c5fd', data:DATA.b50,
+    final:'NT$35.1 萬', ret:'+250.8%', ann:'同源重算' },
+];
+
+/* 對數 Y 軸：1.0（10萬）→ 4.0（40萬） */
+const Y0 = 1.0, Y1 = 4.0;
+const PAD_L = 54, PAD_R = 14, PAD_T = 18, PAD_B = 30;
+const W = 1000, H = 620;
+const NPT = DATA.months.length;
+const xPos = (k) => PAD_L + (k / (NPT - 1)) * (W - PAD_L - PAD_R);
+const logY = (v) => PAD_T + (H - PAD_T - PAD_B) * (1 - (Math.log(v / Y0) / Math.log(Y1 / Y0)));
+
+const chart = document.getElementById('chart');
+const ns = 'http://www.w3.org/2000/svg';
+const el = (tag, attrs, parent) => {
+  const n = document.createElementNS(ns, tag);
+  for (const [k, v] of Object.entries(attrs || {})) n.setAttribute(k, v);
+  (parent || chart).appendChild(n);
+  return n;
+};
+
+/* 網格 + Y 軸（10萬起，NT$ 單位） */
+const GRID = [1.0, 1.25, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0];
+const GRID_LABEL = { 1.0:'10萬', 1.25:'12.5萬', 1.5:'15萬', 2.0:'20萬', 2.5:'25萬', 3.0:'30萬', 3.5:'35萬', 4.0:'40萬' };
+GRID.forEach(v => {
+  const y = logY(v);
+  el('line', { x1: PAD_L, x2: W - PAD_R, y1: y, y2: y, class: 'grid-line' });
+  const t = el('text', { x: PAD_L - 8, y: y + 4, class: 'axis-label', 'text-anchor': 'end' }, chart);
+  t.textContent = GRID_LABEL[v];
+});
+/* 年份刻度（每年 7 月位置） */
+[2022, 2023, 2024, 2025].forEach(yr => {
+  const i = DATA.months.findIndex(m => m === yr + '-08');
+  if (i >= 0) {
+    const x = xPos(i);
+    el('text', { x, y: H - 8, class: 'axis-label', 'text-anchor': 'middle' }, chart).textContent = yr + '/08';
+  }
+});
+el('text', { x: xPos(0), y: H - 8, class: 'axis-label', 'text-anchor': 'middle' }, chart).textContent = '21/08';
+el('text', { x: xPos(NPT - 1), y: H - 8, class: 'axis-label', 'text-anchor': 'middle' }, chart).textContent = '26/08';
+
+/* 系列線 */
+const paths = {}, dots = {}, labels = {};
+SERIES.forEach(s => {
+  paths[s.key] = el('path', { fill: 'none', stroke: s.color, 'stroke-width': 3, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' });
+  dots[s.key] = el('circle', { r: 5, fill: s.color, stroke: '#0b1220', 'stroke-width': 1.5 });
+  labels[s.key] = el('text', { class: 'series-label', fill: s.bright, 'text-anchor': 'start' });
+  labels[s.key].textContent = s.name;
+});
+
+/* 游標線 */
+const timeLine = el('line', { y1: PAD_T, y2: H - PAD_B, class: 'time-line' });
+const timeBadge = el('text', { class: 'value-label', fill: '#f5f5f5', 'text-anchor': 'middle' });
+
+/* 動畫狀態：TOTAL=6000（每月 100 單位） */
+let t = 0, playing = true, speed = +(new URLSearchParams(location.search).get('speed') || '1'), last = 0, finished = false;
+const TOTAL = (NPT - 1) * 100;
+const slider = document.getElementById('progress');
+const playBtn = document.getElementById('play-btn');
+const speedBtn = document.getElementById('speed-btn');
+const timeStrip = document.getElementById('time-strip');
+
+function frame() {
+  const mf = t / 100;
+  const mi = Math.min(Math.floor(mf), NPT - 2);
+  const frac = mf - Math.floor(mf);
+
+  const x = xPos(mi) + frac * (xPos(mi + 1) - xPos(mi));
+  timeLine.setAttribute('x1', x); timeLine.setAttribute('x2', x);
+  timeBadge.setAttribute('x', x);
+  timeBadge.textContent = (t >= TOTAL - 1) ? DATA.months[NPT - 1] : DATA.months[mi];
+  timeStrip.innerHTML = '';
+  const yearMarks = [];
+  DATA.months.forEach((m, i) => { if (m.slice(-2) === '08') yearMarks.push([i, m.slice(2, 4) + '/08']); });
+  if (!yearMarks.some(([i]) => i === NPT - 1)) yearMarks.push([NPT - 1, DATA.months[NPT - 1].slice(2, 4) + '/08']);
+  yearMarks.forEach(([i, label]) => {
+    const s = document.createElement('span');
+    s.textContent = label;
+    if (i <= mi && mi < (i + 6)) s.className = 'current';
+    timeStrip.appendChild(s);
+  });
+
+  SERIES.forEach((s, idx) => {
+    const pts = s.data.map((v, i) => ({ x: xPos(i), y: logY(Math.max(v, Y0 * 1.001)) }));
+    let d = '';
+    for (let i = 0; i <= mi; i++) d += (d === '' ? 'M' : 'L') + pts[i].x.toFixed(1) + ' ' + pts[i].y.toFixed(1);
+    if (mi + 1 < NPT) {
+      const nx = pts[mi].x + (pts[mi + 1].x - pts[mi].x) * frac;
+      const ny = pts[mi].y + (pts[mi + 1].y - pts[mi].y) * frac;
+      d += 'L' + nx.toFixed(1) + ' ' + ny.toFixed(1);
+    }
+    paths[s.key].setAttribute('d', d);
+    const endPt = mi + 1 < NPT ? { x: pts[mi].x + (pts[mi + 1].x - pts[mi].x) * frac, y: pts[mi].y + (pts[mi + 1].y - pts[mi].y) * frac } : pts[mi];
+    dots[s.key].setAttribute('cx', endPt.x); dots[s.key].setAttribute('cy', endPt.y);
+    dots[s.key].setAttribute('opacity', 1);
+    const lx = xPos(NPT - 1), ly = logY(s.data[NPT - 1]);
+    labels[s.key].setAttribute('x', Math.min(lx + 6, W - PAD_R - 150));
+    labels[s.key].setAttribute('y', Math.max(ly - 12 - idx * 16, PAD_T + 8));
+    labels[s.key].setAttribute('opacity', (mi >= NPT - 2) ? 1 : 0);
+  });
+
+  if (t >= TOTAL - 1) showSummary();
+}
+
+function showSummary() {
+  const card = document.getElementById('sum-card');
+  card.innerHTML = '';
+  SERIES.forEach(s => {
+    const d = document.createElement('div');
+    d.className = 'sum-item';
+    d.innerHTML = '<div class="name">' + s.name + '</div>' +
+      '<div class="final" style="color:' + s.bright + '">' + s.final + '</div>' +
+      '<div class="ret" style="color:' + s.bright + '">' + s.ret + '</div>' +
+      '<div class="ann">' + s.ann + '</div>';
+    card.appendChild(d);
+  });
+  const t = document.createElement('div');
+  t.className = 'title';
+  t.textContent = '2021-08 起投入 NT$10 萬 · 至 2026-08（獲利滾入）';
+  document.getElementById('summary').appendChild(t);
+  document.getElementById('summary').style.display = 'flex';
+  finished = true;
+}
+
+function loop(ts) {
+  if (!last) last = ts;
+  const dt = (ts - last) / 1000; last = ts;
+  if (playing && !finished) {
+    t += dt * 60 * speed;
+    if (t >= TOTAL) t = TOTAL;
+    slider.value = Math.round(t);
+    frame();
+  }
+  requestAnimationFrame(loop);
+}
+
+playBtn.addEventListener('click', () => {
+  if (finished) { reset(); return; }
+  playing = !playing;
+  playBtn.textContent = playing ? '⏸ 暫停' : '▶ 播放';
+});
+document.getElementById('restart-btn').addEventListener('click', reset);
+slider.addEventListener('input', () => { t = +slider.value; finished = false; frame(); });
+let speedIdx = 0;
+const SPEEDS = [1, 2, 4];
+speedBtn.addEventListener('click', () => {
+  speedIdx = (speedIdx + 1) % SPEEDS.length;
+  speed = SPEEDS[speedIdx];
+  speedBtn.textContent = '速度 ' + speed + '×';
+});
+
+function reset() {
+  t = 0; playing = true; finished = false; last = 0;
+  playBtn.textContent = '⏸ 暫停';
+  document.getElementById('summary').style.display = 'none';
+  document.getElementById('summary').querySelectorAll('.title').forEach(n => n.remove());
+  slider.value = 0;
+  frame();
+}
+
+(function init() {
+  slider.max = TOTAL;
+  timeBadge.setAttribute('x', xPos(0));
+  frame();
+  document.fonts.ready.then(() => requestAnimationFrame(() => { window.__ready = true; }));
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
