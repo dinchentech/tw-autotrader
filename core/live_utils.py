@@ -1,4 +1,5 @@
 """Live trader 公用函式（市場時間、輔助工具）"""
+import os
 
 from datetime import datetime, timedelta, time
 import pytz

@@ -303,3 +303,12 @@
 - ⚠️ 教訓：trial 對「真實執行碼」的額度極窄（~45.5KB 臨界），檔案只會隨功能增長 → **長期必須購買 PyArmor license** 或持續搬移邏輯到 core/ 模組（不加密、不占額度）。
 
 ## 2026-08-23 · 下單成交確認機制（resolve_fill）— 修正「委託成功≠成交」誤判
+
+## 2026-08-24 · 修復 deploy 後 VM 崩潰（瘦身引入兩缺漏）
+
+- 症狀：v3.13 啟動後 `NameError: name 'os' is not defined`（core/live_utils.run_inst_momentum）＋`name 'is_rotation_buy' is not defined`（買入迴圈）→ Docker 重啟迴圈。
+- 根因：① core/live_utils.py 原無 `import os`（先前 helper 皆未用 os）；② 瘦身腳本的「移除內聯 import」步驟誤刪了我剛加的 top-level `from core.rotation_hold import is_rotation_buy, check_rotation_hold`。兩者皆執行期才爆，py_compile 與既有測試抓不到。
+- 修復：補 `import os` + 補回 top-level import；新增回歸測試（run_inst_momentum 兩分支 + **importlib 載入 live_trader_multi 驗證 helper 皆已綁定** + live_utils 有 os），全 114 tests OK。
+- 教訓：搬移 import/呼叫後必須用「實際載入模組」的回歸測試，不能只靠 py_compile。
+
+## 2026-08-23 · deploy 失敗：pyarmor trial「out of license」— 真實執行碼臨界 ~45.5KB

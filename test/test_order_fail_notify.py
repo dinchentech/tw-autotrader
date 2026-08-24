@@ -1,4 +1,5 @@
 """測試：notify_order_failure — 交易失敗 TG 警示（每日每檔一次）"""
+import os
 import unittest
 from unittest.mock import MagicMock
 
@@ -110,3 +111,30 @@ class TestResolveFill(unittest.TestCase):
         p._trade_sdk = MagicMock()
         p._trade_sdk.get_transactions_by_date.return_value = [{"foo": 1}]
         self.assertIsNone(p.check_fill("2330", "buy", {}, 100), '格式不明 → None 維持原行為')
+
+
+class TestRunInstMomentumAndImports(unittest.TestCase):
+    def test_run_inst_momentum_debug_when_disabled(self):
+        from core.live_utils import run_inst_momentum
+        im = MagicMock()
+        with unittest.mock.patch.dict(os.environ, {"IM_DEBUG": "1", "INST_MOM_CAPITAL": "0"}):
+            run_inst_momentum(0.0, im, MagicMock(), MagicMock(), {}, __import__('datetime').datetime(2026, 8, 24, 13, 35))
+        im.debug_screen.assert_called_once()
+
+    def test_run_inst_momentum_full_when_enabled(self):
+        from core.live_utils import run_inst_momentum
+        im = MagicMock()
+        run_inst_momentum(500000.0, im, MagicMock(), MagicMock(), {}, __import__('datetime').datetime(2026, 8, 24, 13, 35))
+        im.run.assert_called_once()
+
+    def test_live_trader_multi_runtime_names_bound(self):
+        """回歸：瘦身搬移後，執行期依賴的 helper 必須存在於模組命名空間。"""
+        import importlib
+        m = importlib.import_module('live_trader_multi')
+        for name in ('is_rotation_buy', 'check_rotation_hold', 'notify_order_failure',
+                     'resolve_fill', 'run_inst_momentum', 'sell_with_fill_check'):
+            self.assertTrue(hasattr(m, name), f'live_trader_multi 缺少 {name}')
+
+    def test_live_utils_os_available(self):
+        import core.live_utils as lu
+        self.assertIn('os', dir(lu), 'core.live_utils 必須有 import os（run_inst_momentum 使用）')
