@@ -102,6 +102,51 @@ def run_inst_momentum(capital, inst_momentum, broker, rm, holdings, now):
             print(f"❌ [INST_MOM] 執行錯誤: {e}")
 
 
+def skip_if_overlap_held(symbol, holdings, notify_fn=None, label="策略"):
+    """跨策略重疊防護（2026-08-25 規定）：策略選出的股票若已持有 → 通知+跳過。
+
+    法人動能/全輪替選股可能與其他策略撞股。規定：
+    已持有（holdings 股數 > 0）就不再重複建倉，直接跳掉並通知。
+    回傳 True = 應跳過此標的；False = 可買入。
+    """
+    held = int((holdings or {}).get(symbol, 0) or 0)
+    if held <= 0:
+        return False
+    if notify_fn is not None:
+        try:
+            notify_fn(
+                f"⚠️ *{label}* 選出 {symbol} 但已持有 {held} 股 → "
+                f"跳過（不重複建倉）")
+        except Exception:
+            pass
+    print(f"⏭️  {label} 跳過 {symbol}：已持有 {held} 股（跨策略防重疊）")
+    return True
+
+
+def should_skip_rotation_overlap(symbol, holdings, pyramid_tracker, notify_fn=None):
+    """全輪替買入前的跨策略重疊檢查。
+
+    只有「不同策略」的撞股才跳掉；全輪替自身（排程 A/B 撞股，
+    pyramid_tracker 有 buy_count>0 記錄）維持補足，與回測一致。
+    回傳 True = 應跳過；False = 正常買入/補足。
+    """
+    held = int((holdings or {}).get(symbol, 0) or 0)
+    if held <= 0:
+        return False
+    trk = (pyramid_tracker or {}).get(symbol) or {}
+    if int(trk.get("buy_count", 0) or 0) > 0:
+        return False  # 全輪替自己的倉位 → 保留補足
+    if notify_fn is not None:
+        try:
+            notify_fn(
+                f"⚠️ *全輪替* 選出 {symbol} 但 {held} 股由其他策略持有 → "
+                f"跳過（不重複建倉）")
+        except Exception:
+            pass
+    print(f"⏭️  全輪替 跳過 {symbol}：已持有 {held} 股（其他策略，跨策略防重疊）")
+    return True
+
+
 def sell_with_fill_check(broker, symbol, shares, notified, today_str, notify_fn, action_label):
     """賣出 + 成交確認。回傳 (實際賣出股數, 更新後 notified)。
     未成交 → 警示且回傳 0；部分成交 → 回傳實際數；無法確認 → 視為全成交。"""

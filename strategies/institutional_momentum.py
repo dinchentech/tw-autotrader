@@ -659,6 +659,11 @@ class InstitutionalMomentumStrategy:
                     if sid in positions:
                         continue  # 已有倉位
 
+                    # 跨策略防重疊（2026-08-25 規定）：其他策略已持有 → 通知+跳過
+                    from core.live_utils import skip_if_overlap_held
+                    if skip_if_overlap_held(sid, holdings, send_telegram_message, label="法人動能"):
+                        continue
+
                     # 取得現價
                     try:
                         if hasattr(broker, "get_current_price"):

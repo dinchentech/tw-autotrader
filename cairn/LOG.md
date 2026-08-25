@@ -2,6 +2,13 @@
 
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
 
+## 2026-08-25 · 跨策略選股重疊防護（v3.15）
+
+- 規定：法人動能/全輪替選出的股票若已被持有 → TG 通知 + 跳過（不重複建倉）；**全輪替自身撞股（排程 A/B，pyramid_tracker 有 buy_count）維持補足不變**。
+- 實作：`core/live_utils.skip_if_overlap_held()`（法人動能買入前檢查全域 holdings）+ `should_skip_rotation_overlap()`（全輪替買入前：僅非自身倉位才跳）。接線：`strategies/institutional_momentum.py` 買入迴圈、`live_trader_multi.py` 全輪替 max_entry_price=-1 路徑（root 明文 + plans 同步）。
+- 測試 +11（test_overlap_skip.py：已持有/未持有/零股/None/tracker 判斷），全 136 tests OK。版本 3.14→3.15。策略說明新增「跨策略選股重疊的處理」。
+- 安全提醒（本次提交）：**root 的 live_trader_multi.py 工作樹是明文、git 是加密版 — commit 時勿 add root 明文檔**，明文只走 plans 子模組。
+
 ## 2026-08-25 · 篩選報告「未達標前三」排除已入選股票（v3.14）
 
 - 瑕疵：2633 同時出現在「✅ 入選」與「⚠️ 未達標前三」（near_misses 取自 all_evaluated 前三名，未排除 qualified）— 報告易誤讀。
