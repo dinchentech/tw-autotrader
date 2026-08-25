@@ -418,10 +418,12 @@ class InstitutionalMomentumStrategy:
     # 篩選摘要（供收盤報告用）
     # ================================================================
     def _save_screening_summary(self, candidates, all_evaluated, fish_scores, screen_date):
+        qualified_ids = {s for s, _ in candidates}
         evaluated_list = []
         seen = set()
         for stock_id, mom_score in all_evaluated:
-            if stock_id in seen:
+            # 已入選的股票不進未達標前三（避免 2633 同時出現在 ✅ 與 ⚠️）
+            if stock_id in qualified_ids or stock_id in seen:
                 continue
             seen.add(stock_id)
             stock_fish = fish_scores.get(stock_id, {})

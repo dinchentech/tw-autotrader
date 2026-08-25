@@ -66,6 +66,52 @@ class TestDebugScreen(unittest.TestCase):
             mock_run.assert_called_once()  # run 本身直接回傳（capital<=0）
 
 
+class TestScreeningSummaryExcludesQualified(unittest.TestCase):
+    """_save_screening_summary：未達標前三不得包含已入選股票（2026-08-25 報告瑕疵）"""
+
+    def _strat(self):
+        from strategies.institutional_momentum import InstitutionalMomentumStrategy
+        s = InstitutionalMomentumStrategy.__new__(InstitutionalMomentumStrategy)
+        s.top_n = 3
+        s._data_stats = {
+            "stocks_with_price": 150, "stocks_with_inst": 150,
+            "stocks_missing_inst": 0, "latest_inst_date": "2026-08-25",
+            "inst_source": {"cache": 150}, "price_source": {"cache": 150},
+        }
+        return s
+
+    def test_near_misses_exclude_qualified(self):
+        import json
+        from pathlib import Path
+        s = self._strat()
+        s._save_screening_summary(
+            candidates=[("2633", 0.2384)],
+            all_evaluated=[("2633", 0.2384), ("2890", 0.15), ("5880", 0.12)],
+            fish_scores={
+                "2633": {"2026-08-25": (2.0, 100.0)},
+                "2890": {"2026-08-25": (3.5, 80.0)},
+                "5880": {"2026-08-25": (3.5, 70.0)},
+            },
+            screen_date="2026-08-25")
+        summary = json.loads(Path("logs/inst_momentum_screening.json").read_text())
+        self.assertEqual(summary["qualified"][0]["stock_id"], "2633")
+        near_ids = [n["stock_id"] for n in summary["near_misses"]]
+        self.assertNotIn("2633", near_ids, '已入選的 2633 不應出現在未達標前三')
+        self.assertEqual(near_ids, ["2890", "5880"])
+
+    def test_empty_qualified_keeps_all_top3(self):
+        import json
+        from pathlib import Path
+        s = self._strat()
+        s._save_screening_summary(
+            candidates=[],  # 無入選 → 備援前三全部保留
+            all_evaluated=[("2454", 0.0), ("3533", 0.0), ("3030", 0.0), ("2881", 0.0)],
+            fish_scores={}, screen_date="2026-08-25")
+        summary = json.loads(Path("logs/inst_momentum_screening.json").read_text())
+        self.assertEqual([n["stock_id"] for n in summary["near_misses"]],
+                         ["2454", "3533", "3030"])
+
+
 if __name__ == '__main__':
     unittest.main()
 

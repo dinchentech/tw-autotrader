@@ -2,6 +2,12 @@
 
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
 
+## 2026-08-25 · 篩選報告「未達標前三」排除已入選股票（v3.14）
+
+- 瑕疵：2633 同時出現在「✅ 入選」與「⚠️ 未達標前三」（near_misses 取自 all_evaluated 前三名，未排除 qualified）— 報告易誤讀。
+- 修復：`_save_screening_summary` 過濾 qualified_ids；qualified 為空時備援前三不受影響（2454/3533/3030 情境保留）。
+- 測試 +2，全 125 tests OK；版本 3.13→3.14（core/version.py + 兩處 live_trader_multi.py 首行）。需重 deploy。
+
 ## 2026-08-25 · TWSE 法人備援不寫個股快取 → 降級警示每天重發
 
 - 現象：FinMind 配額 402（Requests reach the upper limit）→ 15 檔（市值後段）走 TWSE 備援，但 `get_institutional_data` 的 TWSE 分支只回傳不落盤 → 每天搜尋重試 + 降級警示每天重發。
