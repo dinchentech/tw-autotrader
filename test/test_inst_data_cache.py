@@ -11,6 +11,7 @@ from core.inst_data import (
     CACHE_SCHEMA_VERSION,
     _dump_cache,
     _load_cache,
+    _fetch_price_twse,
     clean_price_df,
     fetch_twse_inst_bulk,
     get_institutional_data,
@@ -194,6 +195,56 @@ class TestCleanPrice(unittest.TestCase):
             self.assertEqual(src, "cache")
             self.assertEqual(len(df), 4)
             self.assertTrue((df["close"] > 0).all())
+
+
+class TestTwsePriceFetch(unittest.TestCase):
+    """TWSE STOCK_DAY 跨月抓取（2026-08-25 實盤事故：只抓 start 單月 → 4 筆殘缺）"""
+
+    APR = [
+        ["115/04/27", "79778277", "100", "2280", "2330", "2265", "2265", "1", "1"],
+        ["115/04/28", "57336004", "100", "2245", "2280", "2215", "2215", "1", "1"],
+        ["115/04/29", "49147402", "100", "2175", "2210", "2165", "2180", "1", "1"],
+        ["115/04/30", "59584011", "100", "2205", "2215", "2135", "2135", "1", "1"],
+    ]
+    AUG = [
+        ["115/08/03", "10000000", "100", "2300", "2310", "2290", "2305", "1", "1"],
+        ["115/08/04", "11000000", "100", "2305", "2320", "2300", "2315", "1", "1"],
+        ["115/08/05", "12000000", "100", "2315", "2330", "2310", "2325", "1", "1"],
+    ]
+
+    def _fake_get(self, url, params=None, headers=None, timeout=None):
+        month = params["date"]  # "20260401" / "20260801"
+        if month.startswith("202604"):
+            rows = self.APR
+        elif month.startswith("202608"):
+            rows = self.AUG
+        else:
+            rows = []
+        return mock.Mock(json=lambda: {"stat": "OK", "data": rows})
+
+    def test_cross_month_merged(self):
+        """跨月請求 → 逐月抓取合併（STOCK_DAY 一次只回一個月）"""
+        with mock.patch("core.inst_data.requests.get", side_effect=self._fake_get):
+            df = _fetch_price_twse("2330", "2026-04-27", "2026-08-25")
+        self.assertGreaterEqual(len(df), 7)  # 4月4筆 + 8月3筆
+        self.assertEqual(str(df.iloc[-1]["date"])[:10], "2026-08-05")
+        self.assertEqual(str(df.iloc[0]["date"])[:10], "2026-04-27")
+
+    def test_stale_fetch_rejected_not_cached(self):
+        """抓到的資料最新日期太舊 → 視為失敗（不採用、不寫快取）"""
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "price.pkl"
+            stale = _price_df(days=4, start="2026-04-27")  # 最新 4/30，距 ref 117 天
+            with mock.patch("core.inst_data._fetch_price_finmind", return_value=stale), \
+                 mock.patch("core.inst_data._fetch_price_twse",
+                            return_value=pd.DataFrame()):
+                df, src = get_price_data(
+                    mock.Mock(), "2330", "2026-04-27", "2026-08-25", cache_path=p,
+                    max_stale_days=5, ref_date=date(2026, 8, 25),
+                    sources=("finmind", "twse"))
+            self.assertEqual(src, "none")
+            self.assertTrue(df.empty)
+            self.assertFalse(p.exists())  # 殘缺資料不得污染快取
 
 
 class TestBulkCache(unittest.TestCase):

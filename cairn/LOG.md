@@ -2,6 +2,14 @@
 
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
 
+## 2026-08-25 · 法人動能實盤全池 0/0 事故根因：TWSE 價格抓取只回單月
+
+- 現象：法人資料正常（60 rows/股）但價格資料只有 4 筆（4/27-4/30）→ `_build_core_dataframe` 全池丟棄 → qualified/near_misses 皆 0 → 睡前報告「法人/價格資料可能異常」（連 c95717f 價格備援也列不出）。
+- 根因 1：`_fetch_price_twse` 用 `strftime("%Y%m01")` 只請求 start 所在月份 — TWSE STOCK_DAY 一次只回一個月，120 天請求只拿到 4 筆殘缺資料。
+- 根因 2：殘缺 4 筆被當成功寫入快取（source=twse）→ 5 天內每次搜尋都命中殘缺快取 → 持續 0/0。
+- 修復：`_fetch_price_twse` 改逐月迴圈抓取合併；`get_price_data` 加新鮮度防護 — fetch 結果最新日期距 ref_date > max_stale_days 視為失敗（不採用、不寫快取）。測試 +2（跨月合併、殘缺拒絕不寫快取），全 121 tests OK。需重 deploy。
+- 背景：FinMind 價格 API 18:00-19:28 間暫時失敗 fallback 到 TWSE 引爆；回測不受影響（ref_date 歷史日期新鮮度檢查照舊）。
+
 ## 2026-08-23 · 下單成交確認機制（resolve_fill）— 修正「委託成功≠成交」誤判
 
 - 問題：place_order 回傳即視為買到 — 漲停排隊未成交、E.Sun timeout 回傳 {"error":...} 都被誤判已持有；清倉部分成交會誤刪全部持股。

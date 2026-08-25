@@ -193,37 +193,53 @@ def _fetch_price_finmind(dl, stock_id: str, start: str, end: str) -> pd.DataFram
 
 
 def _fetch_price_twse(stock_id: str, start: str, end: str) -> pd.DataFrame:
-    """TWSE STOCK_DAY（民國年轉換）。"""
+    """TWSE STOCK_DAY（民國年轉換）。
+
+    STOCK_DAY API 一次只回傳「date 參數所在月份」的資料 → 跨月請求必須逐月迴圈，
+    否則只拿到 start 月的最後幾個交易日（2026-08-25 實盤事故：
+    120 天請求只回 4 筆 4/27-4/30 → 被當成功寫入快取 → 全池篩選 0/0）。
+    """
     try:
-        dt_str = pd.Timestamp(start).strftime("%Y%m01")
-        url = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
-        params = {"response": "json", "date": dt_str, "stockNo": stock_id}
-        resp = requests.get(url, params=params, headers={
-            "User-Agent": "Mozilla/5.0",
-        }, timeout=10)
-        data = resp.json()
-        if data.get("stat") != "OK" or not data.get("data"):
-            return pd.DataFrame()
-        rows = []
-        for row in data["data"]:
-            try:
-                parts = row[0].split("/")
-                d = f"{int(parts[0]) + 1911}-{parts[1]}-{parts[2]}"
-                if d < start or d > end:
-                    continue
-                rows.append({
-                    "date": d, "stock_id": stock_id,
-                    "open": float(row[3].replace(",", "")),
-                    "high": float(row[4].replace(",", "")),
-                    "low": float(row[5].replace(",", "")),
-                    "close": float(row[6].replace(",", "")),
-                    "volume": int(row[1].replace(",", "")),
-                })
-            except (ValueError, IndexError):
+        frames = []
+        cur = pd.Timestamp(start).normalize()
+        end_ts = pd.Timestamp(end).normalize()
+        while cur <= end_ts:
+            dt_str = cur.strftime("%Y%m01")
+            url = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
+            params = {"response": "json", "date": dt_str, "stockNo": stock_id}
+            resp = requests.get(url, params=params, headers={
+                "User-Agent": "Mozilla/5.0",
+            }, timeout=10)
+            data = resp.json()
+            if data.get("stat") != "OK" or not data.get("data"):
+                cur = (cur + pd.offsets.MonthBegin(1)).normalize()
                 continue
-        if not rows:
+            rows = []
+            for row in data["data"]:
+                try:
+                    parts = row[0].split("/")
+                    d = f"{int(parts[0]) + 1911}-{parts[1]}-{parts[2]}"
+                    if d < start or d > end:
+                        continue
+                    rows.append({
+                        "date": d, "stock_id": stock_id,
+                        "open": float(row[3].replace(",", "")),
+                        "high": float(row[4].replace(",", "")),
+                        "low": float(row[5].replace(",", "")),
+                        "close": float(row[6].replace(",", "")),
+                        "volume": int(row[1].replace(",", "")),
+                    })
+                except (ValueError, IndexError):
+                    continue
+            if rows:
+                frames.append(pd.DataFrame(rows))
+            cur = (cur + pd.offsets.MonthBegin(1)).normalize()
+        if not frames:
             return pd.DataFrame()
-        return _norm_price(pd.DataFrame(rows))
+        merged = pd.concat(frames, ignore_index=True)
+        if merged.empty:
+            return pd.DataFrame()
+        return _norm_price(merged)
     except Exception:
         return pd.DataFrame()
 
@@ -329,6 +345,13 @@ def get_price_data(dl, stock_id: str, start, end, cache_path=None,
         except Exception:
             continue
         if df is not None and not df.empty:
+            # 新鮮度防護：抓回來的資料若最新日期太舊（距 ref_date 超過
+            # max_stale_days），視為殘缺/失敗 — 不採用、不寫入快取。
+            # （2026-08-25 事故：TWSE 單月殘缺資料（4 筆）被當成功寫入
+            #   快取，之後 5 天每次搜尋都命中殘缺快取 → 全池 0/0）
+            latest = pd.Timestamp(df["date"].max())
+            if (ref_ts - latest).days > max_stale_days:
+                continue
             if cache_path is not None:
                 try:
                     _dump_cache(cache_path, df,
