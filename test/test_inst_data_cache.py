@@ -13,6 +13,8 @@ from core.inst_data import (
     _load_cache,
     _fetch_price_twse,
     clean_price_df,
+    fetch_inst_history_bulk,
+    fetch_price_history_bulk,
     fetch_twse_inst_bulk,
     get_institutional_data,
     get_price_data,
@@ -268,6 +270,147 @@ class TestTwsePriceFetch(unittest.TestCase):
             self.assertEqual(src, "none")
             self.assertTrue(df.empty)
             self.assertFalse(p.exists())  # 殘缺資料不得污染快取
+
+
+class TestPriceHistoryBulk(unittest.TestCase):
+    """fetch_price_history_bulk：回測價格專用（獨立快取目錄，避免被實盤短歷史覆寫）"""
+
+    def _dl(self, rows_by_stock):
+        dl = mock.Mock()
+        def _get(stock_id, start_date=None, end_date=None):
+            rows = rows_by_stock.get(stock_id, [])
+            if start_date and end_date:
+                rows = [r for r in rows
+                        if str(start_date)[:10] <= str(r["date"])[:10] <= str(end_date)[:10]]
+            return pd.DataFrame(rows)
+        dl.taiwan_stock_daily.side_effect = _get
+        return dl
+
+    def test_price_history_normalized(self):
+        """FinMind 價格 → 正規化為 date/open/high/low/close/volume"""
+        rows = [
+            {"date": "2015-01-05", "stock_id": "2330", "open": 100.0,
+             "max": 102.0, "min": 99.0, "close": 101.0,
+             "Trading_Volume": 5000000, "Trading_money": 5e8},
+        ]
+        dl = self._dl({"2330": rows})
+        with tempfile.TemporaryDirectory() as td:
+            out = fetch_price_history_bulk(dl, ["2330"], "2015-01-01", "2015-12-31",
+                                           cache_dir=td)
+        df = out["2330"]
+        for col in ["date", "open", "high", "low", "close", "volume"]:
+            self.assertIn(col, df.columns)
+        self.assertEqual(df.iloc[0]["high"], 102.0)
+        self.assertEqual(df.iloc[0]["volume"], 5000000)
+
+    def test_quota_402_retries_price(self):
+        """價格抓取遇 402 → 重試成功"""
+        rows = [
+            {"date": "2015-01-05", "stock_id": "2330", "open": 100.0,
+             "max": 102.0, "min": 99.0, "close": 101.0, "Trading_Volume": 100},
+        ]
+        dl = mock.Mock()
+        calls = {"n": 0}
+        def _get(stock_id, start_date=None, end_date=None):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise Exception('{"msg":"Requests reach the upper limit.","status":402}')
+            return pd.DataFrame(rows)
+        dl.taiwan_stock_daily.side_effect = _get
+        with tempfile.TemporaryDirectory() as td:
+            out = fetch_price_history_bulk(dl, ["2330"], "2015-01-01", "2015-12-31",
+                                           cache_dir=td, retry_wait=0)
+        self.assertEqual(calls["n"], 2)
+        self.assertEqual(out["2330"].iloc[0]["close"], 101.0)
+
+    def test_cache_hit_skips_dl(self):
+        """快取命中 → dl 不再被呼叫"""
+        rows = [
+            {"date": "2015-01-05", "stock_id": "2330", "open": 100.0,
+             "max": 102.0, "min": 99.0, "close": 101.0, "Trading_Volume": 100},
+        ]
+        dl = self._dl({"2330": rows})
+        with tempfile.TemporaryDirectory() as td:
+            fetch_price_history_bulk(dl, ["2330"], "2015-01-01", "2015-12-31", cache_dir=td)
+            n = dl.taiwan_stock_daily.call_count
+            out2 = fetch_price_history_bulk(dl, ["2330"], "2015-01-01", "2015-12-31", cache_dir=td)
+            self.assertEqual(dl.taiwan_stock_daily.call_count, n)
+            self.assertEqual(out2["2330"].iloc[0]["close"], 101.0)
+
+
+class TestInstHistoryBulk(unittest.TestCase):
+    """fetch_inst_history_bulk：回測法人資料改用 FinMind（2015-2021 可回測）"""
+
+    def _dl(self, rows_by_stock):
+        """假 dl：回傳 FinMind 法人原始格式（英文 name，按日期範圍過濾）"""
+        dl = mock.Mock()
+        def _get(stock_id, start_date=None, end_date=None):
+            rows = rows_by_stock.get(stock_id, [])
+            if start_date and end_date:
+                rows = [r for r in rows
+                        if str(start_date)[:10] <= str(r["date"])[:10] <= str(end_date)[:10]]
+            return pd.DataFrame(rows)
+        dl.taiwan_stock_institutional_investors.side_effect = _get
+        return dl
+
+    def test_finmind_history_aggregated(self):
+        """FinMind 逐股法人 → 聚合外資+投信為 {date: {sid: (buy, sell)}}"""
+        rows = [
+            {"date": "2015-01-05", "stock_id": "2330", "name": "Foreign_Investor", "buy": 1000, "sell": 400},
+            {"date": "2015-01-05", "stock_id": "2330", "name": "Investment_Trust", "buy": 600, "sell": 200},
+            {"date": "2015-01-06", "stock_id": "2330", "name": "Foreign_Investor", "buy": 300, "sell": 100},
+        ]
+        dl = self._dl({"2330": rows})
+        with tempfile.TemporaryDirectory() as td:
+            out = fetch_inst_history_bulk(dl, ["2330"], "2015-01-01", "2015-12-31", cache_dir=td)
+        self.assertEqual(out["2015-01-05"]["2330"], (1600, 600))  # 外資+投信合計
+        self.assertEqual(out["2015-01-06"]["2330"], (300, 100))
+
+    def test_cache_hit_skips_dl(self):
+        """快取命中 → dl 不再被呼叫（第二次跑回測不耗 FinMind 配額）"""
+        rows = [
+            {"date": "2015-01-05", "stock_id": "2330", "name": "Foreign_Investor", "buy": 1000, "sell": 400},
+        ]
+        dl = self._dl({"2330": rows})
+        with tempfile.TemporaryDirectory() as td:
+            fetch_inst_history_bulk(dl, ["2330"], "2015-01-01", "2015-12-31", cache_dir=td)
+            calls_after_first = dl.taiwan_stock_institutional_investors.call_count
+            out2 = fetch_inst_history_bulk(dl, ["2330"], "2015-01-01", "2015-12-31", cache_dir=td)
+            self.assertEqual(dl.taiwan_stock_institutional_investors.call_count, calls_after_first,
+                             '快取命中不應再呼叫 dl')
+            self.assertEqual(out2["2015-01-05"]["2330"], (1000, 400))
+
+    def test_stale_cache_refetches(self):
+        """快取涵蓋範圍與請求不符（更短 end）→ 重新抓取"""
+        rows = [
+            {"date": "2015-01-05", "stock_id": "2330", "name": "Foreign_Investor", "buy": 1000, "sell": 400},
+            {"date": "2016-01-05", "stock_id": "2330", "name": "Foreign_Investor", "buy": 500, "sell": 100},
+        ]
+        dl = self._dl({"2330": rows})
+        with tempfile.TemporaryDirectory() as td:
+            out1 = fetch_inst_history_bulk(dl, ["2330"], "2015-01-01", "2015-12-31", cache_dir=td)
+            self.assertNotIn("2016-01-05", out1)
+            out2 = fetch_inst_history_bulk(dl, ["2330"], "2015-01-01", "2016-12-31", cache_dir=td)
+            self.assertIn("2016-01-05", out2, 'end 拉長後快取過舊應重抓')
+
+    def test_quota_402_retries(self):
+        """FinMind 配額 402 → 等待後重試成功（免費版 600/hr）"""
+        rows = [
+            {"date": "2015-01-05", "stock_id": "2330", "name": "Foreign_Investor", "buy": 1000, "sell": 400},
+        ]
+        dl = mock.Mock()
+        calls = {"n": 0}
+        def _get(stock_id, start_date=None, end_date=None):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise Exception('{"msg":"Requests reach the upper limit.","status":402}')
+            return pd.DataFrame(rows)
+        dl.taiwan_stock_institutional_investors.side_effect = _get
+        with tempfile.TemporaryDirectory() as td:
+            out = fetch_inst_history_bulk(dl, ["2330"], "2015-01-01", "2015-12-31",
+                                          cache_dir=td, retry_wait=0)
+        self.assertEqual(calls["n"], 2, '402 後應重試一次')
+        self.assertEqual(out["2015-01-05"]["2330"], (1000, 400))
 
 
 class TestBulkCache(unittest.TestCase):

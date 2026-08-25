@@ -190,7 +190,16 @@ create_tw_autotrader.py
 .idea/vcs.xml
 .idea/inspectionProfiles/profiles_settings.xml
 # 回測/選股資料快取（可重建，不進版控；快取格式由 core/cache_io.py 版本化）
-cache/
+cache/*
+!cache/inst_momentum/
+cache/inst_momentum/*
+!cache/inst_momentum/bt_price/
+!cache/inst_momentum/bt_price/**
+!cache/inst_momentum/inst_history/
+!cache/inst_momentum/inst_history/**
+# 例外：回測專用長歷史快取上 git（2026-08-25 起）— FinMind 免費配額 600/hr 逐股
+# 下載太慢（500 檔會等數小時），上 git 讓重跑/換機器 0 秒載入、不碰配額。
+# 注意：實盤短歷史快取（price/、inst/）與 VM 不下載 — 保持 gitignore 排除。
 # E.Sun SDK: 憑證(p12)、WHL 套件、以及環境設定檔（.example 是範本，.ini 是實際設定）
 esun_sdk/*.p12
 esun_sdk/*.whl

@@ -46,6 +46,8 @@ from core.cache_io import load_cache_or_raw
 from core.inst_data import (
     get_price_data as _data_get_price_data,
     fetch_twse_inst_bulk as _data_fetch_twse_inst_bulk,
+    fetch_inst_history_bulk as _data_fetch_inst_history_bulk,
+    fetch_price_history_bulk as _data_fetch_price_history_bulk,
     get_all_stock_ids as _data_get_all_stock_ids,
 )
 
@@ -122,7 +124,8 @@ TOP_N_STOCKS = args.top or MAX_STOCKS  # --top 覆蓋 MAX_STOCKS / STOCK_NO
 CACHE_DIR = Path(f"cache/inst_momentum/{START_DATE[:4]}")
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 # 價格資料跨年份共用快取（歷史股價不會改變，不用每年重載）
-PRICE_CACHE_DIR = Path("cache/inst_momentum/price")
+# 回測專用價格快取：與實盤 price/ 分離（實盤短歷史會覆寫回測長歷史 — 2026-08-25 事故）
+PRICE_CACHE_DIR = Path("cache/inst_momentum/bt_price")
 PRICE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 INITIAL_CAPITAL = float(os.getenv("INITIAL_CAPITAL", os.getenv("TOTAL_CAPITAL", 500000)))
 TOP_N = 3
@@ -205,17 +208,14 @@ def get_all_stock_ids(dl) -> list:
 
 def download_price_data(dl, stock_id: str) -> pd.DataFrame:
     """下載單一 stock 的日K，回傳含 ma20/ma10 的 DataFrame（共用資料層）"""
-    cache_file = PRICE_CACHE_DIR / f"{stock_id}.pkl"
+    # 回測專用快取 bt_price/：與實盤的 price/ 分離（2026-08-25 事故：
+    # 實盤短歷史覆寫回測長歷史 → 2015-2020 無價格 → README 數字無法重現）
     start_dt = datetime.strptime(START_DATE, "%Y-%m-%d") - timedelta(days=DATA_BUFFER_DAYS)
     start = start_dt.strftime("%Y-%m-%d")
-
-    df, _src = _data_get_price_data(
-        dl, stock_id, start, END_DATE,
-        cache_path=cache_file, max_stale_days=7,
-        ref_date=pd.Timestamp(END_DATE).date(),
-        sources=("finmind", "yfinance"),
-        min_start=start,
-    )
+    prices = _data_fetch_price_history_bulk(
+        dl, [stock_id], start, END_DATE,
+        cache_dir=PRICE_CACHE_DIR)
+    df = prices.get(stock_id, pd.DataFrame())
     if df.empty:
         return pd.DataFrame()
 
@@ -989,8 +989,11 @@ def main():
         quarterly_pool = inst_core.build_quarterly_pool(historical, all_data, TOP_N_STOCKS)
         print(f"✅ 逐季當時市值候選池: {len(quarterly_pool)} 季點, 每季前 {TOP_N_STOCKS} 大")
 
-    # ── 1b. TWSE 法人資料 ──
-    print("\n📥 階段 1b/4：下載三大法人資料（TWSE 公開 API）")
+    # ── 1b. 法人資料：TWSE bulk（2017-12-18 後全市場，免配額）+ FinMind 補 2015~2017 池內 ──
+    #   TWSE T86 API 最早僅提供 2017-12-18 後的資料（2026-08-25 確認：2015/2016 全 EMPTY）。
+    #   2015-2017 前段用 FinMind 逐股補（與實盤同資料層），且只補「逐季池內」股票
+    #   控制 FinMind 配額（免費 600/hr，500 檔全抓會爆 402）。
+    print("\n📥 階段 1b/4：法人買賣資料（TWSE bulk + FinMind 補 2015-2017 池內）")
     all_dates = sorted(set(
         d.date() if hasattr(d, 'date') else d
         for df in all_data.values() if not df.empty
@@ -998,7 +1001,19 @@ def main():
     ))
     print(f"   交易日數: {len(all_dates)}")
     twse_raw = fetch_twse_inst_data(set(all_dates))
-    print(f"✅ 法人資料: {len(twse_raw)} 個交易日有資料")
+    print(f"✅ TWSE 法人資料: {len(twse_raw)} 個交易日有資料（2017-12-18 後）")
+
+    fm_end = date(2017, 12, 17)
+    if pd.Timestamp(START_DATE).date() < fm_end:
+        pool_ids = sorted({sid for qp in (quarterly_pool or {}).values() for sid in qp})
+        if not pool_ids:
+            pool_ids = list(all_data.keys())
+        print(f"   FinMind 補抓 {START_DATE}~2017-12-17 池內 {len(pool_ids)} 檔法人（配額 600/hr，分批）...")
+        finmind_raw = _data_fetch_inst_history_bulk(
+            dl, pool_ids, START_DATE, fm_end.isoformat())
+        for d_str, m in finmind_raw.items():
+            twse_raw.setdefault(d_str, {}).update(m)
+        print(f"✅ 合併後法人資料: {len(twse_raw)} 個交易日（FinMind 補 {len(finmind_raw)} 日）")
 
     print("\n📥 階段 1c/4：合併法人資料...")
     all_data = merge_twse_inst(all_data, twse_raw)

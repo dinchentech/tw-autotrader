@@ -121,6 +121,117 @@ def fetch_twse_inst_bulk(trading_dates, cache_path=None, progress_every=50) -> d
     return inst_data
 
 
+def fetch_price_history_bulk(dl, stock_ids, start, end, cache_dir=None,
+                             retry_wait=3600, max_retries=2) -> dict:
+    """逐股抓價格歷史（FinMind，與實盤同資料層），回傳 { sid: DataFrame }。
+
+    回測專用（2026-08-25 事故：回測與實盤共用 cache/inst_momentum/price/，
+    實盤短歷史覆寫回測長歷史 → 2015-2020 無價格 → 魚過濾全滅、README 數字無法重現）。
+    獨立快取目錄（預設 cache/inst_momentum/bt_price/），meta 記錄 start/end。
+    FinMind 免費配額 600/hr：遇 402 自動等待 retry_wait 秒後重試（最多 max_retries 次）。
+    """
+    import time
+    start_s, end_s = str(start)[:10], str(end)[:10]
+    if cache_dir is None:
+        cache_dir = Path("cache/inst_momentum/bt_price")
+    cache_dir = Path(cache_dir)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    out = {}
+    for sid in stock_ids:
+        cache_path = cache_dir / f"{sid}.pkl"
+        df = None
+        if cache_path.exists():
+            cached, meta = _load_cache(cache_path)
+            if cached is not None and not cached.empty:
+                m = meta or {}
+                if m.get("start") == start_s and m.get("end") == end_s:
+                    df = cached
+        if df is None:
+            for attempt in range(max_retries + 1):
+                try:
+                    raw = dl.taiwan_stock_daily(
+                        stock_id=sid, start_date=start_s, end_date=end_s)
+                    if raw is not None and not raw.empty:
+                        df = _norm_price(raw)
+                    break
+                except Exception as e:
+                    if "upper limit" in str(e) and attempt < max_retries:
+                        print(f"   ⏳ FinMind 配額用盡，等待 {retry_wait/60:.0f} 分鐘重試（{sid}）...")
+                        time.sleep(retry_wait)
+                        continue
+                    break
+            if df is not None and not df.empty:
+                try:
+                    _dump_cache(cache_path, df,
+                                meta={"source": "bt_price",
+                                      "start": start_s, "end": end_s})
+                except Exception:
+                    pass
+        if df is not None and not df.empty:
+            out[sid] = df
+    return out
+
+
+def fetch_inst_history_bulk(dl, stock_ids, start, end, cache_dir=None,
+                            retry_wait=3600, max_retries=2) -> dict:
+    """逐股抓法人歷史（FinMind，與實盤同資料層），
+    聚合為 { date_str: { stock_id: (inst_buy, inst_sell) } }（投信+外資）。
+
+    回測用：2015-2021 等長歷史窗口 TWSE T86 無資料（API 僅提供 2017-12-18 後），
+    回測必須用 FinMind（2026-08-25 事故：README 2015-2021 +49.37% 無法重現）。
+    快取：每檔獨立 pkl（cache_dir），meta 記錄 start/end — 涵蓋請求範圍才命中。
+    FinMind 免費配額 600/hr：遇 402 自動等待 retry_wait 秒後重試（最多 max_retries 次）。
+    """
+    import time
+    start_s, end_s = str(start)[:10], str(end)[:10]
+    if cache_dir is None:
+        cache_dir = Path("cache/inst_momentum/inst_history")
+    cache_dir = Path(cache_dir)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    out = {}
+    for i, sid in enumerate(stock_ids):
+        cache_path = cache_dir / f"{sid}.pkl"
+        df = None
+        if cache_path.exists():
+            cached, meta = _load_cache(cache_path)
+            if cached is not None and not cached.empty:
+                m = meta or {}
+                if m.get("start") == start_s and m.get("end") == end_s:
+                    df = cached
+        if df is None:
+            for attempt in range(max_retries + 1):
+                try:
+                    raw = dl.taiwan_stock_institutional_investors(
+                        stock_id=sid, start_date=start_s, end_date=end_s)
+                    if raw is not None and not raw.empty:
+                        df = _norm_inst(raw)
+                    break
+                except Exception as e:
+                    if "upper limit" in str(e) and attempt < max_retries:
+                        print(f"   ⏳ FinMind 配額用盡，等待 {retry_wait/60:.0f} 分鐘重試（{sid}）...")
+                        time.sleep(retry_wait)
+                        continue
+                    break
+            if df is not None and not df.empty:
+                try:
+                    _dump_cache(cache_path, df,
+                                meta={"source": "inst_history",
+                                      "start": start_s, "end": end_s})
+                except Exception:
+                    pass
+        if df is None or df.empty:
+            continue
+        agg = aggregate_institutional(df)
+        for _, row in agg.iterrows():
+            d = row["date"]
+            d_str = d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d)[:10]
+            out.setdefault(d_str, {})[sid] = (
+                int(row["inst_buy"]), int(row["inst_sell"]))
+    return out
+
+
 class TwseDayCache:
     """TWSE 逐日快取（實盤備援用）：先建立近 N 天快取，之後只補最新一天、淘汰最舊一天。"""
 
@@ -174,10 +285,12 @@ def clean_price_df(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _norm_price(df: pd.DataFrame) -> pd.DataFrame:
-    df = clean_price_df(df)
+    # 先 rename 再 clean：FinMind raw 欄位是 max/min（非 high/low），
+    # clean_price_df 需要 high/low（2026-08-25：回測價格直呼時 KeyError）
     rename = {"Trading_Volume": "volume", "Trading_money": "amount",
               "Trading_turnover": "turnover", "max": "high", "min": "low"}
     df = df.rename(columns={k: v for k, v in rename.items() if k in df.columns})
+    df = clean_price_df(df)
     df["date"] = pd.to_datetime(df["date"])
     return df.sort_values("date").reset_index(drop=True)
 
