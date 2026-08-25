@@ -283,7 +283,12 @@ class InstitutionalMomentumStrategy:
         # 2. 法人資料
         df_inst = self._get_institutional_data(stock_id, days=15)
         if df_inst.empty:
-            return pd.DataFrame()
+            # 法人資料缺失時保留價格資料（近 5 日漲幅備援排名仍要能列出前三），
+            # inst 欄位以 0 填充 — 動能/魚分檢查會因法人全 0 而判定不通過（不會誤入選）
+            df = df_price.copy()
+            df["inst_buy"] = 0
+            df["inst_sell"] = 0
+            return df
 
         # 聚合法人資料為每日 inst_buy / inst_sell（投信+外資，共用資料層正規化名稱）
         inst_agg = inst_data.aggregate_institutional(df_inst)
