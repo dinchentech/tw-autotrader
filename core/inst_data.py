@@ -430,6 +430,15 @@ def get_institutional_data(dl, stock_id: str, start, end, cache_path=None,
             twse_day_cache.ensure_range(end_dt, lookback_days=(end_dt - start_dt).days + 5)
             df = twse_day_cache.stock_rows(stock_id)
             if not df.empty:
+                # TWSE 備援結果也寫入個股快取，避免每天重試/降級警示每天重發
+                # （2026-08-25：FinMind 配額用盡 → 15 檔走備援但不落盤）
+                if cache_path is not None:
+                    try:
+                        _dump_cache(cache_path, df,
+                                    meta={"stock_id": stock_id, "source": "twse",
+                                          "start": str(start)[:10], "end": str(end)[:10]})
+                    except Exception:
+                        pass
                 return df, "twse", pd.Timestamp(df["date"].max()).date()
     return pd.DataFrame(), "none", None
 

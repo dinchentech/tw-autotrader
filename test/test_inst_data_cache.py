@@ -161,6 +161,29 @@ class TestInstCache(unittest.TestCase):
             self.assertEqual(src, "cache")
             self.assertEqual(latest, date(2026, 1, 10))
 
+    def test_twse_fallback_writes_cache(self):
+        """TWSE 備援成功 → 寫入個股快取（2026-08-25：備援不寫快取 → 每天重試、
+        降級警示每天重發）"""
+        class _FakeTwseDayCache:
+            def ensure_range(self, end_date, lookback_days=15):
+                pass
+
+            def stock_rows(self, stock_id):
+                return _inst_df()
+
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "inst.pkl"
+            dl = _ExplodingDL()  # finmind 路徑不該被呼叫
+            df, src, latest = get_institutional_data(
+                dl, "2330", "2026-01-01", "2026-01-31", cache_path=p,
+                max_stale_days=5, ref_date=date(2026, 1, 15),
+                sources=("twse",), twse_day_cache=_FakeTwseDayCache())
+            self.assertEqual(src, "twse")
+            self.assertTrue(p.exists(), "TWSE 備援結果應寫入個股快取")
+            cached, meta = _load_cache(p)
+            self.assertIsNotNone(cached)
+            self.assertEqual(meta["source"], "twse")
+
 
 class TestCleanPrice(unittest.TestCase):
 

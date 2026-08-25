@@ -2,6 +2,12 @@
 
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
 
+## 2026-08-25 · TWSE 法人備援不寫個股快取 → 降級警示每天重發
+
+- 現象：FinMind 配額 402（Requests reach the upper limit）→ 15 檔（市值後段）走 TWSE 備援，但 `get_institutional_data` 的 TWSE 分支只回傳不落盤 → 每天搜尋重試 + 降級警示每天重發。
+- 修復：TWSE 備援成功時也 `_dump_cache`（與 finmind 分支一致，meta source=twse）→ 隔日命中快取、不再重試。測試 +1（TWSE 備援寫快取），全 123 tests OK。需重 deploy。
+- 補充：FinMind 免費配額單日爆量（多跑幾次全池搜尋即耗盡）；快取命中後不耗配額，日常單次搜尋不受影響。
+
 ## 2026-08-25 · 實盤全池篩選靜默失敗（第二層根因）：check_date 型態未統一
 
 - 現象：deploy c991375 後法人/價格資料正常（148/148 有法人、最新 08-25），但 near_misses 前三 score 全 0.0 — momentum check 沒真正執行。
