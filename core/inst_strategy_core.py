@@ -190,6 +190,10 @@ def build_quarterly_pool(historical: dict, all_data: dict, top_n: int = 150) -> 
 # ─── 動能進場檢查 ──────────────────────────────────
 def check_momentum_entry(all_data: dict, stock_id: str, check_date,
                          accum_price: float = None) -> tuple:
+    # 統一 check_date 為 Timestamp：實盤傳 datetime.date（date.today()），
+    # pandas 2.2+ 對 datetime64 <= date 拋 TypeError（2026-08-25 事故：
+    # 全池篩選被 except 吞掉 → 只剩備援前三、score 全 0）
+    check_date = pd.Timestamp(check_date)
     df = all_data.get(stock_id)
     if df is None or df.empty or len(df) < LOOKBACK + 5:
         return False, 0

@@ -2,6 +2,13 @@
 
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
 
+## 2026-08-25 · 實盤全池篩選靜默失敗（第二層根因）：check_date 型態未統一
+
+- 現象：deploy c991375 後法人/價格資料正常（148/148 有法人、最新 08-25），但 near_misses 前三 score 全 0.0 — momentum check 沒真正執行。
+- 根因：`check_momentum_entry` 內 `df["date"] <= check_date` — 回測/測試傳 `pd.Timestamp`（正常），**實盤傳 `date.today()`（datetime.date）** → pandas 2.2+ 對 datetime64 <= date 拋 `TypeError: Invalid comparison` → `get_candidates` 每檔 `except: continue` 吞掉 → 只剩備援排名（fish/price_return，score 0.0）。回測數字不受影響（傳 Timestamp），故 121 舊測試全綠未抓到。
+- 引爆時點：VM 最近 rebuild 裝到 pandas 2.2.1（Dockerfile 未鎖版本）→ 8/24/25 實盤開始 0/0（與 TWSE 單月 bug 疊加）。
+- 修復：`check_momentum_entry` 開頭 `check_date = pd.Timestamp(check_date)` 統一型態，所有呼叫端（回測/實盤）安全。測試 +1（datetime.date 傳入不拋錯），全 122 tests OK。需重 deploy。
+
 ## 2026-08-25 · 法人動能實盤全池 0/0 事故根因：TWSE 價格抓取只回單月
 
 - 現象：法人資料正常（60 rows/股）但價格資料只有 4 筆（4/27-4/30）→ `_build_core_dataframe` 全池丟棄 → qualified/near_misses 皆 0 → 睡前報告「法人/價格資料可能異常」（連 c95717f 價格備援也列不出）。

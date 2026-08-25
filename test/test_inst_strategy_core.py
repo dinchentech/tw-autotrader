@@ -58,6 +58,15 @@ class TestMarkupConfirmation(unittest.TestCase):
                                             accum_price=100.0)
         self.assertTrue(ok)
 
+    def test_check_date_as_python_date(self):
+        """實盤傳 date.today()（datetime.date）→ 不拋 TypeError（2026-08-25 事故）"""
+        df = self._markup_df()
+        ok, _ = ic.check_momentum_entry(
+            {"2330": df}, "2330",
+            df["date"].iloc[-1].date(),  # datetime.date 而非 pd.Timestamp
+            accum_price=100.0)
+        self.assertTrue(ok)
+
     def test_min_breakout_rejects_support(self):
         """護盤：貼著成本 +1%（未離開成本區）→ 拒絕"""
         df = make_df(days=40, closes=[100.0] * 35 + [100.5, 100.6, 100.7, 100.8, 101.0])
