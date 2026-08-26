@@ -68,8 +68,17 @@ class TestShouldSkipRotationOverlap(unittest.TestCase):
         self.assertFalse(result, '全輪替自身撞股 → 維持補足')
         notify.assert_not_called()
 
+    def test_rotation_managed_kept_even_tracker_empty(self):
+        """全輪替管理的股票（max_entry_price=-1，is_rotation_managed=True）
+        即使 pyramid_tracker 空（重啟後）→ 不跳過（2026-08-26 實盤 bug）"""
+        notify = MagicMock()
+        result = should_skip_rotation_overlap(
+            "2395", {"2395": 121}, {}, notify, is_rotation_managed=True)
+        self.assertFalse(result, '全輪替自己的倉位不應跳過')
+        notify.assert_not_called()
+
     def test_other_strategy_held_skips(self):
-        """無 tracker 記錄但 holdings 有 → 其他策略持有 → 跳過+通知"""
+        """無 tracker 記錄且非全輪替管理但 holdings 有 → 其他策略持有 → 跳過+通知"""
         notify = MagicMock()
         result = should_skip_rotation_overlap(
             "2330", {"2330": 400}, {}, notify)

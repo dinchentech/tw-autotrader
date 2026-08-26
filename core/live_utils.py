@@ -123,16 +123,23 @@ def skip_if_overlap_held(symbol, holdings, notify_fn=None, label="策略"):
     return True
 
 
-def should_skip_rotation_overlap(symbol, holdings, pyramid_tracker, notify_fn=None):
+def should_skip_rotation_overlap(symbol, holdings, pyramid_tracker, notify_fn=None,
+                                 is_rotation_managed=False):
     """全輪替買入前的跨策略重疊檢查。
 
-    只有「不同策略」的撞股才跳掉；全輪替自身（排程 A/B 撞股，
-    pyramid_tracker 有 buy_count>0 記錄）維持補足，與回測一致。
+    只有「不同策略」的撞股才跳掉；全輪替自身的倉位維持補足（與回測一致）：
+    - is_rotation_managed=True（該股是全輪替管理的，max_entry_price=-1）→ 不跳
+      （即使 pyramid_tracker 空 — 2026-08-26 實盤 bug：重啟後 tracker 為空，
+       全輪替自己的倉位被誤判成其他策略持有，每分鐘重複跳過+通知）
+    - 否則 pyramid_tracker 有 buy_count>0 → 全輪替自己 → 不跳
+    - 否則 holdings 有股 → 其他策略持有 → 通知+跳過
     回傳 True = 應跳過；False = 正常買入/補足。
     """
     held = int((holdings or {}).get(symbol, 0) or 0)
     if held <= 0:
         return False
+    if is_rotation_managed:
+        return False  # 全輪替管理的股票 → 自己的倉位 → 保留補足
     trk = (pyramid_tracker or {}).get(symbol) or {}
     if int(trk.get("buy_count", 0) or 0) > 0:
         return False  # 全輪替自己的倉位 → 保留補足

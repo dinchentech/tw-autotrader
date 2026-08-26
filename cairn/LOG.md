@@ -2,6 +2,13 @@
 
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
 
+## 2026-08-26 · 全輪替重啟後誤判「其他策略持有」→ 每分鐘重複跳過通知（v3.16）
+
+- 症狀：容器重啟後，全輪替 4 檔（2395/3653/2357/3231，皆自己的持倉）被「跨策略防重疊」誤判為其他策略持有 → 09:00-09:05 每分鐘重複發「選出 X 但 N 股由其他策略持有 → 跳過」。
+- 根因：`pyramid_tracker` 重啟後為空（`{}`，未持久化）→ `should_skip_rotation_overlap` 見 holdings 有股但 tracker 無 buy_count → 誤判。
+- 修復：① 全輪替分支重啟後從 holdings 恢復 tracker（buy_count=1/total_shares=existing，仿 keep_wait 既有邏輯）→ 非換股日直接 continue、換股日正常補足；② `should_skip_rotation_overlap` 增 `is_rotation_managed` 參數（全輪替管理的股票永不跳，雙保險）；呼叫端傳 True。
+- 測試 +1（tracker 空但 is_rotation_managed → 不跳），全 144 tests OK；版本 3.15→3.16。需重 deploy（VM 現仍每分鐘刷通知）。
+
 ## 2026-08-26 · 法人動能回測資料稽核：README 數字為還原價 bug 產物
 
 - 重跑雙窗 vs README：2022-2026-07 **+107.31%**（原 +103.66%，接近 ✓）；2015-2021 **-4.15%**（原 +49.37%，❌ 無法重現）。
