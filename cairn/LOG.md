@@ -2,6 +2,16 @@
 
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
 
+## 2026-08-26 · 法人動能回測資料稽核：README 數字為還原價 bug 產物
+
+- 重跑雙窗 vs README：2022-2026-07 **+107.31%**（原 +103.66%，接近 ✓）；2015-2021 **-4.15%**（原 +49.37%，❌ 無法重現）。
+- 根因一：TWSE T86 API 僅提供 2017-12-18 後法人資料 → 2015-2017 法人全空 → 魚過濾失效。FinMind 有完整歷史 → 新增 `fetch_inst_history_bulk` 補 2015-2017 池內股票（FinMind 免費 600/hr，遇 402 自動等待重試）。
+- 根因二（更根本）：回測與實盤共用 `cache/inst_momentum/price/`，實盤短歷史（yfinance 2021-06 起）覆寫回測長歷史 → 2015-2020 無價格。且 `min_start` 的 span_ok 例外（覆蓋≥365天視為上市晚）誤放行殘缺快取。
+- 根因三（README 數字虛胖的真正來源）：舊 price/ 快取混入 **yfinance 還原價**（auto_adjust=True 修正前）→ 歷史買入價被系統性調低 → 虛增報酬。2015-2021 累積 7 年除息影響巨大（1101 買入 27.55 vs 真實 37.55）；2022 窗僅 4-5 年影響小（+103.66%≈+107.31%）。
+- 修復：`fetch_price_history_bulk`（FinMind 原始價）+ 回測價格快取獨立 `bt_price/`（與實盤 price/ 分離）；`_norm_price` 先 rename 再 clean（FinMind max/min → high/low KeyError）；回測階段 1b = TWSE bulk（2017-12 後）+ FinMind 補 2015-2017 池內。
+- 快取上 git（2026-08-25 起）：`bt_price/` + `inst_history/` 放行 .gitignore（回測長歷史快取 0 秒載入、不耗配額）；實盤 price/、inst/ 與 VM 仍排除（.dockerignore）。
+- README/策略說明/使用手冊 法人動能數字更新為稽核後值（+107.31% / -4.15%）+ 註記還原價 bug。測試 +4（inst/price history bulk、402 重試、快取命中），全 143 tests OK。
+
 ## 2026-08-25 · 跨策略選股重疊防護（v3.15）
 
 - 規定：法人動能/全輪替選出的股票若已被持有 → TG 通知 + 跳過（不重複建倉）；**全輪替自身撞股（排程 A/B，pyramid_tracker 有 buy_count）維持補足不變**。
