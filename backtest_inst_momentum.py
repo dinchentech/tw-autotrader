@@ -989,11 +989,11 @@ def main():
         quarterly_pool = inst_core.build_quarterly_pool(historical, all_data, TOP_N_STOCKS)
         print(f"✅ 逐季當時市值候選池: {len(quarterly_pool)} 季點, 每季前 {TOP_N_STOCKS} 大")
 
-    # ── 1b. 法人資料：TWSE bulk（2017-12-18 後全市場，免配額）+ FinMind 補 2015~2017 池內 ──
-    #   TWSE T86 API 最早僅提供 2017-12-18 後的資料（2026-08-25 確認：2015/2016 全 EMPTY）。
-    #   2015-2017 前段用 FinMind 逐股補（與實盤同資料層），且只補「逐季池內」股票
-    #   控制 FinMind 配額（免費 600/hr，500 檔全抓會爆 402）。
-    print("\n📥 階段 1b/4：法人買賣資料（TWSE bulk + FinMind 補 2015-2017 池內）")
+    # ── 1b. 法人資料：TWSE bulk 全市場（2015-2025 完整，無配額限制） ──
+    #   TWSE T86 完整涵蓋 2015-2025（2026-08-28 修正 fetch_twse_day 欄位動態
+    #   定位：2015-2016 為 16 欄格式，舊版硬編碼 19 欄索引 → IndexError →
+    #   誤判「無 2015 資料」→ 曾繞道 FinMind 補抓（撞 600/hr 配額））
+    print("\n📥 階段 1b/4：下載法人買賣資料（TWSE T86，全市場、2015-2025 完整）")
     all_dates = sorted(set(
         d.date() if hasattr(d, 'date') else d
         for df in all_data.values() if not df.empty
@@ -1001,19 +1001,7 @@ def main():
     ))
     print(f"   交易日數: {len(all_dates)}")
     twse_raw = fetch_twse_inst_data(set(all_dates))
-    print(f"✅ TWSE 法人資料: {len(twse_raw)} 個交易日有資料（2017-12-18 後）")
-
-    fm_end = date(2017, 12, 17)
-    if pd.Timestamp(START_DATE).date() < fm_end:
-        pool_ids = sorted({sid for qp in (quarterly_pool or {}).values() for sid in qp})
-        if not pool_ids:
-            pool_ids = list(all_data.keys())
-        print(f"   FinMind 補抓 {START_DATE}~2017-12-17 池內 {len(pool_ids)} 檔法人（配額 600/hr，分批）...")
-        finmind_raw = _data_fetch_inst_history_bulk(
-            dl, pool_ids, START_DATE, fm_end.isoformat())
-        for d_str, m in finmind_raw.items():
-            twse_raw.setdefault(d_str, {}).update(m)
-        print(f"✅ 合併後法人資料: {len(twse_raw)} 個交易日（FinMind 補 {len(finmind_raw)} 日）")
+    print(f"✅ 法人資料: {len(twse_raw)} 個交易日有資料（2015-2025 完整）")
 
     print("\n📥 階段 1c/4：合併法人資料...")
     all_data = merge_twse_inst(all_data, twse_raw)

@@ -62,6 +62,12 @@ def fetch_twse_day(dt_str: str) -> dict:
 
     回傳 { stock_id: {"外資": {buy, sell}, "投信": {buy, sell}, "自營商": {buy, sell}} }
     失敗或 stat != OK 回傳 {}。
+
+    欄位以 API 回傳的 fields 標題動態定位（2026-08-28 修正）：
+    2015-2016 為 16 欄格式（投信 [5]/[6]），2017+ 為 19 欄（投信 [8]/[9]、
+    外陸資不含外資自營商）— 舊版硬編碼 19 欄索引解析 2015 資料時
+    row[16] IndexError → 誤判「TWSE 無 2015 資料」→ 改用 FinMind 補抓
+    （撞配額 402）。實測 TWSE T86 完整涵蓋 2015-2025。
     """
     try:
         params = {"response": "json", "date": dt_str, "selectType": "ALLBUT0999"}
@@ -70,15 +76,41 @@ def fetch_twse_day(dt_str: str) -> dict:
         data = resp.json()
         if data.get("stat") != "OK" or not data.get("data"):
             return {}
+
+        fields = data.get("fields", [])
+        def idx(*names):
+            for n in names:
+                if n in fields:
+                    return fields.index(n)
+            return None
+
+        i_fb = idx("外資買進股數", "外陸資買進股數(不含外資自營商)")
+        i_fs = idx("外資賣出股數", "外陸資賣出股數(不含外資自營商)")
+        i_tb = idx("投信買進股數")
+        i_ts = idx("投信賣出股數")
+        i_sb = idx("自營商買進股數(自行買賣)")
+        i_ss = idx("自營商賣出股數(自行買賣)")
+        i_hb = idx("自營商買進股數(避險)")
+        i_hs = idx("自營商賣出股數(避險)")
+        if i_fb is None or i_fs is None or i_tb is None or i_ts is None:
+            return {}
+
         day = {}
         for row in data["data"]:
             sid = row[0].strip()
-            day[sid] = {
-                "外資": {"buy": _safe_int(row[2]), "sell": _safe_int(row[3])},
-                "投信": {"buy": _safe_int(row[8]), "sell": _safe_int(row[9])},
-                "自營商": {"buy": _safe_int(row[12]) + _safe_int(row[15]),
-                           "sell": _safe_int(row[13]) + _safe_int(row[16])},
-            }
+            try:
+                day[sid] = {
+                    "外資": {"buy": _safe_int(row[i_fb]), "sell": _safe_int(row[i_fs])},
+                    "投信": {"buy": _safe_int(row[i_tb]), "sell": _safe_int(row[i_ts])},
+                    "自營商": {
+                        "buy": (_safe_int(row[i_sb]) if i_sb is not None else 0)
+                               + (_safe_int(row[i_hb]) if i_hb is not None else 0),
+                        "sell": (_safe_int(row[i_ss]) if i_ss is not None else 0)
+                                + (_safe_int(row[i_hs]) if i_hs is not None else 0),
+                    },
+                }
+            except (ValueError, IndexError):
+                continue
         return day
     except Exception:
         return {}
@@ -145,7 +177,9 @@ def fetch_price_history_bulk(dl, stock_ids, start, end, cache_dir=None,
             cached, meta = _load_cache(cache_path)
             if cached is not None and not cached.empty:
                 m = meta or {}
-                if m.get("start") == start_s and m.get("end") == end_s:
+                # 請求範圍 ⊆ 快取範圍 → 命中（2026-08-28：精確等於會讓不同
+                # 窗口互相覆寫快取，且首次下載遇配額 402 殘缺 → 全窗口假數字）
+                if (m.get("start", "") <= start_s and m.get("end", "") >= end_s):
                     df = cached
         if df is None:
             for attempt in range(max_retries + 1):
@@ -198,7 +232,8 @@ def fetch_inst_history_bulk(dl, stock_ids, start, end, cache_dir=None,
             cached, meta = _load_cache(cache_path)
             if cached is not None and not cached.empty:
                 m = meta or {}
-                if m.get("start") == start_s and m.get("end") == end_s:
+                # 請求範圍 ⊆ 快取範圍 → 命中（同 fetch_price_history_bulk）
+                if (m.get("start", "") <= start_s and m.get("end", "") >= end_s):
                     df = cached
         if df is None:
             for attempt in range(max_retries + 1):
