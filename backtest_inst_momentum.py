@@ -1020,8 +1020,14 @@ def main():
 
     # TWSE 反爬封鎖/殘缺 → 用 FinMind inst_history 快取補段（2026-08-28 容錯）
     # 檢查 TWSE 覆蓋是否明顯不足（<80% 交易日）
-    expected_days = len(all_dates)
-    if twse_raw and len(twse_raw) < expected_days * 0.8:
+    # TWSE 反爬封鎖/殘缺 → 用 FinMind inst_history 快取補段（2026-08-28 容錯）
+    # 檢查 TWSE 覆蓋是否明顯不足：基準是「窗口內交易日」（START~END），
+    # 不能用 len(all_dates)（含價格緩衝的 2014-06 起 → 2022 窗口 2974 天
+    # vs TWSE 1107 天 → 誤判殘缺 → 錯誤觸發補段 → 數字錯亂（2026-08-28）
+    window_days = [d for d in all_dates
+                   if pd.Timestamp(START_DATE).date() <= d <= pd.Timestamp(END_DATE).date()]
+    expected_days = len(window_days)
+    if twse_raw and expected_days and len(twse_raw) < expected_days * 0.8:
         print(f"⚠️  TWSE 法人僅 {len(twse_raw)}/{expected_days} 天（殘缺）→ FinMind 補段")
         try:
             fm_end = date(2017, 12, 17)
