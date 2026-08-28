@@ -19,6 +19,7 @@ inst_data.py — 法人動能策略共用資料層（回測與實盤唯一資料
 """
 import os
 import pickle
+import time
 import requests
 import pandas as pd
 from datetime import date, timedelta
@@ -57,11 +58,15 @@ def _safe_int(val) -> int:
 
 # ─── TWSE T86 三大法人（唯一實作）────────────────────────
 
+class TwseBlockedError(Exception):
+    """TWSE T86 反爬封鎖（428 或 HTML 回應）— 呼叫方可改走 FinMind 補段"""
+
+
 def fetch_twse_day(dt_str: str) -> dict:
     """TWSE T86 單日全市場法人資料。
 
     回傳 { stock_id: {"外資": {buy, sell}, "投信": {buy, sell}, "自營商": {buy, sell}} }
-    失敗或 stat != OK 回傳 {}。
+    失敗或 stat != OK 回傳 {}；**TWSE 反爬封鎖（428/HTML）拋 TwseBlockedError**。
 
     欄位以 API 回傳的 fields 標題動態定位（2026-08-28 修正）：
     2015-2016 為 16 欄格式（投信 [5]/[6]），2017+ 為 19 欄（投信 [8]/[9]、
@@ -73,6 +78,10 @@ def fetch_twse_day(dt_str: str) -> dict:
         params = {"response": "json", "date": dt_str, "selectType": "ALLBUT0999"}
         resp = requests.get(TWSE_T86_URL, params=params,
                             headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        if resp.status_code == 428 or not resp.text.strip().startswith("{"):
+            # 反爬封鎖（428 Precondition Required 或 HTML 驗證頁）—
+            # 2026-08-28：大量連續請求觸發，靜默回 {} 會讓回測法人殘缺 → 假數字
+            raise TwseBlockedError(f"TWSE 428/HTML blocked ({dt_str}, status={resp.status_code})")
         data = resp.json()
         if data.get("stat") != "OK" or not data.get("data"):
             return {}
@@ -112,6 +121,8 @@ def fetch_twse_day(dt_str: str) -> dict:
             except (ValueError, IndexError):
                 continue
         return day
+    except TwseBlockedError:
+        raise  # 反爬封鎖往上拋（呼叫方改走 FinMind 補段）
     except Exception:
         return {}
 
@@ -130,6 +141,7 @@ def fetch_twse_inst_bulk(trading_dates, cache_path=None, progress_every=50) -> d
 
     inst_data = {}
     dates = sorted(trading_dates)
+    blocked = 0
     for i, d in enumerate(dates):
         if hasattr(d, "strftime"):
             dt_str = d.strftime("%Y%m%d")
@@ -137,15 +149,28 @@ def fetch_twse_inst_bulk(trading_dates, cache_path=None, progress_every=50) -> d
         else:
             dt_str = str(d).replace("-", "")
             key = str(d)[:10]
-        day = fetch_twse_day(dt_str)
-        if not day:
-            continue
-        inst_data[key] = {
-            sid: (v["外資"]["buy"] + v["投信"]["buy"], v["外資"]["sell"] + v["投信"]["sell"])
-            for sid, v in day.items()
-        }
+        # TWSE 大量連續請求會限流/超時（2026-08-28：7 年窗口 1712 天只
+        # 成功 44 天 → 回測法人殘缺 → 勝率 100% 假象）→ 單日重試 3 次
+        day = None
+        for attempt in range(3):
+            try:
+                day = fetch_twse_day(dt_str)
+                break
+            except TwseBlockedError:
+                blocked += 1
+                time.sleep(1.5 * (attempt + 1))
+        if day:
+            inst_data[key] = {
+                sid: (v["外資"]["buy"] + v["投信"]["buy"], v["外資"]["sell"] + v["投信"]["sell"])
+                for sid, v in day.items()
+            }
         if progress_every and (i + 1) % progress_every == 0:
             print(f"   TWSE 下載進度: {i+1}/{len(dates)}")
+
+    if blocked > len(dates) * 0.3:
+        # 大量封鎖（>30%）→ 資料殘缺，拋出讓回測層改用 FinMind 補段
+        raise TwseBlockedError(
+            f"TWSE 反爬封鎖 {blocked}/{len(dates)} 天（>30%）— 需 FinMind 補段")
 
     if cache_path is not None:
         _dump_cache(cache_path, inst_data, meta={"source": "TWSE_T86", "dates": len(inst_data)})

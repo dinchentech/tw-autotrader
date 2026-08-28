@@ -44,6 +44,7 @@ from core.inst_strategy_core import (
 import core.inst_strategy_core as inst_core
 from core.cache_io import load_cache_or_raw
 from core.inst_data import (
+    TwseBlockedError,
     get_price_data as _data_get_price_data,
     fetch_twse_inst_bulk as _data_fetch_twse_inst_bulk,
     fetch_inst_history_bulk as _data_fetch_inst_history_bulk,
@@ -236,12 +237,26 @@ def fetch_twse_inst_data(trading_dates: set) -> dict:
 
     回傳 { date_str: { stock_id: (inst_buy, inst_sell) } }
     其中 inst_buy/sell = 投信買進 + 外陸資買進/賣出
+
+    TWSE 反爬封鎖（428，>30% 天被封）→ 拋 TwseBlockedError，
+    由主流程改用 FinMind inst_history 快取補段（2026-08-28 容錯）。
     """
     cache_key = f"twse_inst_{START_DATE}_{END_DATE}.pkl"
     cache_file = CACHE_DIR / cache_key
     dates = sorted(d for d in trading_dates
                    if pd.Timestamp(START_DATE).date() <= d <= pd.Timestamp(END_DATE).date())
-    return _data_fetch_twse_inst_bulk(dates, cache_path=cache_file, progress_every=50)
+    # 已存在但殘缺的快取（<80% 交易日）→ 刪除重建（2026-08-28：
+    # 殘缺快取曾被靜默載入 → 勝率 100% 假數字）
+    if cache_file.exists():
+        _cached, _meta = load_cache_or_raw(cache_file)
+        if _cached is not None and len(_cached) < len(dates) * 0.8:
+            print(f"⚠️  快取殘缺（{len(_cached)}/{len(dates)} 天）→ 刪除重建")
+            cache_file.unlink()
+    try:
+        return _data_fetch_twse_inst_bulk(dates, cache_path=cache_file, progress_every=50)
+    except TwseBlockedError:
+        print(f"⚠️  TWSE 反爬封鎖（{cache_key} 殘缺）→ 改用 FinMind inst_history 補段")
+        return {}  # 主流程偵測空/殘缺後走 FinMind
 
 
 def merge_twse_inst(all_data: dict, twse_data: dict) -> dict:
@@ -1001,7 +1016,24 @@ def main():
     ))
     print(f"   交易日數: {len(all_dates)}")
     twse_raw = fetch_twse_inst_data(set(all_dates))
-    print(f"✅ 法人資料: {len(twse_raw)} 個交易日有資料（2015-2025 完整）")
+    print(f"✅ 法人資料: {len(twse_raw)} 個交易日有資料（TWSE）")
+
+    # TWSE 反爬封鎖/殘缺 → 用 FinMind inst_history 快取補段（2026-08-28 容錯）
+    # 檢查 TWSE 覆蓋是否明顯不足（<80% 交易日）
+    expected_days = len(all_dates)
+    if twse_raw and len(twse_raw) < expected_days * 0.8:
+        print(f"⚠️  TWSE 法人僅 {len(twse_raw)}/{expected_days} 天（殘缺）→ FinMind 補段")
+        try:
+            fm_end = date(2017, 12, 17)
+            pool_ids = sorted({sid for qp in (quarterly_pool or {}).values() for sid in qp}) or list(all_data.keys())
+            if pd.Timestamp(START_DATE).date() < fm_end:
+                finmind_raw = _data_fetch_inst_history_bulk(
+                    dl, pool_ids, START_DATE, fm_end.isoformat())
+                for d_str, m in finmind_raw.items():
+                    twse_raw.setdefault(d_str, {}).update(m)
+                print(f"✅ FinMind 補段完成 → 合併 {len(twse_raw)} 天")
+        except Exception as _e:
+            print(f"⚠️  FinMind 補段失敗: {_e}")
 
     print("\n📥 階段 1c/4：合併法人資料...")
     all_data = merge_twse_inst(all_data, twse_raw)

@@ -393,6 +393,23 @@ class TestInstHistoryBulk(unittest.TestCase):
             out2 = fetch_inst_history_bulk(dl, ["2330"], "2015-01-01", "2016-12-31", cache_dir=td)
             self.assertIn("2016-01-05", out2, 'end 拉長後快取過舊應重抓')
 
+    def test_subrange_cache_hit(self):
+        """請求範圍 ⊆ 快取範圍 → 命中（2026-08-28：全窗口快取可服務單年窗口）"""
+        rows = [
+            {"date": "2015-01-05", "stock_id": "2330", "name": "Foreign_Investor", "buy": 1000, "sell": 400},
+            {"date": "2016-01-05", "stock_id": "2330", "name": "Foreign_Investor", "buy": 500, "sell": 100},
+        ]
+        dl = self._dl({"2330": rows})
+        with tempfile.TemporaryDirectory() as td:
+            # 先抓全窗口（2015-2016）
+            fetch_inst_history_bulk(dl, ["2330"], "2015-01-01", "2016-12-31", cache_dir=td)
+            n = dl.taiwan_stock_institutional_investors.call_count
+            # 再抓子窗口（僅 2015）→ 應命中快取，不再呼叫 dl
+            out = fetch_inst_history_bulk(dl, ["2330"], "2015-01-01", "2015-12-31", cache_dir=td)
+            self.assertEqual(dl.taiwan_stock_institutional_investors.call_count, n,
+                             '子範圍請求應命中既有快取')
+            self.assertIn("2015-01-05", out)
+
     def test_quota_402_retries(self):
         """FinMind 配額 402 → 等待後重試成功（免費版 600/hr）"""
         rows = [
@@ -411,6 +428,63 @@ class TestInstHistoryBulk(unittest.TestCase):
                                           cache_dir=td, retry_wait=0)
         self.assertEqual(calls["n"], 2, '402 後應重試一次')
         self.assertEqual(out["2015-01-05"]["2330"], (1000, 400))
+
+
+class TestTwseBlocked(unittest.TestCase):
+    """TWSE 反爬封鎖（428/HTML）偵測 — 2026-08-28 容錯"""
+
+    def test_428_raises_twse_blocked(self):
+        """status 428 → 拋 TwseBlockedError（不可靜默當無資料）"""
+        from core.inst_data import fetch_twse_day, TwseBlockedError
+        resp = mock.Mock()
+        resp.status_code = 428
+        resp.text = "<html>blocked</html>"
+        with mock.patch("core.inst_data.requests.get", return_value=resp):
+            with self.assertRaises(TwseBlockedError):
+                fetch_twse_day("20150105")
+
+    def test_html_response_raises_twse_blocked(self):
+        """200 但 HTML（驗證頁）→ 拋 TwseBlockedError"""
+        from core.inst_data import fetch_twse_day, TwseBlockedError
+        resp = mock.Mock()
+        resp.status_code = 200
+        resp.text = "<html><meta charset='utf-8'>captcha</html>"
+        with mock.patch("core.inst_data.requests.get", return_value=resp):
+            with self.assertRaises(TwseBlockedError):
+                fetch_twse_day("20150105")
+
+    def test_json_normal_ok(self):
+        """正常 JSON 回應 → 正常回傳（不誤判封鎖）"""
+        from core.inst_data import fetch_twse_day
+        import json as _json
+        payload = {
+            "stat": "OK",
+            "fields": ["證券代號", "證券名稱", "外資買進股數", "外資賣出股數", "外資買賣超股數",
+                       "投信買進股數", "投信賣出股數", "投信買賣超股數", "自營商買賣超股數",
+                       "自營商買進股數(自行買賣)", "自營商賣出股數(自行買賣)",
+                       "自營商買賣超股數(自行買賣)", "自營商買進股數(避險)",
+                       "自營商賣出股數(避險)", "自營商買賣超股數(避險)", "三大法人買賣超股數"],
+            "data": [["2330", "台積電", "100", "50", "50", "10", "5", "5", "2",
+                      "3", "1", "2", "1", "1", "0", "2"]],
+        }
+        resp = mock.Mock()
+        resp.status_code = 200
+        resp.text = _json.dumps(payload)
+        resp.json.return_value = payload
+        with mock.patch("core.inst_data.requests.get", return_value=resp):
+            day = fetch_twse_day("20150105")
+        self.assertIn("2330", day)
+        self.assertEqual(day["2330"]["外資"]["buy"], 100)
+
+    def test_bulk_high_block_ratio_raises(self):
+        """>30% 天被封鎖 → fetch_twse_inst_bulk 拋 TwseBlockedError（資料殘缺）"""
+        from core.inst_data import fetch_twse_inst_bulk, TwseBlockedError
+        from datetime import date as _d
+        dates = [_d(2026, 1, 5), _d(2026, 1, 6), _d(2026, 1, 7), _d(2026, 1, 8)]
+        with mock.patch("core.inst_data.fetch_twse_day",
+                        side_effect=TwseBlockedError("blocked")):
+            with self.assertRaises(TwseBlockedError):
+                fetch_twse_inst_bulk(dates, cache_path=None, progress_every=0)
 
 
 class TestBulkCache(unittest.TestCase):
