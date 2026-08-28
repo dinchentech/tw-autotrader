@@ -50,7 +50,7 @@ authoring_mode: ai_generated
 |---|---|---|---|---|
 | `cache/inst_momentum/price/{sid}.pkl` | 實盤法人動能 + july/bottomfish | **原始價**（FinMind 為主，yfinance `auto_adjust=False`），近期短歷史 | inst_data / 實盤 / july / bottomfish | ❌ gitignore |
 | `cache/inst_momentum/bt_price/{sid}.pkl` | 回測專用（backtest_inst_momentum） | **原始價**（FinMind `taiwan_stock_daily`），長歷史 2014-2025 | fetch_price_history_bulk | ✅ **上 git**（回測長歷史，避免重抓撞配額） |
-| `cache/inst_momentum/{year}/twse_inst_{START}_{END}.pkl` | 法人動能回測（momentum/july/bottomfish） | TWSE T86 法人逐日（外資+投信+自營），**2015-2025 完整** | fetch_twse_inst_bulk | ❌ gitignore |
+| `cache/inst_momentum/{year}/twse_inst_{START}_{END}.pkl` | 法人動能回測（momentum/july/bottomfish） | TWSE T86 法人逐日（外資+投信+自營），**2015-2025 完整** | fetch_twse_inst_bulk | ✅ **上 git**（2026-08-28 起，24 檔 144MB — TWSE 無配額但仍省重抓時間） |
 | `cache/inst_momentum/inst_history/{sid}.pkl` | 歷史殘留（2026-08-26 曾用 FinMind 補 2015-2017） | FinMind 法人逐股 | fetch_inst_history_bulk | ✅ 上 git（**已不再需要** — TWSE 完整，保留相容） |
 | `cache/inst_momentum/inst/{sid}.pkl` | 實盤法人動能 | FinMind/TWSE 法人近期 | get_institutional_data | ❌ gitignore |
 | `cache/inst_momentum/mcap_ranking.pkl` | 法人動能 + 全輪替選股工具 | 市值排名（寫入者在外部/加密程式） | 外部 | ❌ |

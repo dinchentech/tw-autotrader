@@ -197,6 +197,9 @@ cache/inst_momentum/*
 !cache/inst_momentum/bt_price/**
 !cache/inst_momentum/inst_history/
 !cache/inst_momentum/inst_history/**
+!cache/inst_momentum/20*/
+cache/inst_momentum/20*/**
+!cache/inst_momentum/20*/twse_inst_*.pkl
 # 例外：回測專用長歷史快取上 git（2026-08-25 起）— FinMind 免費配額 600/hr 逐股
 # 下載太慢（500 檔會等數小時），上 git 讓重跑/換機器 0 秒載入、不碰配額。
 # 注意：實盤短歷史快取（price/、inst/）與 VM 不下載 — 保持 gitignore 排除。
