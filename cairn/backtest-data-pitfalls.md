@@ -45,6 +45,8 @@ authoring_mode: ai_generated
 > 2. 法人：`cache/inst_momentum/{year}/twse_inst_{START}_{END}.pkl`（TWSE T86 bulk，**2015-2025 完整**）
 > 3. 歷史股本：`cache/inst_momentum/historical_shares.pkl`（逐季池，消除倖存者偏差）
 > 4. 市值排名：`cache/inst_momentum/mcap_ranking.pkl`
+>
+> **2026-08-29 起：跑 `python scripts/verify_cache.py`（離線完整性 + 除息跳空原始價檢測）；懷疑資料時加 `--online` 對比 FinMind/TWSE 即時 API。** 六項檢查對應六次歷史事故（bt_price 範圍=短歷史覆寫、selector 涵蓋=殘缺、twse_inst 天數=反爬 428、除息跳空=還原價混入、線上價格/法人=混合狀態與欄位格式）。
 
 | 快取 | 共用者 | 語義 | 寫入者 | git 狀態 |
 |---|---|---|---|---|
