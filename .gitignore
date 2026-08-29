@@ -200,9 +200,12 @@ cache/inst_momentum/*
 !cache/inst_momentum/20*/
 cache/inst_momentum/20*/**
 !cache/inst_momentum/20*/twse_inst_*.pkl
-# 例外：回測專用長歷史快取上 git（2026-08-25 起）— FinMind 免費配額 600/hr 逐股
+!cache/selector_prices/
+!cache/selector_prices/**
+# 例外：回測/選股專用長歷史快取上 git（2026-08-25 起）— FinMind 免費配額 600/hr 逐股
 # 下載太慢（500 檔會等數小時），上 git 讓重跑/換機器 0 秒載入、不碰配額。
 # 注意：實盤短歷史快取（price/、inst/）與 VM 不下載 — 保持 gitignore 排除。
+# selector_prices（全輪替還原價）2026-08-29 起上 git — 全輪替回測 0 秒載入。
 # E.Sun SDK: 憑證(p12)、WHL 套件、以及環境設定檔（.example 是範本，.ini 是實際設定）
 esun_sdk/*.p12
 esun_sdk/*.whl
