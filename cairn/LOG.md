@@ -1,6 +1,67 @@
+本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
+
+## 2026-08-31 · 手動選股補救寫入使用手冊（10.3.1 + 自動化章節交叉引用）
+
+- 使用手冊.md 新增「10.3.1 手動選股補救（選股日沒執行選股的救援）」：`scripts/manual_rotation_pick.py` 用法（dry-run / --sync-vm / --schedule / --force）、local→VM 流程圖、注意事項（部署順序：先 deploy 再選股；VM 買賣由 rotation_pending 驅動不依賴新版主程式）。
+- 全輪替自動化章節補交叉引用：「若選股日沒收到選股完成 TG → 用 10.3.1 補救」。
+- 今日實作已驗證：v3.19 部署成功 → local 選股（3017/3653/2059）→ .env + rotation_pending（buy_date=09/01）同步 VM → 明日開盤自動換股。
+
+本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
+
+## 2026-08-31 · manual_rotation_pick.py 改為 local 執行設計（+ --sync-vm）
+
+- 使用者要求：補救選股在 local 執行、改 local .env，明日 VM 主程式負責買賣（不必部署到 VM）。
+- 更新 `scripts/manual_rotation_pick.py`：新增 `--sync-vm`（scp .env + logs/rotation_pending.json 到 VM，`--vm`/`--zone` 可指定）；未加 --sync-vm 時印出手動複製清單。
+- 驗證：local `get_next_market_open` 正確（2026-08-31 → buy_date 2026-09-01）；主程式買賣由 `rotation_pending.json.buy_date` 驅動（`is_rotation_buy`），**與 v3.18 選股 bug 無關** → VM 主程式不需升級也能執行明日換股。
+- MIN_DRAW_BACK 檢查：local 無 broker → fail-open 照常換股（與主程式一致）。
+- scripts/README.md 補文件；151 tests 維持通過。
+
+本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
+
+## 2026-08-31 · 手動補救選股程式 scripts/manual_rotation_pick.py
+
+- 因 v3.18 bug（13:31 continue 擋死選股）錯過 08/31 排程 A 選股日，建立手動補救程式：`python scripts/manual_rotation_pick.py --dry-run`（預覽）/ 正式執行。
+- 行為與主程式 13:31~13:35 一致：should_rotate_today 判斷（08/31 → 排程 A）→ MIN_DRAW_BACK 檢查（fail-open）→ selector → backup_env + update_env_section → rotation_pending.json 排買賣日 → 重置分帳本/預算。
+- **順帶發現 selector 重複輸出 bug**：`--recommend --output-env` 在雙排程模式印兩次 PC_（1185 行單排程路徑 + 1592 行雙排程路徑）→ `run_rotation_selection` 加保序去重（6→3 條）；主程式 v3.19 內聯路徑若直接用 run_rotation_selection 也受益。
+- dry-run 選出（08/31 排程 A top3）：**3017 奇鋐 / 3653 健策 / 2059 川湖**（alloc 16.7 全輪替）。
+- 151 tests 通過（含新去重邏輯）。
+
 # Project Cairn 日誌
 
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
+
+## 2026-08-31 · 修復重大 bug：全輪替自動選股從未執行過（v3.19）
+
+- 使用者問「今天有選股了?」→ 查 VM：08/31（8月最後交易日=選股日）13:31-13:35 log 只有 INST_MOM DEBUG，無選股輸出；`backups/` 空、`rotation_pending.json` 從未存在 → **ROTATE_MODE=5 的自動選股自導入以來從未運作**（8/03 持倉是手動配置的）。
+- **根因（控制流 bug）**：主迴圈 `if (is_weekday and (h == 13) and (m >= 31)):` 區塊內每分鐘 `run_inst_momentum → time.sleep(60) → continue`；選股邏輯（`31<=m<=35`）寫在**同層級、該區塊之後** → 13:31~13:35 被 continue 擋死，永遠不可達。v3.16 起即有此結構。
+- 修復：選股區塊移入 13:31+ 區塊**內部**（run_inst_momentum 之前），`31<=m<=35` 保留。版本 3.18→3.19。
+- 回歸測試：`test/test_rotation_selectable.py`（AST 驗證 13:31+ 區塊內含 should_rotate_today），全套 151 tests 通過。
+- **後續影響**：因從未自動選股，8/31 的 11 月排程選股錯過——下次選股日 11/30（排程 A 2/5/8/11）將是修復後首次實盤驗證；部署 v3.19 後可考慮手動跑 `stock_selector_grid.py --recommend --output-env --schedule-label A --top-n 3` 補選。
+
+## 2026-08-31 · 規則：所有 deploy 由人工執行（AI 不代跑）
+
+- 使用者指示：所有 deploy（deploy.sh / deploy_source.sh / VM 重啟）一律由使用者本人執行，AI 不代跑。
+- 已寫入 `cairn/deploy-pipeline.md` 開頭「鐵則」；AI 職責止於改源碼 → 測試 → cairn → 告知就緒。
+- 背景：v3.18（下單失敗 TG 警示修復）準備完成後，deploy_source.sh 由使用者中止改為人工執行。
+
+## 2026-08-31 · 修復：下單失敗（error dict）未發 TG 警示（v3.18）
+
+- 實盤（08/31 09:00-10:36）3008 breakout 買入連敗 30+ 次（E.Sun `A00002: response parse Error`），使用者完全沒收到 TG 警示。
+- **根因**：E.Sun place_order 的 A00002 是**回傳 `{"error": ...}` dict**（非拋例外）。主迴圈 `if ('error' in order_result):` 分支只有 keep_wait rollback + continue，**未呼叫 notify_order_failure**——TG 警示只覆蓋「委託未成交 `_filled<=0`」與「except Exception」兩路徑，error-dict 路徑是縫隙。
+- 修復：`plans/live_trader_multi.py` error 分支第一行補 `notify_order_failure(...)`（所有策略通用，含買/賣動作標示）。版本 3.17→3.18。
+- 回歸測試：新增 `test/test_order_fail_notify_branch.py`（AST 驗證 error 分支必須呼叫 notify_order_failure），先紅後綠；全套 150 tests 通過。
+- 使用者觀察 ②：休眠 TG 報告其實有發（名為「睡前持倉報告」、14:00 觸發 `send_sleep_notification`），非 bug，只是名稱易混淆。
+- 後續：VM 10:41 重啟後 3008 買入成功（13 股 @ 7455）；部署 v3.18 待執行。
+
+## 2026-08-30 · Group 1 加碼 20 萬 → 3008/6805 breakout 各 10 萬；沉澱資金操作規範
+
+- 使用者指令：加碼 20 萬、3008 大立光 / 6805 富世達用 breakout 各投 10 萬（並要求「以後手動買賣/加減資金先參考使用手冊」→ 沉澱 cairn）。
+- 查閱順序：策略說明.md（PC_ 格式、全輪替非輪替區段共存 §8、breakout 參數）→ 確認後改 `.env`：`TOTAL_CAPITAL=600000→800000`、新增 `PC_3008`/`PC_6805`（breakout、alloc 12.5、buy/sell_shares 14/42）。capital.txt 僅註解記錄（# 開頭）。
+- **陷阱①（關鍵）**：capital.txt 有效條目會對**每個 keep_wait 標的自動加碼**（`800000×12.5%×1.0 = 10 萬/檔`，4 檔=40 萬 > 注資 20 萬）→ 全輪替 4 檔皆 keep_wait，改走「.env 直改 + capital.txt 註解」安全路徑。
+- **陷阱②**：VM `logs/processed_capital.json` = `[]`（本地含 2023-06-01）→ 兩邊狀態不一致，未來動 capital.txt 前先查 VM。
+- 驗證：`load_portfolio_config()` 解析 PC_3008/6805 正確（TOTAL_CAPITAL=800000、breakout 參數入列、4 檔 keep_wait 不變）；breakout_strategy 函式 dry-run OK；VM .env/capital.txt 已同步（先備份 .bak_）。
+- 新增專題 `cairn/capital-ops.md`（資金操作規範：改 .env+註解記錄、PC_ 格式、breakout 固定股數特性、上述陷阱）。
+- 後續注意（2026-08-30 修正）：**breakout 訊號=當日剛創新高本身就觸發**（收盤 > 前20日高 shift(1)），非「創高後等突破」。3008/6805 在 2026-08-28 當日即符合 BUY（7,065>6,915 / 2,345>2,225，ATR≥2%）。先前的「剛創新高短期可能無訊號」為因果顛倒之誤——操作時序提醒應為「若配置時已遠離突破點，該次訊號已過，需等下次再突破」。
 
 ## 2026-08-30 · 文件回測資料全量重跑（top3/15d/MDB30 定案參數）
 

@@ -227,6 +227,23 @@ python scripts/build_historical_shares.py --stock 2330 2455
 
 ---
 
+### `manual_rotation_pick.py` — 手動補救選股（local 執行，VM 只負責明日買賣）
+
+**定位**：全輪替自動選股的手動觸發版（v3.19 主程式修復前的補救工具，亦可作為一般手動選股入口）。
+
+**設計**：在 **local 執行** → 更新 local `.env` 排程區段 + 產生 `logs/rotation_pending.json` → 加 `--sync-vm` 自動 scp 到 VM → **明日 VM 主程式**依 `rotation_pending.buy_date` 自動清倉/買入。主程式不需部署新選股邏輯也能執行買賣（買賣由 rotation_pending 驅動）。
+
+```bash
+python scripts/manual_rotation_pick.py --dry-run    # 預覽選出結果（不寫任何檔）
+python scripts/manual_rotation_pick.py --sync-vm    # 正式選股 + scp 同步到 VM
+python scripts/manual_rotation_pick.py              # 僅 local 選股（之後手動複製檔案）
+python scripts/manual_rotation_pick.py --force --schedule A   # 補跑錯過的選股日
+```
+
+行為與主程式 13:31~13:35 一致：選股日判斷（should_rotate_today）→ MIN_DRAW_BACK 檢查（fail-open）→ selector → backup_env + update_env_section → 排定買賣日 → 重置分帳本/預算。`--sync-vm` 需 gcloud 認證（`--vm`/`--zone` 可指定，預設 tw-autotrader/asia-east1-b）。
+
+> ⚠️ 已知：`stock_selector_grid.py --recommend --output-env` 在雙排程模式會重複印 PC_ 兩次（1185/1592 兩條輸出路徑）——`run_rotation_selection` 已內建保序去重（2026-08-31 修復）。
+
 ## 建議使用流程
 
 詳見[使用手冊 — 選股工具工作流程](../使用手冊.md#🛠️-選股工具工作流程)。

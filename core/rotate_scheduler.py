@@ -125,7 +125,15 @@ def run_rotation_selection(rotate_mode, schedule_label, env_path='.env', backup_
         raise RuntimeError(f'selector exited with {result.returncode}: {result.stderr[:500]}')
 
     raw_lines = result.stdout.strip().split('\n')
-    pc_lines = [l.strip() for l in raw_lines if l.strip().startswith('PC_')]
+    # selector 在雙排程模式會重複印 PC_ 兩次（單排程路徑 1185 行 + 雙排程路徑 1592 行）——
+    # 保序去重，避免 .env 寫入重複條目（2026-08-31 手動補救時發現）
+    pc_lines = []
+    seen = set()
+    for l in raw_lines:
+        l = l.strip()
+        if l.startswith('PC_') and l not in seen:
+            pc_lines.append(l)
+            seen.add(l)
 
     if not pc_lines:
         raise RuntimeError('selector returned no PC_ entries')

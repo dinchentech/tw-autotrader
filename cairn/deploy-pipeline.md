@@ -3,9 +3,22 @@
 > 當前真相（2026-08-18 建立，源於 `_rot_day_buys` 除錯期間對「root 為何是混淆版 / deploy 沒發生」的誤判）。
 > 涉及部署、加密、版本發布的任務，先讀本篇。
 
+## ⚠️ 鐵則：所有 deploy 一律由「人工」執行（2026-08-31 起）
+
+**任何 agent（AI）不得代跑 deploy 命令**（`./deploy.sh` / `./deploy_source.sh` / `docker compose` 於 VM 上重啟等）。
+AI 的職責止於：改 `plans/` 源碼 → 跑測試 → 更新 cairn → 告知「準備就緒，請人工執行 deploy」。
+原因：deploy 涉及 VM 重啟、交易系統中斷、git push，屬高風險操作；2026-08-31 使用者明確指示。
+
 ## 一句話
 
 `deploy.sh` = 把**源碼** `live_trader_multi.py` 用 pyarmor 加密成混淆版 → 塞進 Docker image → 上傳 GCS → VM 拉取重啟。過程先把源碼備份到 `plans/`（git 子模組，自動 commit/push），**結束時一定把 root 還原成源碼**。
+
+## C 方案（2026-08-30 起）：deploy_source.sh — 源碼直部署（無加密）
+
+> pyarmor 8.x trial 授權 2026-08-30 全數過期（`out of license`），6.x/7.x 語法與 deploy.sh 不相容 → 使用者選 C 方案。
+> `deploy_source.sh` = deploy.sh 移除全部 pyarmor 步驟，直接 `docker build`（Dockerfile `COPY . .` 打包源碼）→ GCS → VM 重啟。
+> 舊混淆版仍保留於 VM `~/plans/live_trader_multi.py.obfuscated_bak`；VM 根目錄不放未加密源碼（放 ~/plans）。
+> 未來若購入 pyarmor 授權，可回歸 `deploy.sh`（加密版）。
 
 ## 角色對照（最容易搞混的部分）
 
@@ -40,6 +53,7 @@
 4. **判斷 VM 是否跑新版**：看啟動 log 的版號與設定字串（例：`選股日: 每月最後交易日` = ROTATE_TRADING_DAY_N=-1 新設定；`每月第 1 個交易日` = 舊版）。
 5. **deploy 失敗不會破壞源碼**：gcloud 認證過期 / VM 關機 / docker build 失敗都是 `exit 1`，EXIT trap 仍會還原 root——只有硬殺才會留混淆版。
 6. **deploy_crypted.sh 是另一條路**：給「沒有源碼、只有 .encrypted 檔」的使用者（上傳加密檔＋runtime），不涉及 plans 備份。
+7. **選股邏輯曾被 continue 擋死（v3.19 修復）**：主迴圈 13:31+ 盤後區塊（`h==13 and m>=31`）內每分鐘 `continue`，曾導致寫在區塊後的選股邏輯（13:31~13:35）**永遠不可達——全輪替自動選股自導入以來從未執行**（2026-08-31 發現，backups/ 空 + rotation_pending.json 從不存在為鐵證）。改動主迴圈時務必確認「同層級 continue 後的程式碼是否可達」；回歸測試 `test/test_rotation_selectable.py` 防再犯。
 
 ## 回測 vs 實盤快取（VM 只需實盤用）（contains）
 
