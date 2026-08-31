@@ -9,8 +9,9 @@ from dotenv import load_dotenv
 
 load_dotenv()  # 讀取 .env 檔
 
-SYS_TELEGRAM_BOT_TOKEN = "8459224155:AAFL5OaRHUqnuCJBg_yTiJSmIYPcQ5YwS8M"
-SYS_TELEGRAM_CHAT_ID = "8384117171"
+# 從環境變數讀取（機密不寫死在源碼；.env 已提供 TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID）
+SYS_TELEGRAM_BOT_TOKEN = os.getenv("SYS_TELEGRAM_BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN", "")
+SYS_TELEGRAM_CHAT_ID = os.getenv("SYS_TELEGRAM_CHAT_ID") or os.getenv("TELEGRAM_CHAT_ID", "")
 
 # 匯入共用設定載入器（V1.1 PC_<代號> JSON 格式）
 from core.config_loader import load_portfolio_config, STRATEGY_PARAM_KEYS, get_strategy_params
