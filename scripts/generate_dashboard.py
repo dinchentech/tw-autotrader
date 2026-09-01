@@ -2,9 +2,13 @@
 
 import json
 import os
+import sys
 from pathlib import Path
 from collections import defaultdict
 from datetime import datetime
+
+# 確保可從 container(/app) 或 VM repo 根執行：sys.path[0]=scripts/ → 加專案根
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pandas as pd
 import numpy as np
@@ -24,15 +28,34 @@ def load_trades() -> pd.DataFrame:
         return pd.DataFrame()
     try:
         # 兼容 6/7 欄混合（2026-09-01 起 log_trade 新增 exclude_daily 欄位）：
-        # CSV 無 header → 用 names 指定欄位；6 欄舊行第 7 欄為 NaN（相容）
-        df = pd.read_csv(CSV_PATH, header=None, on_bad_lines='skip',
-                         names=["timestamp", "symbol", "signal", "price",
-                                "quantity", "action", "exclude_daily"])
+        # 舊版 pandas（VM 1.5.3）對欄位數不符會跳行 → 改用 csv 模組手動讀取，
+        # 7 欄行的第 7 欄為 exclude_daily，6 欄舊行補 0
+        import csv as _csv
+        rows = []
+        with open(CSV_PATH, newline='', encoding='utf-8') as f:
+            reader = _csv.reader(f)
+            header = next(reader, None)
+            for r in reader:
+                if not r:
+                    continue
+                while len(r) < 6:
+                    r.append('')
+                rows.append(r[:7])
+        df = pd.DataFrame(rows,
+                          columns=["timestamp", "symbol", "signal", "price",
+                                   "quantity", "action", "exclude_daily"])
+        df['exclude_daily'] = pd.to_numeric(df['exclude_daily'], errors='coerce').fillna(0)
+        df['symbol'] = df['symbol'].astype(str).str.strip()
+        df['price'] = pd.to_numeric(df['price'], errors='coerce').fillna(0.0)
+        df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce').fillna(0).astype(int)
+        df['signal'] = pd.to_numeric(df['signal'], errors='coerce').fillna(0).astype(int)
+        df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
     except pd.errors.EmptyDataError:
         return pd.DataFrame()
     except pd.errors.ParserError:
         return pd.DataFrame()
-    df['exclude_daily'] = df['exclude_daily'].fillna(0)
+    if 'group' not in df.columns:
+        df['group'] = 1
     return df
     if df.empty:
         return df

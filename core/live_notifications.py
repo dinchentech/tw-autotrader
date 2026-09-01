@@ -243,3 +243,75 @@ def send_closing_summary(pd, app_version):
         print("✅ 收盤持倉報告已發送")
     except Exception as e:
         print(f"❌ 發送收盤持倉報告失敗: {e}")
+
+
+def send_rotation_cash_reminder(today_str, broker, holdings, portfolio_config,
+                                total_capital, notify_fn=None):
+    """換股日盤前資金提醒（v3.20）：rotation_pending.buy_date == 今日時，估算各輪替
+    標的補足目標權重的現金需求並 TG 通知；非換股日或檔案缺失時靜默。
+
+    公式與買入端一致（live_trader_multi.py）：target_amount = TOTAL_CAPITAL × alloc%，
+    target_shares = max(1, int(target_amount / px))，需求 = max(0, (target_shares - held)) × px。
+    """
+    import json
+    from pathlib import Path
+    try:
+        pending = json.loads(Path("logs/rotation_pending.json").read_text(encoding="utf-8"))
+    except Exception:
+        return
+    buy_date = str(pending.get("buy_date", ""))
+    if buy_date != today_str:
+        return
+
+    lines = [f"💰 換股日（{today_str}）資金提醒，請確認帳戶現金"]
+    total_need = 0.0
+    price_unknown = False
+    for symbol, cfg in (portfolio_config or {}).items():
+        if cfg.get("strategy") != "keep_wait":
+            continue
+        try:
+            if float(cfg.get("max_entry_price", 0)) != -1:
+                continue
+        except (TypeError, ValueError):
+            continue
+        try:
+            alloc_pct = float(cfg.get("alloc", 25))
+        except (TypeError, ValueError):
+            continue
+        target_amount = (total_capital or 0) * alloc_pct / 100.0
+        held = int((holdings or {}).get(symbol, 0) or 0)
+        try:
+            px = float((broker.get_current_price(symbol) or 0) if broker else 0)
+        except Exception:
+            px = 0.0
+        if px <= 0:
+            lines.append(f"{symbol} 目標 NT${target_amount:,.0f}｜目前 {held} 股｜現價未知（盤前）")
+            price_unknown = True
+            continue
+        target_shares = max(1, int(target_amount / px))
+        diff_amount = (target_shares - held) * px
+        if diff_amount > 0:
+            total_need += diff_amount
+            lines.append(
+                f"{symbol} 目標 {target_shares} 股（約 NT${target_amount:,.0f}）"
+                f"｜目前 {held} 股｜需補約 NT${diff_amount:,.0f}")
+        else:
+            lines.append(
+                f"{symbol} 目標 {target_shares} 股（約 NT${target_amount:,.0f}）"
+                f"｜目前 {held} 股｜超額約 NT${-diff_amount:,.0f}（換股日將 trim 賣出）")
+    if total_need > 0:
+        lines.append("────────────────────")
+        lines.append(f"預估現金需求 ≈ NT${total_need:,.0f}")
+    if price_unknown:
+        lines.append("⚠️ 部分標的現價未取得，需求依目標金額估算")
+    lines.append(
+        "⚠️ 現金不足時輪替補足優先（換股日跳過風控），固定策略（breakout/ma_cross）排後；"
+        "觸發 MIN_DRAW_BACK=30 時本次換股可能暫緩")
+
+    if notify_fn is None:
+        notify_fn = send_telegram_message
+    try:
+        notify_fn("\n".join(lines))
+        print("✅ 換股日資金提醒已發送")
+    except Exception as e:
+        print(f"⚠️ 換股日資金提醒發送失敗: {e}")

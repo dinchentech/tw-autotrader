@@ -31,8 +31,15 @@ PC_6805={"strategy":"breakout","alloc":12.5,"buy_shares":42,"sell_shares":42,"lo
 # 200000, 2026/08/30  # 外部加碼 20 萬 → 配置 3008/6805 breakout 各 10 萬（已計入 TOTAL_CAPITAL=800000）
 ```
 
-## 手動新增標的（PC_<代號>）規則
+## v3.20 換股日盤前現金提醒（2026-08-31 新增）
 
+換股日（`logs/rotation_pending.json.buy_date == 當日`）於主程式啟動時，TG 自動發送預估現金需求：
+`Σ max(0, 目標股數 − 現有持股) × 現價`（目標股數 = `TOTAL_CAPITAL × alloc% ÷ 現價`，與買入端同公式）。
+僅統計 `keep_wait + max_entry_price=-1` 的輪替標的；現價抓不到 → 「現價未知」估算模式；
+超額 → 提示換股日 trim；觸發 MIN_DRAW_BACK=30 時換股可能暫緩（訊息註記）。
+實作：`core/live_notifications.send_rotation_cash_reminder()`；源碼 v3.20（`APP_VERSION`）。
+
+## 手動新增標的（PC_<代號>）規則
 1. **格式**：`PC_<代號>={"strategy":"<策略>","alloc":<%>,"<參數>":...}`，例：`PC_3008={"strategy":"breakout","alloc":12.5,"buy_shares":14,...}`
 2. **alloc**：個股資金上限 = `TOTAL_CAPITAL × alloc%`。加碼後要重算——例如 TOTAL_CAPITAL 600000→800000 時，alloc 12.5 由 NT$75,000 變 NT$100,000
 3. **strategies**：bollinger / vwap / ma_cross / breakout / keep_wait（見策略說明.md §9.2 參數表）
