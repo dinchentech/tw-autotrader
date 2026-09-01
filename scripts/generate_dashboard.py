@@ -23,11 +23,17 @@ def load_trades() -> pd.DataFrame:
     if not CSV_PATH.exists():
         return pd.DataFrame()
     try:
-        df = pd.read_csv(CSV_PATH, on_bad_lines='skip')
+        # 兼容 6/7 欄混合（2026-09-01 起 log_trade 新增 exclude_daily 欄位）：
+        # CSV 無 header → 用 names 指定欄位；6 欄舊行第 7 欄為 NaN（相容）
+        df = pd.read_csv(CSV_PATH, header=None, on_bad_lines='skip',
+                         names=["timestamp", "symbol", "signal", "price",
+                                "quantity", "action", "exclude_daily"])
     except pd.errors.EmptyDataError:
         return pd.DataFrame()
     except pd.errors.ParserError:
         return pd.DataFrame()
+    df['exclude_daily'] = df['exclude_daily'].fillna(0)
+    return df
     if df.empty:
         return df
     df["timestamp"] = pd.to_datetime(df["timestamp"], format='mixed')
