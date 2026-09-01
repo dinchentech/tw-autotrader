@@ -1,5 +1,6 @@
 import requests
 import os
+import json
 from utils.telegram import send_telegram_message
 
 def send_line_notification(message):
@@ -244,6 +245,45 @@ def send_closing_summary(pd, app_version):
     except Exception as e:
         print(f"❌ 發送收盤持倉報告失敗: {e}")
 
+
+
+def estimate_rotation_capital(pc_lines, total_capital, stock_alloc):
+    """選股日資金估算（v3.25）：新配置所需 vs 目前可用 + 換股日清倉回籠。
+
+    回傳 dict:
+      need        新選檔 alloc×TOTAL_CAPITAL 總和（撞股時同檔多條目自然累加）
+      available   目前可用 = TOTAL_CAPITAL − 已投入總成本
+      released    換股日將清倉回籠 = 非新選清單內持股的成本
+      sufficient  need ≤ available + released
+      shortfall   max(0, need − (available + released))
+    """
+    need = 0.0
+    for line in pc_lines or []:
+        try:
+            cfg = json.loads(line.split('=', 1)[1])
+            alloc = float(cfg.get('alloc', 0))
+        except (ValueError, IndexError, json.JSONDecodeError):
+            alloc = 0.0
+        need += (total_capital or 0) * alloc / 100.0
+    stock_alloc = stock_alloc or {}
+    invested = sum(float(v.get('total_buy_cost', 0) or 0) for v in stock_alloc.values())
+    available = max(0.0, (total_capital or 0) - invested)
+    selected = set()
+    for line in pc_lines or []:
+        try:
+            selected.add(line.split('=', 1)[0].replace('PC_', ''))
+        except IndexError:
+            pass
+    released = sum(float(v.get('total_buy_cost', 0) or 0)
+                   for sym, v in stock_alloc.items() if sym not in selected)
+    total = available + released
+    return {
+        'need': round(need, 2),
+        'available': round(available, 2),
+        'released': round(released, 2),
+        'sufficient': need <= total + 1e-6,
+        'shortfall': round(max(0.0, need - total), 2),
+    }
 
 def send_rotation_cash_reminder(today_str, broker, holdings, portfolio_config,
                                 total_capital, notify_fn=None):

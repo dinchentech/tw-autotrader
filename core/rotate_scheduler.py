@@ -115,6 +115,42 @@ def update_env_section(env_path, schedule_label, pc_entries):
     p.write_text(''.join(new_lines), encoding='utf-8')
 
 
+def remove_monitored_only_entries(env_path, selected_symbols, holdings=None):
+    """全輪替選股完成後清理：選入的標的若被其他策略僅監控（有非全輪替 PC_ 條目
+    且未持有）→ 移除該監控條目並回報 [(symbol, 原條目行)]，供 TG 通知。
+
+    判定「其他策略」：PC_ 條目的 strategy != keep_wait 或 max_entry_price != -1
+    （全輪替管理的條目特徵 = keep_wait + max_entry_price=-1，不會被移除 —
+    撞股時由 config_loader 的 alloc 加倍處理）。已持有（holdings > 0）不移除，
+    由買入端 should_skip_rotation_overlap 防護跳過。
+    """
+    p = Path(env_path)
+    if not p.exists() or not selected_symbols:
+        return []
+    holdings = holdings or {}
+    wanted = set(selected_symbols)
+    removed = []
+    kept = []
+    for line in p.read_text(encoding='utf-8').splitlines(True):
+        stripped = line.strip()
+        if stripped.startswith('PC_') and '=' in stripped:
+            sym = stripped[3:].split('=', 1)[0].strip()
+            if sym in wanted and int(holdings.get(sym, 0) or 0) <= 0:
+                try:
+                    cfg = json.loads(stripped.split('=', 1)[1])
+                except (json.JSONDecodeError, IndexError):
+                    cfg = {}
+                is_rotation = (cfg.get('strategy') == 'keep_wait'
+                               and float(cfg.get('max_entry_price', 0)) == -1)
+                if not is_rotation:
+                    removed.append((sym, stripped))
+                    continue
+        kept.append(line)
+    if removed:
+        p.write_text(''.join(kept), encoding='utf-8')
+    return removed
+
+
 def run_rotation_selection(rotate_mode, schedule_label, env_path='.env', backup_dir='backups', top_n=4):
     result = subprocess.run(
         ['python', 'scripts/stock_selector_grid.py', '--recommend', '--output-env',

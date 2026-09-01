@@ -74,3 +74,79 @@ class TestHoldingsMessagePrices(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestRotationCapitalEstimate(unittest.TestCase):
+
+    def _est(self, pc_lines, total_capital, stock_alloc):
+        from core.live_notifications import estimate_rotation_capital
+        return estimate_rotation_capital(pc_lines, total_capital, stock_alloc)
+
+    def test_sufficient_capital(self):
+        pc_lines = [
+            'PC_3017={"strategy":"keep_wait","alloc":16.7,"max_entry_price":-1,"initial_buy_pct":1.0}',
+            'PC_3653={"strategy":"keep_wait","alloc":16.7,"max_entry_price":-1,"initial_buy_pct":1.0}',
+            'PC_2059={"strategy":"keep_wait","alloc":16.7,"max_entry_price":-1,"initial_buy_pct":1.0}',
+        ]
+        # 總資金 120 萬，已投入 50 萬 → 可用 70 萬 > 所需 60.1 萬
+        r = self._est(pc_lines, 1200000, {'3017': {'total_buy_cost': 300000}})
+        self.assertAlmostEqual(r['need'], 601200)
+        self.assertAlmostEqual(r['available'], 900000)
+        self.assertTrue(r['sufficient'])
+        self.assertEqual(r['shortfall'], 0)
+
+    def test_shortfall_after_rotation_release(self):
+        pc_lines = [
+            'PC_3017={"strategy":"keep_wait","alloc":16.7,"max_entry_price":-1,"initial_buy_pct":1.0}',
+            'PC_3653={"strategy":"keep_wait","alloc":16.7,"max_entry_price":-1,"initial_buy_pct":1.0}',
+            'PC_2059={"strategy":"keep_wait","alloc":16.7,"max_entry_price":-1,"initial_buy_pct":1.0}',
+        ]
+        # 已投入 90 萬（含 40 萬舊輪替股 3008，換股日將清倉回籠）
+        stock_alloc = {
+            '3017': {'total_buy_cost': 500000},
+            '3008': {'total_buy_cost': 400000},
+        }
+        r = self._est(pc_lines, 1200000, stock_alloc)
+        # 可用 = 120-90 = 30 萬；回籠 = 40 萬 → 合計 70 萬 > 60.1 萬
+        self.assertAlmostEqual(r['available'], 300000)
+        self.assertAlmostEqual(r['released'], 400000)
+        self.assertTrue(r['sufficient'])
+        self.assertEqual(r['shortfall'], 0)
+
+    def test_insufficient_even_with_release(self):
+        pc_lines = [
+            'PC_3017={"strategy":"keep_wait","alloc":26.7,"max_entry_price":-1,"initial_buy_pct":1.0}',
+            'PC_3653={"strategy":"keep_wait","alloc":16.7,"max_entry_price":-1,"initial_buy_pct":1.0}',
+            'PC_2059={"strategy":"keep_wait","alloc":21.7,"max_entry_price":-1,"initial_buy_pct":1.0}',
+        ]
+        stock_alloc = {
+            '3017': {'total_buy_cost': 700000},
+            '3008': {'total_buy_cost': 100000},
+        }
+        r = self._est(pc_lines, 1200000, stock_alloc)
+        # 所需 = 26.7+16.7+21.7 = 65.1% × 120萬 = 781,200
+        self.assertAlmostEqual(r['need'], 781200)
+        # 可用 = 120-80 = 40 萬；回籠 = 10 萬 → 合計 50 萬 < 78.1 萬
+        self.assertFalse(r['sufficient'])
+        self.assertAlmostEqual(r['shortfall'], 281200)
+
+    def test_released_excludes_new_selection(self):
+        # 舊持股若也在新選清單內（續抱），不計入回籠
+        pc_lines = [
+            'PC_3017={"strategy":"keep_wait","alloc":16.7,"max_entry_price":-1,"initial_buy_pct":1.0}',
+            'PC_3653={"strategy":"keep_wait","alloc":16.7,"max_entry_price":-1,"initial_buy_pct":1.0}',
+        ]
+        stock_alloc = {
+            '3017': {'total_buy_cost': 200000},
+            '3653': {'total_buy_cost': 200000},
+        }
+        r = self._est(pc_lines, 1200000, stock_alloc)
+        self.assertAlmostEqual(r['released'], 0, '續抱股不計入回籠')
+        self.assertAlmostEqual(r['available'], 800000)
+        self.assertTrue(r['sufficient'])
+
+    def test_empty_pc_lines(self):
+        r = self._est([], 1200000, {})
+        self.assertEqual(r['need'], 0)
+        self.assertAlmostEqual(r['available'], 1200000)
+        self.assertTrue(r['sufficient'])

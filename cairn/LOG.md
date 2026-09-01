@@ -1,5 +1,19 @@
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
 
+## 2026-09-01 · 選股日 TG 通知資金預估（v3.25）
+
+- 需求：全輪替選股日選好股後，TG 通知使用者「新配置所需資金」及「目前資金是否足夠」。
+- 實作：`core/live_notifications.estimate_rotation_capital(pc_lines, total_capital, stock_alloc)` 回傳 need（新選檔 alloc×TOTAL_CAPITAL 總和）/ available（TOTAL_CAPITAL−已投入）/ released（非新選清單內持股成本=次日清倉回籠）/ sufficient / shortfall；live_trader_multi.py 選股完成通知改為多行（✅資金足夠 或 ⚠️資金不足+短少金額）。
+- ⚠️ 順序陷阱：資金估算必須在 v3.5 重置分帳本之前（否則 stock_alloc 全 0 → available 虛高、released 錯 0）；已用註解標示。
+- 測試 +5（足夠/回籠補足/不足含短少/續抱不計回籠/空清單），全 171 tests OK。版本 3.24→3.25。
+
+## 2026-09-01 · 全輪替選入標的移除其他策略監控條目（v3.24）
+
+- 需求：其他策略「僅監控未持有」（有 PC_ 條目但 holdings=0）的股票被全輪替選入時 → 自動移除該監控條目 + TG 通知使用者；「已持有」維持現況（買入端 should_skip_rotation_overlap 通知+跳過，不重複建倉）。
+- 實作：`core/rotate_scheduler.remove_monitored_only_entries(env_path, selected_symbols, holdings)` — 移除「非全輪替管理」（strategy != keep_wait 或 max_entry_price != -1）且 holdings=0 的 PC_ 條目，回傳 [(sym, 原條目)]；live_trader_multi.py 選股完成後呼叫並逐檔 TG 通知被移除的策略名。
+- 判定基準：全輪替管理條目特徵 = keep_wait + max_entry_price=-1 → 不會被誤刪（撞股由 config_loader alloc 加倍處理）；非 keep_wait 策略（breakout/ma_cross/bollinger 等）即使放在排程區段內也會被正確移除。
+- 測試 +3（僅監控移除/已持有保留/無條目不變），全 166 tests OK。版本 3.23→3.24。
+
 ## 2026-09-01 · bollinger/vwap/ma_cross 買入與回測對齊 + BUY_AMOUNT_OFFSET 補足機制
 
 - 問題：實盤用 position_amount（預設 2500 元 → 只買 2-4 股），回測 simulate_portfolio 用 bucket 全額買入且滿倉不買 → 實盤行為 ≠ 回測績效。

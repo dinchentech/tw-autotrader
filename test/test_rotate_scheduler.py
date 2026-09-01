@@ -84,8 +84,9 @@ class TestRotateScheduler(unittest.TestCase):
     def setUp(self):
         from core.rotate_scheduler import (
             get_rotate_months, should_rotate_today, backup_env,
-            update_env_section, _make_pc_entry
+            update_env_section, _make_pc_entry, remove_monitored_only_entries
         )
+        self.remove_monitored_only_entries = remove_monitored_only_entries
         from core.trading_calendar import TradingCalendar
         self.get_rotate_months = get_rotate_months
         self.should_rotate_today = should_rotate_today
@@ -207,5 +208,67 @@ class TestRotateScheduler(unittest.TestCase):
                 content = f.read()
             self.assertIn('PC_TEST', content)
             self.assertIn('排程 A', content)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_remove_monitored_only_removes_other_strategy(self):
+        tmpdir = tempfile.mkdtemp()
+        try:
+            test_env = ('# =====\nTOTAL_CAPITAL=1200000\n'
+                        '# ── 排程 A (2/5/8/11月)\n'
+                        'PC_3017={"strategy":"keep_wait","alloc":16.7,"max_entry_price":-1,"initial_buy_pct":1.0}\n\n'
+                        '# ── 排程 B (3/6/9/12月)\n'
+                        'PC_3008={"strategy":"breakout","alloc":12.5,"buy_shares":14,"sell_shares":14}\n'
+                        'PC_2360={"strategy":"ma_cross","alloc":5,"fast_period":10,"slow_period":30}\n')
+            env_path = os.path.join(tmpdir, '.env')
+            with open(env_path, 'w') as f:
+                f.write(test_env)
+            removed = self.remove_monitored_only_entries(env_path, ['3008', '2360'], {})
+            self.assertEqual(len(removed), 2, '兩檔僅監控標的應被移除')
+            removed_syms = {sym for sym, _ in removed}
+            self.assertIn('3008', removed_syms)
+            self.assertIn('2360', removed_syms)
+            with open(env_path) as f:
+                updated = f.read()
+            self.assertNotIn('PC_3008', updated, 'breakout 監控條目應被移除')
+            self.assertNotIn('PC_2360', updated, 'ma_cross 監控條目應被移除')
+            self.assertIn('PC_3017', updated, '排程 A 內全輪替條目不受影響')
+            self.assertIn('TOTAL_CAPITAL', updated, '無關設定保留')
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_remove_monitored_only_keeps_held(self):
+        tmpdir = tempfile.mkdtemp()
+        try:
+            test_env = ('# =====\n'
+                        '# ── 排程 A (2/5/8/11月)\n'
+                        'PC_3008={"strategy":"keep_wait","alloc":16.7,"max_entry_price":-1,"initial_buy_pct":1.0}\n\n'
+                        '# ── 排程 B (3/6/9/12月)\n'
+                        'PC_3008={"strategy":"breakout","alloc":12.5,"buy_shares":14,"sell_shares":14}\n')
+            env_path = os.path.join(tmpdir, '.env')
+            with open(env_path, 'w') as f:
+                f.write(test_env)
+            removed = self.remove_monitored_only_entries(env_path, ['3008'], {'3008': 13})
+            self.assertEqual(removed, [], '已持有標的不移除監控條目')
+            with open(env_path) as f:
+                updated = f.read()
+            self.assertIn('PC_3008', updated, '已持有標的之監控條目保留')
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_remove_monitored_only_no_entries(self):
+        tmpdir = tempfile.mkdtemp()
+        try:
+            test_env = ('# =====\nTOTAL_CAPITAL=1200000\n'
+                        '# ── 排程 A (2/5/8/11月)\n'
+                        'PC_3017={"strategy":"keep_wait","alloc":16.7,"max_entry_price":-1,"initial_buy_pct":1.0}\n')
+            env_path = os.path.join(tmpdir, '.env')
+            with open(env_path, 'w') as f:
+                f.write(test_env)
+            removed = self.remove_monitored_only_entries(env_path, ['3017'], {})
+            self.assertEqual(removed, [], '無其他策略監控 → 不移除')
+            with open(env_path) as f:
+                updated = f.read()
+            self.assertEqual(updated, test_env, '檔案應保持原樣')
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
