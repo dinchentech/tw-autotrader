@@ -11,10 +11,23 @@ from pathlib import Path
 # 全輪替策略常數
 ROTATE_TOP_N = int(os.getenv('ROTATE_TOP_N', '4'))
 ROTATE_MODE = int(os.getenv('ROTATE_MODE', '0'))
-ROTATE_ALLOC = round((50.0 if ROTATE_MODE in (4, 5) else 100.0) / ROTATE_TOP_N, 2)
+ROTATE_CAPITAL_PCT = float(os.getenv('ROTATE_CAPITAL_PCT', '50'))
 ROTATE_STRATEGY = 'keep_wait'
 ROTATE_MAX_ENTRY = -1
 ROTATE_BUY_PCT = 1.0
+
+
+def calc_rotation_alloc(rotate_mode, top_n, capital_pct=50.0):
+    """全輪替每檔 alloc（v3.26）：capital_pct（全輪替總資金佔 TOTAL_CAPITAL 比例）
+    平分給排程數（雙排程 4/5 = 2，其餘 = 1），再除以 top_n。
+
+    相容性：capital_pct=100 時與舊行為一致（雙排程 50/top_n、單排程 100/top_n）。
+    """
+    num_schedules = 2 if int(rotate_mode) in (4, 5) else 1
+    return round(float(capital_pct) / num_schedules / int(top_n), 2)
+
+
+ROTATE_ALLOC = calc_rotation_alloc(ROTATE_MODE, ROTATE_TOP_N, ROTATE_CAPITAL_PCT)
 
 ROTATE_QMAP = {
     1: {'months': (1, 4, 7, 10), 'label': 'A', 'is_dual': False},

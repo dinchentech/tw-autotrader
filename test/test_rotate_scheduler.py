@@ -84,9 +84,11 @@ class TestRotateScheduler(unittest.TestCase):
     def setUp(self):
         from core.rotate_scheduler import (
             get_rotate_months, should_rotate_today, backup_env,
-            update_env_section, _make_pc_entry, remove_monitored_only_entries
+            update_env_section, _make_pc_entry, remove_monitored_only_entries,
+            calc_rotation_alloc
         )
         self.remove_monitored_only_entries = remove_monitored_only_entries
+        self.calc_rotation_alloc = calc_rotation_alloc
         from core.trading_calendar import TradingCalendar
         self.get_rotate_months = get_rotate_months
         self.should_rotate_today = should_rotate_today
@@ -272,3 +274,32 @@ class TestRotateScheduler(unittest.TestCase):
             self.assertEqual(updated, test_env, '檔案應保持原樣')
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+class TestRotationCapitalPct(unittest.TestCase):
+
+    def setUp(self):
+        from core.rotate_scheduler import calc_rotation_alloc
+        self.calc_rotation_alloc = calc_rotation_alloc
+
+    def test_dual_schedule_default_50pct(self):
+        # 雙排程 + PCT=50 → 每排程 25% → top3 每檔 8.33
+        self.assertAlmostEqual(self.calc_rotation_alloc(5, 3, 50.0), 8.33, places=2)
+
+    def test_single_schedule_default_50pct(self):
+        # 單排程 + PCT=50 → 每排程 50% → top3 每檔 16.67
+        self.assertAlmostEqual(self.calc_rotation_alloc(1, 3, 50.0), 16.67, places=2)
+
+    def test_dual_schedule_100pct_matches_legacy(self):
+        # PCT=100 → 與舊行為一致（雙排程 50/top_n）
+        self.assertAlmostEqual(self.calc_rotation_alloc(5, 3, 100.0), 16.67, places=2)
+        self.assertAlmostEqual(self.calc_rotation_alloc(5, 4, 100.0), 12.5, places=2)
+
+    def test_single_schedule_100pct_matches_legacy(self):
+        # PCT=100 → 與舊行為一致（單排程 100/top_n）
+        self.assertAlmostEqual(self.calc_rotation_alloc(2, 4, 100.0), 25.0, places=2)
+
+    def test_custom_pct(self):
+        # 自訂 30%：雙排程每排程 15% → top3 每檔 5.0
+        self.assertAlmostEqual(self.calc_rotation_alloc(5, 3, 30.0), 5.0, places=2)
+

@@ -26,6 +26,8 @@ from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
+
+from core.rotate_scheduler import calc_rotation_alloc
 import yfinance as yf
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -1183,7 +1185,7 @@ def recommend_next_quarter(data, params, top_n=4, mode="momentum",
         return
 
     if output_env:
-        alloc = round(50.0 / top_n, 1)
+        alloc = calc_rotation_alloc(ROTATE_MODE, top_n, float(os.getenv('ROTATE_CAPITAL_PCT', '50')))
         print(f"#SCHEDULE={schedule_label}")
         for s in selected:
             cfg = {"strategy": "keep_wait", "alloc": alloc, "max_entry_price": -1, "initial_buy_pct": 1.0}
@@ -1585,7 +1587,7 @@ def main():
                                            inst_conf=inst_conf, inst_days=inst_days)
                 if args.output_env:
                     sched_label = label.replace("排程", "")
-                    alloc = round(50.0 / top_n, 1)
+                    alloc = calc_rotation_alloc(ROTATE_MODE, top_n, float(os.getenv('ROTATE_CAPITAL_PCT', '50')))
                     print(f"#SCHEDULE={sched_label}")
                     for s in selected:
                         cfg = {"strategy": "keep_wait", "alloc": alloc, "max_entry_price": -1, "initial_buy_pct": 1.0}
