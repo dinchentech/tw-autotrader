@@ -4,7 +4,7 @@
 
 - 問題：實盤用 position_amount（預設 2500 元 → 只買 2-4 股），回測 simulate_portfolio 用 bucket 全額買入且滿倉不買 → 實盤行為 ≠ 回測績效。
 - 修正：bollinger/vwap/ma_cross 買入量改為 alloc×TOTAL_CAPITAL（一次買足）；滿倉判定 held ≥ target×(1-BUY_AMOUNT_OFFSET=0.02)；賣出全賣；金字塔移除（keep_wait 專用，回測無）。position_amount 廢除。
-- 新增 BUY_AMOUNT_OFFSET（預設 0.02）：持倉不足目標 98% 時，3 交易日內可補買；逾時 TG 通知（每日一次去重，core/live_utils.check_buy_fill_shortfall）。
+- 新增 BUY_AMOUNT_OFFSET（預設 0.02）：**方案 B 主動補足** — 每日盤中（09:00-13:30）檢查持倉 < 目標×(1-offset) 即自動補買到目標（不看策略訊號，因回測假設全額成交）；逾 3 交易日仍未滿 → TG 通知（每日一次去重，core/live_utils.check_buy_fill_shortfall）。補買僅盤中執行避免盤後下單失敗。
 - 測試 +5（足額/不足/3日內/去重/安全），全 163 tests OK。.env/.env.example/使用手冊/策略說明同步。
 
 
@@ -62,7 +62,7 @@
 
 - 問題：實盤用 position_amount（預設 2500 元 → 只買 2-4 股），回測 simulate_portfolio 用 bucket 全額買入且滿倉不買 → 實盤行為 ≠ 回測績效。
 - 修正：bollinger/vwap/ma_cross 買入量改為 alloc×TOTAL_CAPITAL（一次買足）；滿倉判定 held ≥ target×(1-BUY_AMOUNT_OFFSET=0.02)；賣出全賣；金字塔移除（keep_wait 專用，回測無）。position_amount 廢除。
-- 新增 BUY_AMOUNT_OFFSET（預設 0.02）：持倉不足目標 98% 時，3 交易日內可補買；逾時 TG 通知（每日一次去重，core/live_utils.check_buy_fill_shortfall）。
+- 新增 BUY_AMOUNT_OFFSET（預設 0.02）：**方案 B 主動補足** — 每日盤中（09:00-13:30）檢查持倉 < 目標×(1-offset) 即自動補買到目標（不看策略訊號，因回測假設全額成交）；逾 3 交易日仍未滿 → TG 通知（每日一次去重，core/live_utils.check_buy_fill_shortfall）。補買僅盤中執行避免盤後下單失敗。
 - 測試 +5（足額/不足/3日內/去重/安全），全 163 tests OK。.env/.env.example/使用手冊/策略說明同步。
 
 
@@ -88,7 +88,7 @@
 
 - 問題：實盤用 position_amount（預設 2500 元 → 只買 2-4 股），回測 simulate_portfolio 用 bucket 全額買入且滿倉不買 → 實盤行為 ≠ 回測績效。
 - 修正：bollinger/vwap/ma_cross 買入量改為 alloc×TOTAL_CAPITAL（一次買足）；滿倉判定 held ≥ target×(1-BUY_AMOUNT_OFFSET=0.02)；賣出全賣；金字塔移除（keep_wait 專用，回測無）。position_amount 廢除。
-- 新增 BUY_AMOUNT_OFFSET（預設 0.02）：持倉不足目標 98% 時，3 交易日內可補買；逾時 TG 通知（每日一次去重，core/live_utils.check_buy_fill_shortfall）。
+- 新增 BUY_AMOUNT_OFFSET（預設 0.02）：**方案 B 主動補足** — 每日盤中（09:00-13:30）檢查持倉 < 目標×(1-offset) 即自動補買到目標（不看策略訊號，因回測假設全額成交）；逾 3 交易日仍未滿 → TG 通知（每日一次去重，core/live_utils.check_buy_fill_shortfall）。補買僅盤中執行避免盤後下單失敗。
 - 測試 +5（足額/不足/3日內/去重/安全），全 163 tests OK。.env/.env.example/使用手冊/策略說明同步。
 
 
@@ -116,7 +116,7 @@
 
 - 問題：實盤用 position_amount（預設 2500 元 → 只買 2-4 股），回測 simulate_portfolio 用 bucket 全額買入且滿倉不買 → 實盤行為 ≠ 回測績效。
 - 修正：bollinger/vwap/ma_cross 買入量改為 alloc×TOTAL_CAPITAL（一次買足）；滿倉判定 held ≥ target×(1-BUY_AMOUNT_OFFSET=0.02)；賣出全賣；金字塔移除（keep_wait 專用，回測無）。position_amount 廢除。
-- 新增 BUY_AMOUNT_OFFSET（預設 0.02）：持倉不足目標 98% 時，3 交易日內可補買；逾時 TG 通知（每日一次去重，core/live_utils.check_buy_fill_shortfall）。
+- 新增 BUY_AMOUNT_OFFSET（預設 0.02）：**方案 B 主動補足** — 每日盤中（09:00-13:30）檢查持倉 < 目標×(1-offset) 即自動補買到目標（不看策略訊號，因回測假設全額成交）；逾 3 交易日仍未滿 → TG 通知（每日一次去重，core/live_utils.check_buy_fill_shortfall）。補買僅盤中執行避免盤後下單失敗。
 - 測試 +5（足額/不足/3日內/去重/安全），全 163 tests OK。.env/.env.example/使用手冊/策略說明同步。
 
 
