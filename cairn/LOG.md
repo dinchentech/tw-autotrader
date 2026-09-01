@@ -1,5 +1,39 @@
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
 
+## 2026-09-01 · 全輪替換股不計入每日交易次數 + 風險攔截通知去重（v3.21）
+
+- 3008 breakout 被攔截根因：全輪替 4 賣 4 買吃掉 MAX_DAILY_TRADES=5 額度 → 一般策略無額度。
+- 修復：`risk_manager.log_trade` 加 `exclude_from_daily` 參數（CSV 記 `exclude_daily` 欄位），`_load_today_trades` 排除；主程式 4 處接線（全輪替換股 `_rot_buy`/清倉/trim/資本注入不計額度）。MAX_DAILY_TRADES 5→10。
+- 通知去重：風險控管攔截 TG 改每日每檔一次（`_risk_notified` dict，仿 `_order_fail_notified` 模式）— 不再每分鐘洗版。
+- 版本統一 3.20→3.21（root 與 plans 首行曾漂移不一致，已對齊）。158 tests OK。需 deploy。
+
+## 2026-08-31 · 加碼 20 萬投入布林通道（Group 1 比例制）
+
+- 需求：TOTAL 100萬→120萬，20萬佈局布林通道（上一個布林前100回測的穩健檔）。
+- 新增：PC_2454 聯發科（alloc 6.7=8萬）、PC_3189 景碩（5=6萬）、PC_6213 聯茂（5=6萬）；策略 bollinger 全參數（20/2.0/5/30/70，即 strategies/bollinger.py 實盤版）。
+- 決策：維持比例制（A案）— 舊標的上限等比放大 20% 屬設計特性，由訊號+check_stock_cap+現金三重約束；總 alloc 111.8% 僅為理論上限。
+- 布林三檔目前皆無買訊號（需跌破下軌+RSI<30），系統等訊號進場。
+- ⚠️ 未部署：本地 .env 已改，VM 待人工 ./deploy_source.sh 同步（鐵則：AI 不代跑）。
+
+
+## 2026-08-31 · 市值前100布林通道回測分析（外部資料層驗證 + 新陷阱）
+
+- 任務：近3年（2023-09-01~2026-08-31）市值前100大公司、每檔10萬、布林通道策略、獲利最高前5。
+- 市值定義：FinMind `CapitalStock`（單位＝**元**，非千元；市值＝cap×close/10）×最新收盤價，與群益權值100大（8/31）**88檔中83檔比值=1.000**交叉驗證；5檔異常（2327/6669/6415/6531/6919 股本欄位資料差）以官方值覆寫。
+- ⚠️ 新陷阱：**金融股（2881等）資產負債表股本欄位是 `OrdinaryShare` 不是 `CapitalStock`**（抓 CapitalStock 會整批缺失，金控季報延遲時更要退到上一季）；兩份權威名單（群益/mcap_ranking）並集取前100最穩（邊界股如 2633 高鐵 1463億 只在一份名單）。
+- 回測：FinMind 原始價、零股、次日開盤執行、手續費0.1425%+賣出證交稅0.3%；4,630筆訊號全數通過條件驗證。
+- 結果（top5）：布林反轉+RSI(實盤版)：川湖+328.7%、聯茂+294.0%、緯創+213.0%、新代+187.2%、富世達+173.0%（100檔勝率81%）；經典布林(20,2)：川湖+111.0%、健策+106.3%、聯發科+93.1%、緯創+83.4%、台光電+82.4%。
+- 產物：/tmp/opencode/bt_top100_universe.csv、bt_results_final.csv、bt_chart_{classic,revrsi}.png（未進 repo，回測產物）。
+
+
+## 2026-08-31 · v3.20 換股日盤前現金提醒（送審，待人工 deploy）
+
+- 需求：換股日（rotation_pending.buy_date==當日）啟動時，TG 提醒使用者預估現金需求＝Σ(max(0, 目標股數−現有持股))×現價，非全額目標。
+- 實作：`core/live_notifications.send_rotation_cash_reminder()`（公式與買入端一致：target=TOTAL×alloc%、target_shares=max(1,int(target/px))）+ 主程式啟動持倉報告後呼叫（plans/root 同步）；`APP_VERSION=3.20`。
+- 邊界：現價抓不到→顯示「現價未知」估算模式；非換股日/檔案缺失→靜默；超額→提示 trim；僅 keep_wait+mep=-1 輪替股計入（breakout/ma_cross 不計）；MDB=30 觸發時換股可能暫緩（訊息註記）。
+- 測試：`test/test_cash_reminder.py` 7 案例；全套 **158/158 綠**（含 py_compile）。
+- 待辦：使用者人工 `./deploy_source.sh`（鐵則：AI 不代跑 deploy）；部署後驗證啟動 log 出現「換股日資金提醒」與 TG 訊息。
+
 ## 2026-08-31 · 手動選股補救寫入使用手冊（10.3.1 + 自動化章節交叉引用）
 
 - 使用手冊.md 新增「10.3.1 手動選股補救（選股日沒執行選股的救援）」：`scripts/manual_rotation_pick.py` 用法（dry-run / --sync-vm / --schedule / --force）、local→VM 流程圖、注意事項（部署順序：先 deploy 再選股；VM 買賣由 rotation_pending 驅動不依賴新版主程式）。
