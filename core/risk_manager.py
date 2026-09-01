@@ -37,6 +37,9 @@ class RiskManager:
             df = pd.read_csv(self.log_file, on_bad_lines='skip')
             df['timestamp'] = pd.to_datetime(df['timestamp'])
             today_df = df[df['timestamp'].dt.date == self.today]
+            # 排除全輪替換股（exclude_daily=1）：全輪替 4 賣 4 買不該吃掉其他策略額度
+            if 'exclude_daily' in df.columns:
+                today_df = today_df[today_df.get('exclude_daily', 0) != 1]
             self.daily_trade_count = len(today_df)
             
             # 計算今日累積虧損（簡化：假設每筆交易有 profit 欄位）
@@ -106,8 +109,13 @@ class RiskManager:
         limit_down = prev_close * 0.90
         return price >= limit_up or price <= limit_down
     
-    def log_trade(self, symbol: str, signal: int, price: float, quantity: int):
-        """記錄交易"""
+    def log_trade(self, symbol: str, signal: int, price: float, quantity: int,
+                  exclude_from_daily: bool = False):
+        """記錄交易
+
+        exclude_from_daily=True：不計入「每日交易次數」額度（全輪替換股用 —
+        2026-08-31 需求：全輪替 4 賣 4 買不該吃掉其他策略的當日額度）。
+        """
         import csv
         from datetime import datetime
         
@@ -119,7 +127,9 @@ class RiskManager:
         with open(self.log_file, 'a', newline='', encoding='utf-8') as csvfile:
             writer = csv.writer(csvfile)
             if not file_exists:
-                writer.writerow(["timestamp", "symbol", "signal", "price", "quantity", "action"])
-            writer.writerow([timestamp, symbol, signal, price, quantity, action])
+                writer.writerow(["timestamp", "symbol", "signal", "price", "quantity", "action", "exclude_daily"])
+            writer.writerow([timestamp, symbol, signal, price, quantity, action,
+                             1 if exclude_from_daily else 0])
         
-        print(f"📝 已記錄交易: {action} {symbol} @ {price} ({quantity} 股)")
+        print(f"📝 已記錄交易: {action} {symbol} @ {price} ({quantity} 股)" +
+              ("（不計入每日額度）" if exclude_from_daily else ""))
