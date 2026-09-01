@@ -1,5 +1,11 @@
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
 
+## 2026-09-01 · 使用手冊：實盤無獲利自動滾入警示（§5.8）
+
+- 確認落差：回測（simulate_portfolio / 全輪替回測）有獲利自動滾入本金（records[i-1].value 當下季本金，複利）；實盤 live_trader_multi.py 的 TOTAL_CAPITAL 固定讀 .env，獲利不會自動增加 → 買入額度永遠按原 TOTAL_CAPITAL。
+- 實盤僅有的加碼管道：capital.txt（每日檢查、TG 通知、依 alloc 加碼 keep_wait 70%）；ekwr() 獲利滾入加碼只對「非全輪替 keep_wait」觸發（現有 keep_wait 全為全輪替 → 走清倉路徑不觸發）。
+- 使用手冊 §5.8 加 🔴 實盤警示（建議每季換股日後把盈餘記入 capital.txt）+ §1.5 補對照連結。回測數字（+5,485% 等）含複利，實盤不手動加碼則為固定本金、績效低於回測。
+
 ## 2026-09-01 · ROTATE_CAPITAL_PCT 資金佔比參數（v3.26）
 
 - 問題：ROTATE_MODE=5 雙排程下每排程固定 50% → 全輪替吃光 100% 資金，固定策略（breakout/bollinger/ma_cross）排後買不到（6805/2454/2360 長期未進場，總配置 111.8% 超額）。
