@@ -1,5 +1,13 @@
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
 
+## 2026-09-01 · bollinger 買太少根因：position_amount 未設定（預設 2,500 元）
+
+- 現象：6213 買 4 股（2,200 元）、3189 買 2 股（1,748 元），與 alloc 5%（6 萬）差太多。
+- 根因：bollinger/vwap/ma_cross 的買入金額走 `position_amount`（預設 2,500），**不看 alloc**；PC_2454/3189/6213 未設 → 每次只買 2,500 元。
+- 修復：三檔加 `position_amount`（2454=80400、3189=60000、6213=60000，對應 alloc×TOTAL_CAPITAL）。.env.example 加警告註解。
+- 教訓：bollinger 買入金額由 position_amount 決定（非 alloc），新增 bollinger 標的必須同時設定。
+
+
 ## 2026-09-01 · 全輪替換股不計入每日交易次數 + 風險攔截通知去重（v3.21）
 
 - 3008 breakout 被攔截根因：全輪替 4 賣 4 買吃掉 MAX_DAILY_TRADES=5 額度 → 一般策略無額度。
@@ -42,6 +50,14 @@
 
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
 
+## 2026-09-01 · bollinger 買太少根因：position_amount 未設定（預設 2,500 元）
+
+- 現象：6213 買 4 股（2,200 元）、3189 買 2 股（1,748 元），與 alloc 5%（6 萬）差太多。
+- 根因：bollinger/vwap/ma_cross 的買入金額走 `position_amount`（預設 2,500），**不看 alloc**；PC_2454/3189/6213 未設 → 每次只買 2,500 元。
+- 修復：三檔加 `position_amount`（2454=80400、3189=60000、6213=60000，對應 alloc×TOTAL_CAPITAL）。.env.example 加警告註解。
+- 教訓：bollinger 買入金額由 position_amount 決定（非 alloc），新增 bollinger 標的必須同時設定。
+
+
 ## 2026-08-31 · manual_rotation_pick.py 改為 local 執行設計（+ --sync-vm）
 
 - 使用者要求：補救選股在 local 執行、改 local .env，明日 VM 主程式負責買賣（不必部署到 VM）。
@@ -51,6 +67,14 @@
 - scripts/README.md 補文件；151 tests 維持通過。
 
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
+
+## 2026-09-01 · bollinger 買太少根因：position_amount 未設定（預設 2,500 元）
+
+- 現象：6213 買 4 股（2,200 元）、3189 買 2 股（1,748 元），與 alloc 5%（6 萬）差太多。
+- 根因：bollinger/vwap/ma_cross 的買入金額走 `position_amount`（預設 2,500），**不看 alloc**；PC_2454/3189/6213 未設 → 每次只買 2,500 元。
+- 修復：三檔加 `position_amount`（2454=80400、3189=60000、6213=60000，對應 alloc×TOTAL_CAPITAL）。.env.example 加警告註解。
+- 教訓：bollinger 買入金額由 position_amount 決定（非 alloc），新增 bollinger 標的必須同時設定。
+
 
 ## 2026-08-31 · 手動補救選股程式 scripts/manual_rotation_pick.py
 
@@ -63,6 +87,14 @@
 # Project Cairn 日誌
 
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
+
+## 2026-09-01 · bollinger 買太少根因：position_amount 未設定（預設 2,500 元）
+
+- 現象：6213 買 4 股（2,200 元）、3189 買 2 股（1,748 元），與 alloc 5%（6 萬）差太多。
+- 根因：bollinger/vwap/ma_cross 的買入金額走 `position_amount`（預設 2,500），**不看 alloc**；PC_2454/3189/6213 未設 → 每次只買 2,500 元。
+- 修復：三檔加 `position_amount`（2454=80400、3189=60000、6213=60000，對應 alloc×TOTAL_CAPITAL）。.env.example 加警告註解。
+- 教訓：bollinger 買入金額由 position_amount 決定（非 alloc），新增 bollinger 標的必須同時設定。
+
 
 ## 2026-08-31 · 修復重大 bug：全輪替自動選股從未執行過（v3.19）
 
