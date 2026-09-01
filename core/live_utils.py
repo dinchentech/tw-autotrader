@@ -167,3 +167,39 @@ def sell_with_fill_check(broker, symbol, shares, notified, today_str, notify_fn,
         print(f"⚠️ {symbol} {action_label}部分成交 {filled}/{shares} 股，餘額續留")
         return filled, notified
     return shares, notified
+
+
+def check_buy_fill_shortfall(symbol, held, target_shares, buy_offset, last_buy_date,
+                             today, notify_fn, notified, label="策略"):
+    """買入未補足檢查（2026-09-01）：持倉 < 目標×(1-offset) 且最後買入已超 3 交易日 →
+    TG 通知（每日一次）。回傳更新後 notified。
+
+    last_buy_date: 該檔最後一次 BUY 的日期（str 'YYYY-MM-DD' 或 None）
+    """
+    if held <= 0 or target_shares <= 0:
+        return notified
+    if held >= target_shares * (1 - buy_offset):
+        return notified
+    if last_buy_date is None:
+        return notified
+    try:
+        lb = datetime.strptime(last_buy_date[:10], "%Y-%m-%d").date()
+    except Exception:
+        return notified
+    days_since = (today - lb).days
+    if days_since <= 3:
+        return notified
+    if notified.get(symbol) == today.isoformat():
+        return notified
+    notified[symbol] = today.isoformat()
+    shortfall_pct = (1 - held / target_shares) * 100
+    msg = (f"⚠️ *{label}* {symbol} 買入未補足！\n"
+           f"持倉 {held} 股 / 目標 {target_shares} 股（差 {shortfall_pct:.1f}%）\n"
+           f"最後買入 {last_buy_date[:10]} 已逾 3 交易日，請確認是否需手動補足。")
+    if notify_fn is not None:
+        try:
+            notify_fn(msg)
+        except Exception:
+            pass
+    print(f"⚠️ 買入未補足 {symbol}: {held}/{target_shares}（{last_buy_date[:10]} 買入已逾 3 交易日）")
+    return notified

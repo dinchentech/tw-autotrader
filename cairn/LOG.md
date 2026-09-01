@@ -1,5 +1,13 @@
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
 
+## 2026-09-01 · bollinger/vwap/ma_cross 買入與回測對齊 + BUY_AMOUNT_OFFSET 補足機制
+
+- 問題：實盤用 position_amount（預設 2500 元 → 只買 2-4 股），回測 simulate_portfolio 用 bucket 全額買入且滿倉不買 → 實盤行為 ≠ 回測績效。
+- 修正：bollinger/vwap/ma_cross 買入量改為 alloc×TOTAL_CAPITAL（一次買足）；滿倉判定 held ≥ target×(1-BUY_AMOUNT_OFFSET=0.02)；賣出全賣；金字塔移除（keep_wait 專用，回測無）。position_amount 廢除。
+- 新增 BUY_AMOUNT_OFFSET（預設 0.02）：持倉不足目標 98% 時，3 交易日內可補買；逾時 TG 通知（每日一次去重，core/live_utils.check_buy_fill_shortfall）。
+- 測試 +5（足額/不足/3日內/去重/安全），全 163 tests OK。.env/.env.example/使用手冊/策略說明同步。
+
+
 ## 2026-09-01 · bollinger 買太少根因：position_amount 未設定（預設 2,500 元）
 
 - 現象：6213 買 4 股（2,200 元）、3189 買 2 股（1,748 元），與 alloc 5%（6 萬）差太多。
@@ -50,6 +58,14 @@
 
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
 
+## 2026-09-01 · bollinger/vwap/ma_cross 買入與回測對齊 + BUY_AMOUNT_OFFSET 補足機制
+
+- 問題：實盤用 position_amount（預設 2500 元 → 只買 2-4 股），回測 simulate_portfolio 用 bucket 全額買入且滿倉不買 → 實盤行為 ≠ 回測績效。
+- 修正：bollinger/vwap/ma_cross 買入量改為 alloc×TOTAL_CAPITAL（一次買足）；滿倉判定 held ≥ target×(1-BUY_AMOUNT_OFFSET=0.02)；賣出全賣；金字塔移除（keep_wait 專用，回測無）。position_amount 廢除。
+- 新增 BUY_AMOUNT_OFFSET（預設 0.02）：持倉不足目標 98% 時，3 交易日內可補買；逾時 TG 通知（每日一次去重，core/live_utils.check_buy_fill_shortfall）。
+- 測試 +5（足額/不足/3日內/去重/安全），全 163 tests OK。.env/.env.example/使用手冊/策略說明同步。
+
+
 ## 2026-09-01 · bollinger 買太少根因：position_amount 未設定（預設 2,500 元）
 
 - 現象：6213 買 4 股（2,200 元）、3189 買 2 股（1,748 元），與 alloc 5%（6 萬）差太多。
@@ -67,6 +83,14 @@
 - scripts/README.md 補文件；151 tests 維持通過。
 
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
+
+## 2026-09-01 · bollinger/vwap/ma_cross 買入與回測對齊 + BUY_AMOUNT_OFFSET 補足機制
+
+- 問題：實盤用 position_amount（預設 2500 元 → 只買 2-4 股），回測 simulate_portfolio 用 bucket 全額買入且滿倉不買 → 實盤行為 ≠ 回測績效。
+- 修正：bollinger/vwap/ma_cross 買入量改為 alloc×TOTAL_CAPITAL（一次買足）；滿倉判定 held ≥ target×(1-BUY_AMOUNT_OFFSET=0.02)；賣出全賣；金字塔移除（keep_wait 專用，回測無）。position_amount 廢除。
+- 新增 BUY_AMOUNT_OFFSET（預設 0.02）：持倉不足目標 98% 時，3 交易日內可補買；逾時 TG 通知（每日一次去重，core/live_utils.check_buy_fill_shortfall）。
+- 測試 +5（足額/不足/3日內/去重/安全），全 163 tests OK。.env/.env.example/使用手冊/策略說明同步。
+
 
 ## 2026-09-01 · bollinger 買太少根因：position_amount 未設定（預設 2,500 元）
 
@@ -87,6 +111,14 @@
 # Project Cairn 日誌
 
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
+
+## 2026-09-01 · bollinger/vwap/ma_cross 買入與回測對齊 + BUY_AMOUNT_OFFSET 補足機制
+
+- 問題：實盤用 position_amount（預設 2500 元 → 只買 2-4 股），回測 simulate_portfolio 用 bucket 全額買入且滿倉不買 → 實盤行為 ≠ 回測績效。
+- 修正：bollinger/vwap/ma_cross 買入量改為 alloc×TOTAL_CAPITAL（一次買足）；滿倉判定 held ≥ target×(1-BUY_AMOUNT_OFFSET=0.02)；賣出全賣；金字塔移除（keep_wait 專用，回測無）。position_amount 廢除。
+- 新增 BUY_AMOUNT_OFFSET（預設 0.02）：持倉不足目標 98% 時，3 交易日內可補買；逾時 TG 通知（每日一次去重，core/live_utils.check_buy_fill_shortfall）。
+- 測試 +5（足額/不足/3日內/去重/安全），全 163 tests OK。.env/.env.example/使用手冊/策略說明同步。
+
 
 ## 2026-09-01 · bollinger 買太少根因：position_amount 未設定（預設 2,500 元）
 
