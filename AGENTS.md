@@ -21,6 +21,11 @@
 2. 若 `cairn/ROADMAP.md` 存在，閱讀它以了解路線圖、目前焦點與開放問題（ROADMAP 為選用；最小化初始化的專案可能沒有）。
 3. 閱讀 `cairn/LOG.md` 最新的條目（最新在上方）了解近期進度與關鍵決策。
 4. 依任務需要閱讀相關的 `cairn/` 知識專題文件（**部署/加密/版本發布**相關任務：先讀 `cairn/deploy-pipeline.md` — root 是混淆版、plans/ 是源碼）。
+5. **依任務類型讀對應章節**（文件很大，勿全文載入，用 grep 找章節）：
+   - **策略/選股/回測相關** → `策略說明.md`（全輪替 §5.1、法人動能 §6、買入金額計算、MIN_DRAW_BACK）+ `scripts/README.md`（選股工具）
+   - **操作/參數/部署相關** → `使用手冊.md`（PC_ 設定、deploy 腳本選擇、參數表、驗證結果）
+   - **資料/快取/回測數字驗證** → `cairn/backtest-data-pitfalls.md`（快取共用地圖、回測前跑 `scripts/verify_cache.py`）
+   - **資金/資本操作** → `cairn/capital-ops.md`
 
 ## 文件職責
 
