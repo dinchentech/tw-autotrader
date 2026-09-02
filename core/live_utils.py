@@ -169,6 +169,21 @@ def sell_with_fill_check(broker, symbol, shares, notified, today_str, notify_fn,
     return shares, notified
 
 
+
+def calc_topup_need(held, target, buy_offset, market_open):
+    """方案 B 補足判定（v3.27）：僅補「已有持股但不足」。
+
+    空倉（held<=0）→ 不補，等策略訊號（2026-09-02 修正：方案 B 是補足不是建倉，
+    2454 空倉被直接建倉為 bug）；有持股且 < 目標×(1-offset) → 補差額。
+    """
+    if held <= 0 or target <= 0:
+        return 0
+    if not market_open:
+        return 0
+    if held >= target * (1 - buy_offset):
+        return 0
+    return target - held
+
 def check_buy_fill_shortfall(symbol, held, target_shares, buy_offset, last_buy_date,
                              today, notify_fn, notified, label="策略"):
     """買入未補足檢查（2026-09-01）：持倉 < 目標×(1-offset) 且最後買入已超 3 交易日 →

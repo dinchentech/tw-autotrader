@@ -69,3 +69,31 @@ class TestBuyFillShortfall(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestCalcTopupNeed(unittest.TestCase):
+    """方案 B 補足判定（v3.27）：僅補「已有持股但不足」；空倉等訊號不補"""
+
+    def setUp(self):
+        from core.live_utils import calc_topup_need
+        self.calc_topup_need = calc_topup_need
+
+    def test_empty_hold_no_topup(self):
+        """空倉（held=0）→ 不補（等策略訊號，2026-09-02 修正）"""
+        self.assertEqual(self.calc_topup_need(0, 100, 0.02, True), 0)
+
+    def test_held_below_target_topup(self):
+        """有持股但 < 目標×(1-offset) → 補差額"""
+        self.assertEqual(self.calc_topup_need(40, 100, 0.02, True), 60)
+
+    def test_held_within_offset_no_topup(self):
+        """持倉 ≥ 目標×(1-offset) → 足額不補"""
+        self.assertEqual(self.calc_topup_need(98, 100, 0.02, True), 0)
+
+    def test_market_closed_no_topup(self):
+        """盤外時段 → 不補（避免盤後下單失敗）"""
+        self.assertEqual(self.calc_topup_need(40, 100, 0.02, False), 0)
+
+    def test_zero_target_no_topup(self):
+        """目標 0（價格抓取失敗等）→ 不補不崩潰"""
+        self.assertEqual(self.calc_topup_need(40, 0, 0.02, True), 0)
