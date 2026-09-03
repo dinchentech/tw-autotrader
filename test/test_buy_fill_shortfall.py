@@ -97,3 +97,28 @@ class TestCalcTopupNeed(unittest.TestCase):
     def test_zero_target_no_topup(self):
         """目標 0（價格抓取失敗等）→ 不補不崩潰"""
         self.assertEqual(self.calc_topup_need(40, 0, 0.02, True), 0)
+
+
+class TestAddStockAllocation(unittest.TestCase):
+    """方案 B 買入分帳本記錄（v3.29）：補買必須累加 cost/shares，否則成本失真"""
+
+    def setUp(self):
+        from core.live_utils import add_stock_allocation
+        self.add_stock_allocation = add_stock_allocation
+
+    def test_new_symbol_creates_entry(self):
+        alloc = {}
+        self.add_stock_allocation(alloc, '6213', 57645.0, 105)
+        self.assertEqual(alloc['6213']['total_buy_cost'], 57645.0)
+        self.assertEqual(alloc['6213']['total_buy_shares'], 105)
+
+    def test_existing_symbol_accumulates(self):
+        alloc = {'6213': {'total_buy_cost': 2200.0, 'total_buy_shares': 4}}
+        self.add_stock_allocation(alloc, '6213', 57645.0, 105)
+        self.assertEqual(alloc['6213']['total_buy_cost'], 59845.0)
+        self.assertEqual(alloc['6213']['total_buy_shares'], 109)
+
+    def test_empty_alloc_safe(self):
+        self.add_stock_allocation(None, '2454', 79380.0, 18)
+        self.add_stock_allocation({}, '2454', 79380.0, 18)
+        # 不崩潰即通過（None 時無法寫入，僅安全返回）

@@ -184,6 +184,20 @@ def calc_topup_need(held, target, buy_offset, market_open):
         return 0
     return target - held
 
+
+def add_stock_allocation(stock_alloc, symbol, cost, shares):
+    """分帳本累加（v3.29）：買入後記錄 total_buy_cost / total_buy_shares。
+
+    方案 B 補買原本只 log_trade 未更新分帳本 → avg_cost 失真（賣出時
+    「預估損益 +0」）、check_stock_cap 資金上限失效 → 可能超買。
+    主迴圈 BUY 與方案 B 補足共用此函式。
+    """
+    if stock_alloc is None:
+        return
+    entry = stock_alloc.setdefault(symbol, {'total_buy_cost': 0.0, 'total_buy_shares': 0})
+    entry['total_buy_cost'] = float(entry.get('total_buy_cost', 0) or 0) + cost
+    entry['total_buy_shares'] = int(entry.get('total_buy_shares', 0) or 0) + shares
+
 def check_buy_fill_shortfall(symbol, held, target_shares, buy_offset, last_buy_date,
                              today, notify_fn, notified, label="策略"):
     """買入未補足檢查（2026-09-01）：持倉 < 目標×(1-offset) 且最後買入已超 3 交易日 →

@@ -1,5 +1,19 @@
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
 
+## 2026-09-03 · 方案 B 補買未更新分帳本修正（v3.29）
+
+- Bug：方案 B 買入補足只做 log_trade + save_holdings，未更新 stock_alloc → 9/3 賣出時 avg_cost 算不出（「預估損益 +0」被 PROFIT_MARGIN 擋）、check_stock_cap 資金上限失效（可能超買）。
+- 修正：新增 `core/live_utils.add_stock_allocation(stock_alloc, symbol, cost, shares)` 純函式，方案 B 補買成交後呼叫並 save_stock_allocation。
+- 測試 +3（新檔建立/既有累加/空 dict 安全），全 184 tests OK。版本 3.28→3.29。plans/live_trader_multi.py 同步（core/ 在 root git 明文）。
+
+## 2026-09-03 · 實盤訊號改日K：bollinger/vwap/ma_cross 分鐘污染修正（v3.28）
+
+- Bug：9/2 買入 2454/6213/3189（bollinger），9/3 隔天全賣且虧損（2454: 4410→4350、6213: 549→531、3189: 848→813）。根因：主迴圈對 bollinger/vwap/ma_cross concat 1-min bars → acd = 日K+分鐘混合 → rolling(20) 變成「20 分鐘」而非「20 日」→ 訊號隔天反轉（9/2 分鐘級跌破下軌假買訊 → 9/3 分鐘級漲破上軌假賣訊）。
+- 驗證：FinMind 日K 算 bollinger 三檔皆無賣訊（6213 RSI 24、3189 RSI 42），證明日K訊號正常、分鐘才是亂源；docker timestamps 顯示 SELL 在 10:10-10:19（非開盤）。
+- 修正（v3.28）：除 keep_wait（signal=0、主程式管理買賣、用即時價）外，**所有策略統一改日K模式** — 初始化 get_historical_data(260)、盤中合成當日K（更新 high/low/close=現價），比照 breakout 既有作法。涵蓋 bollinger/vwap/ma_cross/user_strategies（未來啟用 g1/g2 不再踩坑）。熱重載同步。
+- 另發現：方案 B 買入未更新 stock_alloc（只 log_trade）→ 成本/損益計算失真（9/3「預估損益 +0」即因此）；待修。
+- SIGNAL_DEBUG env 診斷 log 保留（驗證用，之後移除）。測試 181 全綠。版本 3.27→3.28。
+
 ## 2026-09-02 · 方案 B 補足修正：空倉不建倉、等策略訊號（v3.27）
 
 - Bug：方案 B 補足邏輯 `_need = _target - held` 在 held=0 時 `_need = _target > 0` → 空倉標的也被直接建倉（9/2 實盤 2454 空倉被補買 18 股）。方案 B 本意是「補足已持有但程式錯誤/未買足的倉位」，空倉應等策略訊號。
