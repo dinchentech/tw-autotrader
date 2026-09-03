@@ -27,6 +27,7 @@
    - **策略/選股/回測相關** → `策略說明.md`（全輪替 §5.1、法人動能 §6、買入金額計算、MIN_DRAW_BACK）+ `scripts/README.md`（選股工具）
    - **操作/參數/部署相關** → `使用手冊.md`（PC_ 設定、deploy 腳本選擇、參數表、驗證結果）
    - **資料/快取/回測數字驗證** → `cairn/backtest-data-pitfalls.md`（快取共用地圖、回測前跑 `scripts/verify_cache.py`）
+   - **台股/FinMind 資料查詢** → 先讀 `cairn/finmind-access.md`（API 端點、dataset 對照、token=`.env` FINMIND_API_TOKEN、欄位 max/min/Trading_Volume 陷阱）
    - **資金/資本操作** → `cairn/capital-ops.md`
    - **環境/資金口徑** → 先讀 `cairn/environment-scope.md`（「實盤」=用玉山 API 實際執行路徑；本目錄用玉山**模擬**key → 模擬資金無真金，真錢=real key 待另開分支）
    - **版本庫/源碼位置/結構** → 先讀 `cairn/repo-layout.md`（明文源碼在 `plans/` 私有子模組、root=可部署版、機密/快取 gitignore）

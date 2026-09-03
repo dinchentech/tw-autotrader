@@ -1,5 +1,12 @@
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
 
+## 2026-09-03 · finmind 存取常駐化 + K線 HTML 實作
+
+- 新增 `cairn/finmind-access.md`（FinMind 資料存取專題）：API 端點、dataset 對照、token=`.env` FINMIND_API_TOKEN（注意 skill 原文是 $FINMIND_TOKEN）、錯誤處理、中文繪圖字型、查詢範例。
+- **陷阱（lesson）**：`TaiwanStockPrice` 欄位用 `max`(高)/`min`(低)/`Trading_Volume`(量)，非 high/low/volume（2026-09-03 實測死在這一欄）。
+- `AGENTS.md` 導覽加「台股/FinMind 資料查詢 → 先讀 finmind-access.md」（自動注入，跨 session 免提醒）。
+- 實作示例：`_gen_kline.py` 抓 2884 玉山金 近一年(265筆/2025-08-04~09-03/收盤43.2) K線 → `img/2884_玉山金_1y_kline.html`（ECharts 蠟燭+MA5/10/20+成交量）。
+
 ## 2026-09-03 · 沉澱：版本庫結構 + plans 子模組（明文源碼位置）
 
 - 新增 `cairn/repo-layout.md`：repo（dinchentech/tw-autotrader, main）、唯一 submodule=`plans`（dinchentech/plans，**私有不公開**）、**明文主程式源碼在 `plans/live_trader_multi.py`**、root=可部署版（源碼或混淆）、三層 split（plans/root/TMP）、機密 gitignore（.env/backups/esun_sdk *.p12/*.whl/*.ini/*.pem/*.key/capital.txt）、快取條件上 git（bt_price/inst_history/20*/twse_inst_*/selector_prices/ 上；price/ 排除 → backtest-data-pitfalls）、node_modules 誤追蹤 gotcha。
