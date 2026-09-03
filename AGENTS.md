@@ -29,6 +29,7 @@
    - **資料/快取/回測數字驗證** → `cairn/backtest-data-pitfalls.md`（快取共用地圖、回測前跑 `scripts/verify_cache.py`）
    - **資金/資本操作** → `cairn/capital-ops.md`
    - **環境/資金口徑** → 先讀 `cairn/environment-scope.md`（「實盤」=用玉山 API 實際執行路徑；本目錄用玉山**模擬**key → 模擬資金無真金，真錢=real key 待另開分支）
+   - **版本庫/源碼位置/結構** → 先讀 `cairn/repo-layout.md`（明文源碼在 `plans/` 私有子模組、root=可部署版、機密/快取 gitignore）
 
 ## 文件職責
 

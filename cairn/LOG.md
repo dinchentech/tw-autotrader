@@ -1,5 +1,10 @@
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
 
+## 2026-09-03 · 沉澱：版本庫結構 + plans 子模組（明文源碼位置）
+
+- 新增 `cairn/repo-layout.md`：repo（dinchentech/tw-autotrader, main）、唯一 submodule=`plans`（dinchentech/plans，**私有不公開**）、**明文主程式源碼在 `plans/live_trader_multi.py`**、root=可部署版（源碼或混淆）、三層 split（plans/root/TMP）、機密 gitignore（.env/backups/esun_sdk *.p12/*.whl/*.ini/*.pem/*.key/capital.txt）、快取條件上 git（bt_price/inst_history/20*/twse_inst_*/selector_prices/ 上；price/ 排除 → backtest-data-pitfalls）、node_modules 誤追蹤 gotcha。
+- `AGENTS.md` 加導覽「版本庫/源碼位置/結構 → 先讀 repo-layout.md」。
+
 ## 2026-09-03 · CURRENT.md 再校正：本機跑 + 過渡超額現況（配股驗證）
 
 - 啟動 log（v3.29，本機 DESKTOP WSL）驗證 `.env` 配股正確生效：2884 玉山金(7%=8.4萬, ma_cross 新)、3008(5%, 8股)、6805(7%, 30股)，其餘上限金額全數相符；10 檔初始化成功、Group2 關閉。
