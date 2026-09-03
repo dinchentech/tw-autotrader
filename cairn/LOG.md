@@ -1,5 +1,12 @@
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
 
+## 2026-09-03 · WSL恢復.md：opencode → DSH 轉換
+
+- 依使用者指示，把 `WSL恢復.md` 的 AI agent 設定由 opencode 改成 DSH（DeepSeek Harness）：
+  - API Key 備份：`~/.local/share/opencode/auth.json` → `~/.dsh/.credentials.yaml`（`refs.DEEPSEEK_API_KEY`）。
+  - 買家需準備表、還原後檢查/設定 provider 全部改為 DSH；**經使用者確認：重設 API Key 一律建議「於 DSH 設定(Settings)→憑證 重新輸入」，不採手動建 `.credentials.yaml`**。
+- 提醒：DSH 憑證檔若 mode 有 group/other 讀 bit，DSH **拒絕啟動**（須 `chmod 600`）；刪檔不會自動重建帶內容的檔，須重設（見本 session 對 credentials-local 的確認）。
+
 ## 2026-09-03 · finmind 存取常駐化 + K線 HTML 實作
 
 - 新增 `cairn/finmind-access.md`（FinMind 資料存取專題）：API 端點、dataset 對照、token=`.env` FINMIND_API_TOKEN（注意 skill 原文是 $FINMIND_TOKEN）、錯誤處理、中文繪圖字型、查詢範例。

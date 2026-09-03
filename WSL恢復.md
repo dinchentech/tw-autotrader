@@ -21,8 +21,8 @@ mv ~/tw-autotrader/esun_sdk/*.ini /mnt/c/Users/frank/Documents/tw_autotrader_bac
 mv ~/tw-autotrader/.env /mnt/c/Users/frank/Documents/tw_autotrader_backup/
 mv ~/tw-autotrader/live_trader_multi.py /mnt/c/Users/frank/Documents/tw_autotrader_backup/
 
-# 3. 移 opencode API Key 憑證（沒有 key 就打不了任何 API）
-mv ~/.local/share/opencode/auth.json /mnt/c/Users/frank/Documents/tw_autotrader_backup/
+# 3. 移 DSH（DeepSeek Harness）API Key 憑證（沒有 key 就打不了任何 LLM API）
+mv ~/.dsh/.credentials.yaml /mnt/c/Users/frank/Documents/tw_autotrader_backup/
 
 # 4. 清 shell 歷史
 history -c && history -w
@@ -103,7 +103,7 @@ wsl -d Ubuntu_New
 | 📄 玉山 帳號/憑證密碼 | 填入.env |
 | 🔑 自己的 `.env` | 參考 `.env.example.lump(dca)` 填寫 |
 | 🤖 Telegram Bot Token | 自己跟 `@BotFather` 申請 填入 .env |
-| 🔐 OpenCode API Key(openrouter/nvidea) | 填入 ~/.local/share/opencode/auth.json |
+| 🔐 DeepSeek API Key（DSH） | 設定於 `~/.dsh/.credentials.yaml` 的 `refs.DEEPSEEK_API_KEY`（或設 `DEEPSEEK_API_KEY` 環境變數） |
 | 🔐 FinMind API Key | 自己跟 finmindtrade.com 申請,填入.\bashrc,.env |
 
 ### 還原後第一次設定
@@ -116,12 +116,13 @@ git remote set-url origin https://github.com/dinchentech/tw-autotrader.git
 # 2. 拉最新程式碼
 git pull
 
-# 3. 檢查 opencode 憑證已清空
-ls ~/.local/share/opencode/auth.json
+# 3. 檢查 DSH 憑證已清空
+ls ~/.dsh/.credentials.yaml
 # 預期輸出：ls: cannot access ... No such file or directory
 
-# 4. 重新設定 opencode provider
-opencode providers login OpenRouter
+# 4. 重新設定 DSH provider（設定 DeepSeek API Key）
+#    啟動 DSH Web GUI → 設定(Settings) → 憑證(credentials) → 填 DEEPSEEK_API_KEY
+#    或設環境變數：export DEEPSEEK_API_KEY=你的key（加到 ~/.bashrc）
 
 # 5. 還原.bashrc, live_trader_multi.py
 cp ~/.bashrc.txt  ~/.bashrc
@@ -131,29 +132,18 @@ cp ~/tw-autotrader/live_trader_multi.py.encrypted ~/tw-autotrader/live_trader_mu
 進去後確認：
 
 ```bash
-# 檢查 opencode 憑證已清空
-ls ~/.local/share/opencode/auth.json
+# 檢查 DSH 憑證已清空
+ls ~/.dsh/.credentials.yaml
 # 預期輸出：ls: cannot access ... No such file or directory
 
 # 檢查憑證已放入
 ls ~/tw-autotrader/esun_sdk/*.p12
 # 應該看到你的 .p12 檔案
 
-# 設定 opencode provider（重新登入）
-opencode providers login OpenRouter
-```
-或直接產生 nano ~/.local/share/opencode/auth.json
-```bash
-{
-  "openrouter": {
-    "type": "api",
-    "key": "你的key"
-  },
-  "nvidia": {
-    "type": "api",
-    "key": "你的key"
-  }
-}
+# 設定 DSH provider（重新輸入 DeepSeek API Key）
+#   建議直接於 DSH 的設定中重新輸入 API Key：
+#   → 啟動 DSH Web GUI → 設定(Settings) → 憑證(credentials) → DEEPSEEK_API_KEY → 填入你的 DeepSeek API Key
+#   DSH 會自動以 mode 0600 存到 ~/.dsh/.credentials.yaml，無需手動建檔或設權限
 ```
 
 接著設定自己：.bashrc 中的FinMind憑證, .env檔中的FinMind key/玉山密碼/TG key, esun_sdk中放上玉山.example,.p12檔
