@@ -22,6 +22,7 @@ cairn:
   # (raw external material stays out of the repo either way).
   # reference_git_policy: "ignore"
   # language: en | zh | ... — language used when writing AGENTS.md/LOG.md/ROADMAP.md/topic notes for this project
+  # (zh = 繁體中文，與對話回覆、專案文件一致)
   language: "zh"
 graduation:
   # (c) Deferred — no knowledge base connected yet ("try Cairn first, connect

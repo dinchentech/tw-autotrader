@@ -1,5 +1,67 @@
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
 
+## 2026-09-03 · CURRENT.md 再校正：本機跑 + 過渡超額現況（配股驗證）
+
+- 啟動 log（v3.29，本機 DESKTOP WSL）驗證 `.env` 配股正確生效：2884 玉山金(7%=8.4萬, ma_cross 新)、3008(5%, 8股)、6805(7%, 30股)，其餘上限金額全數相符；10 檔初始化成功、Group2 關閉。
+- 更新 `cairn/CURRENT.md`：環境邊界補「本機 vs GCP VM」；配股現況改為「目標（90.7%/現金9.3%）vs 現況（固定40.7%+排程A 65.1% ≈ 105.8% 過渡超額）」。
+- 觀察：過渡期排程 A（3017/3653/2059 = 26.7/16.7/21.7%）仍超額，`ROTATE_CAPITAL_PCT=50` 將於 9 月底排程 B、11 月底排程 A 覆寫回 25%。
+
+## 2026-09-03 · plans/ 定位確認：主程式源碼的私有存放處
+
+- 使用者確認：`plans/` = **主程式源碼存放處、私有不公開**。核查：`plans/` 是 git submodule → `git@github.com:dinchentech/plans.git`（SSH private）；`plans/live_trader_multi.py` 為源碼（~981 行/56KB，與 root 源碼同 size）。
+- 更新 `cairn/deploy-pipeline.md` 角色對照表：plans 行註明「私有 submodule、主程式源碼、不公開」+ 補一句 plans 定位（deploy 備份 + push 到此私有 repo）。
+- 判別：**root = 混淆版/部署用版本；plans = 源碼（私有不公開）**；機密源碼以 plans 為準（見環境/部署）。root live_trader_multi.py 目前為源碼（981 行）＝上次 deploy 有正常還原。
+
+## 2026-09-03 · deploy 使用路徑定案（現況/未來/使用者三分法）
+
+- 使用者明示 deploy 長期使用路徑 → 更新 `cairn/deploy-pipeline.md`（一句話+對照表「何時用」欄）：
+  - **現況**：無加密 license → 用 `deploy_source.sh`（C 方案、不加密）。
+  - **未來（購入 pyarmor license）**：改以 `deploy.sh` 加密版為主。
+  - **一般使用者**：未買主程式源碼 → 用 `deploy_crypted.sh`（只有加密檔）。校正檔名為 `deploy_crypted.sh`（非 `deploy_scrypted.sh`）。
+
+## 2026-09-03 · 沉澱：三個 deploy 腳本對照（常用）
+
+- 讀懂 `deploy.sh` / `deploy_source.sh` / `deploy_crypted.sh` 三腳本，沉澱到 `cairn/deploy-pipeline.md`：
+  - 新增「三個 deploy 腳本對照」表 + 共同點/主要差異（加密輸入=plans、上傳途徑 GCS vs scp、結束時 root 狀態、deploy_crypted 用 set -e）。
+  - 更新「一句話」：**目前預設 = deploy_source.sh（C 方案、不加密）**；deploy.sh=加密版（無license、8.x trial 過期）；deploy_crypted.sh=只有加密檔無源碼者。
+- 反覆出現的判別：root=混淆版(3行/179KB) = 上次 deploy 被硬殺、EXIT trap 沒還原 → `cp plans/live_trader_multi.py live_trader_multi.py`。
+
+## 2026-09-03 · 配股調整（第三節建議 #1/#3/#4/#5，使用者核准）
+
+- **新增 2884 玉山金（金融/防禦腿）**：ma_cross（金融股波動低、用趨勢策略）、alloc 7%=NT$84,000。動機：資金輪動至金融避險、降beta+搭輪動。
+- **3008/6805 降高價部位**：3008 alloc 12.5%→5%、buy_shares 14→8；6805 alloc 12.5%→7%、buy_shares 42→30（各自 < alloc 上限）。控高檔高價股回撤風險。
+- **留現金緩衝**：固定腿 40.7%(488,400) + 全輪替 50%(600,000) = 90.7% → 現金約 NT$111,600(9.3%)。
+- **註解對齊**：#5 修正 .env 全輪替「4檔×12.5」vs 實際 3 檔 26.7/16.7/21.7、2360 過時基準(1000000→1200000)。
+- #2（選股日資金估算 v3.25）：`estimate_rotation_capital` 已存在（core/live_notifications.py + live_trader/plans 接線），runtime 觀察 9 月底排程 B 的 TG 資金估算。
+
+## 2026-09-03 · 部署安全硬規則（deploy 一律手動、勿自動代跑）
+
+- 補 AGENTS.md「部署安全規則（硬規則）」+ 歸納到 cairn（deploy-pipeline.md 已有鐵則）：**任何 agent 不得代跑 ./deploy.sh / deploy_source.sh / docker compose 於 VM 重啟**；職責止於改 plans 源碼→跑測試→更新 cairn→告知「請人工執行 deploy」（2026-08-31 使用者明示）。
+
+## 2026-09-03 · 對話語言定案：回覆一律繁體中文
+
+- 補一筆規則到 AGENTS.md「文件協作規則」：**對話回覆一律使用繁體中文**（除非使用者指定其他語言）；並明訂 `cairn/.cairn/config.yaml` 的 `language: zh` = 繁體中文，與專案文件（cairn/、使用手冊、策略說明）一致。
+- 動機：之前「回繁體中文」只是跟隨慣例（使用者語氣 + 專案文件皆繁體），未寫成規則；本筆讓不同 session／agent 都明確遵守，非靠猜。
+
+## 2026-09-03 · session 引導：新增 CURRENT.md + AGENTS.md STEP 0
+
+- 新增 `cairn/CURRENT.md`（session 引導索引）：環境邊界（本目錄=模擬資金、真錢=real key 另開分支）、目前焦點、近期決策、配股現況（TOTAL_CAPITAL=120萬、輪替50%/固定46.7%集中AI硬體）、「我該怎麼讀」。
+- AGENTS.md 閱讀順序前加 **STEP 0 硬規則**：任一 session 第一步先讀 `cairn/CURRENT.md`；不存在則改讀 LOG 最新 + ROADMAP。
+- 目的：讓每個 session 自動先讀輕量現況索引取得方向，大文件（使用手冊/策略說明）仍依任務 grep（勿全文載入）。
+
+## 2026-09-03 · 環境邊界術語精修：「實盤」=玉山 API 實際執行，資金另看 key
+
+- 修正（原地修 `cairn/environment-scope.md`，非覆寫舊結論）：把「實盤」定義再精確——**兩個軸**：① 執行模式（回測 vs **實盤**=用玉山 API 的實際執行結果）；② 資金性質（玉山**模擬** key=模擬資金、real key=真金=另開分支）。
+- 前版本誤把「實盤」講成「非指真錢」（語意混淆）；正確：**「實盤」指用玉山 API 實際執行，不代表就是真錢**；要不要錢看 `.env` 的 `ESUN_ENVIRONMENT`（simulation／real）。
+- 結論不變：本目錄（`ESUN_ENVIRONMENT=simulation`）跑實盤路徑 × 模擬資金，無真金；真錢日後另起分支用玉山 real key。
+
+## 2026-09-03 · 環境邊界定案：本目錄只跑模擬、真錢另開分支
+
+- 定義：本 repo（root，`/home/frank/tw-autotrader`）**永遠只跑 E.Sun 模擬**（`ESUN_ENVIRONMENT=simulation`，模擬 API 沙箱、無真金）。軟體走「實盤流程」（`live_trader_multi.py` 完整管線：風控/通知/選股/下單），但 broker 後端是模擬 → 下單不觸及真錢。
+- 決策（使用者）：真錢日後**另開分支**執行；本目錄只當沙箱/驗證場。
+- 影響：① 本目錄所有讀數（績效/損益/回撤/監控）都是**模擬**結果，勿當真錢績效或投資依據；② cairn/LOG 中「實盤」=「實盤後端流程」之意，非指真錢；③ deploy 到 VM 與資本操作皆為模擬資金，真錢架構待分支落地才成立。
+- 詳見：`cairn/environment-scope.md`（新增 topic，`related`: deploy-pipeline / capital-ops）。
+
 ## 2026-09-03 · 法人動能關閉（啟用數小時後即關）
 
 - 啟用 30 萬試跑後即發現：帳戶現金僅 ~24 萬（Group1 持股 ~96 萬），Group2 虛擬資金池無實體支撐；且 TOTAL_CAPITAL 是 Group1 基準，加碼會放大 Group1 補買吃光資金（無法用加碼解決）。

@@ -11,7 +11,11 @@ AI 的職責止於：改 `plans/` 源碼 → 跑測試 → 更新 cairn → 告�
 
 ## 一句話
 
-`deploy.sh` = 把**源碼** `live_trader_multi.py` 用 pyarmor 加密成混淆版 → 塞進 Docker image → 上傳 GCS → VM 拉取重啟。過程先把源碼備份到 `plans/`（git 子模組，自動 commit/push），**結束時一定把 root 還原成源碼**。
+**目前預設用 `deploy_source.sh`（C 方案，2026-08-30 起）**：把**源碼** `live_trader_multi.py` 直接 `docker build`（**不加密**）→ 上傳 GCS → VM 拉取重啟；過程先把源碼備份到 `plans/`（git 子模組，自動 commit/push）。
+- `deploy.sh` = pyarmor **加密版**（現無正式 license、8.x trial 單檔上限已過 → 改走 C 方案），加密輸入是 `plans/`，結束後把 root 還原成源碼。
+- `deploy_crypted.sh` = 給**只有加密檔 `.encrypted`、無源碼（未買主程式源碼）**的使用者；無 plans 備份、scp 直傳 VM。
+- **使用路徑**：現況（無 license）以 `deploy_source.sh` 為主；**購入 pyarmor license 後改以 `deploy.sh` 加密版為主**；一般使用者（沒買源碼）用 `deploy_crypted.sh`。
+- 三個腳本的完整對照見下方「三個 deploy 腳本對照」。
 
 ## C 方案（2026-08-30 起）：deploy_source.sh — 源碼直部署（無加密）
 
@@ -20,12 +24,31 @@ AI 的職責止於：改 `plans/` 源碼 → 跑測試 → 更新 cairn → 告�
 > 舊混淆版仍保留於 VM `~/plans/live_trader_multi.py.obfuscated_bak`；VM 根目錄不放未加密源碼（放 ~/plans）。
 > 未來若購入 pyarmor 授權，可回歸 `deploy.sh`（加密版）。
 
+## 三個 deploy 腳本對照（常用，先看這張表）
+
+| 腳本 | 資料來源 | 加密 | plans 備份 | 上傳途徑 | 結束時 root | 什麼時候用 |
+|---|---|---|---|---|---|---|
+| `deploy.sh` | root **源碼** | Pyarmor（需正式 license；8.x trial 單檔上限 ~45.5KB） | **有**（commit+push） | **GCS bucket** | **還原為源碼**（EXIT trap 保證） | 需**加密**部署；**購入 license 後為主路徑** |
+| `deploy_source.sh` | root **源碼** | 無（源碼直出） | **有**（commit+push） | **GCS bucket** | 維持源碼 | **目前預設（無 license，2026-08-30 起）** |
+| `deploy_crypted.sh` | 已加密 `.encrypted` | 現成 | **無** | **scp 直傳 VM** | **移除**複製的根檔 | **無源碼（未買主程式源碼）的一般使用者** |
+
+**共同點**（三者都做）：gcloud 認證檢查 → VM 必須 RUNNING（非交易時段可能關機）→ `scp .env + docker-compose.yml` 到 VM → VM 上 `docker compose down/up --force-recreate`（**交易中斷**）→ `docker system prune` → 清理 VM 回測快取（`historical_shares.pkl`/`2015`/`2020`/`2021`/`inst_momentum_2022`/過舊 `twse_inst_*.pkl`）。
+
+**主要差異**：
+- **加密輸入是 `plans/`（源碼備份），不是 root**：deploy.sh / deploy_source.sh 都先 `cp live_trader_multi.py → plans/` 再 commit+push。deploy.sh 再 `pyarmor gen plans/...`（防二次加密）。deploy_crypted.sh 無 plans 流程。
+- **上傳途徑**：deploy.sh / deploy_source.sh 把 image tar.gz 傳 **GCS bucket**（VM 再 gsutil 拉）；deploy_crypted.sh 直接 **scp tar.gz 到 VM**（不走 GCS）。
+- **deploy.sh / deploy_source.sh 結束後 root 必為源碼**；看到 root=3行/179KB 混淆版 = 上次 deploy 在加密後被**硬殺**（EXIT trap 沒跑到）。deploy_crypted.sh 用 `set -e`（任一失敗即停）且結束時移除複製的 `live_trader_multi.py`（只留 `.encrypted` 與可能產生的 `.bak`）。
+
+**口徑提醒**：三者部署的 `.env` 與本 repo 相同（`ESUN_ENVIRONMENT=simulation` 模擬資金）——見 `environment-scope.md`；真錢是另一分支、用 real key。
+
 ## 角色對照（最容易搞混的部分）
 
 | 檔案 | 是什麼 | 判別方式 |
 |---|---|---|
 | `live_trader_multi.py`（root，git 內） | **混淆/加密版**（README 明言「GIT站上已加密僅可執行」） | 3 行、~179KB、變數名被改名（grep 不到源碼變數） |
-| `plans/live_trader_multi.py`（子模組） | **源碼**（可讀、可改） | 806 行；`grep -c _rot_day_buys plans/live_trader_multi.py` > 0 |
+| `plans/live_trader_multi.py`（**私有 submodule**） | **主程式源碼**（可讀、可改、**私有不公開**） | git@github.com:dinchentech/plans.git（SSH **private**）；`grep -c _rot_day_buys` > 0；~981 行/56KB |
+
+> **`plans/` = 主程式源碼的私有存放處**：是 git submodule，指向 `git@github.com:dinchentech/plans.git`（**私有、不公開**，非公開 repo）。deploy.sh / deploy_source.sh 部署時把 root 源碼備份到 `plans/` 並 commit+push 到此私有 repo。**機密來源（源碼）以 plans 為準；root 只是混淆/部署用版本。**
 | `TMP/live_trader_multi.py.encrypted` | 每次 deploy 的加密檔備份（回滾用） | 與 git 內版本不同來源 |
 | `pyarmor_runtime_000000/` | pyarmor 解密密碼函式庫（必須與加密檔同目錄） | — |
 

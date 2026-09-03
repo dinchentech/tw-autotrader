@@ -17,6 +17,8 @@
 
 ## 進入專案後的閱讀順序
 
+> ⚠️ **開啟任一 session 的第一步（STEP 0，硬規則）**：先讀 `cairn/CURRENT.md`（當前狀態索引，指向正式 cairn 文件）。若該檔不存在，改讀 `cairn/LOG.md` 最新條目 + `cairn/ROADMAP.md`。
+
 1. 先讀本檔案（AGENTS.md）。
 2. 若 `cairn/ROADMAP.md` 存在，閱讀它以了解路線圖、目前焦點與開放問題（ROADMAP 為選用；最小化初始化的專案可能沒有）。
 3. 閱讀 `cairn/LOG.md` 最新的條目（最新在上方）了解近期進度與關鍵決策。
@@ -26,6 +28,7 @@
    - **操作/參數/部署相關** → `使用手冊.md`（PC_ 設定、deploy 腳本選擇、參數表、驗證結果）
    - **資料/快取/回測數字驗證** → `cairn/backtest-data-pitfalls.md`（快取共用地圖、回測前跑 `scripts/verify_cache.py`）
    - **資金/資本操作** → `cairn/capital-ops.md`
+   - **環境/資金口徑** → 先讀 `cairn/environment-scope.md`（「實盤」=用玉山 API 實際執行路徑；本目錄用玉山**模擬**key → 模擬資金無真金，真錢=real key 待另開分支）
 
 ## 文件職責
 
@@ -35,6 +38,7 @@
 | `CLAUDE.md`（根目錄） | 一行 `@AGENTS.md` stub | 寫一次，之後不再動 |
 | `cairn/ROADMAP.md` | 路線圖與進度 | 原地更新，保持精簡 |
 | `cairn/LOG.md` | 時間序日誌 | 新條目加在最上方（新的在前），每條 ≤ 20 行，只要摘要 + 指標 |
+| `cairn/CURRENT.md` | session 引導索引（開啟 session 的 STEP 0 先讀） | 隨現況更新；只做索引、不取代專題文件 |
 | `cairn/<topic>.md` | 知識專題文件（當前真相） | 原地更新；陷阱放在內文區段，用 `contains` 標記；修訂加 LOG 指標 |
 | `cairn/Reference/` | 外部原始輸入 | 需要時才建立；只增不改 |
 | `cairn/Cited.md` | 知識庫引用清單 | 只有指標，絕不複製來源內容 |
@@ -52,6 +56,7 @@
 
 ## 文件協作規則
 
+- **對話回覆一律使用繁體中文**（除非使用者指定其他語言）；本專案文件（`.cairn/config.yaml` 的 `language: zh`、`cairn/`、`使用手冊.md`、`策略說明.md` 等）皆為繁體中文，`zh` 即指繁體中文。
 - 變更前判斷使用者要的是「討論/建議」還是「直接改文件」；當他們說「先看看/先評估」時，先給分析——不要直接改寫正式文件。
 - 修正過去的判斷時，附加修正說明；不要默默覆寫。
 - 不要把未經確認的判斷寫成既成事實。
@@ -66,6 +71,11 @@
 
 - 回測與實盤的快取一律經 `core/cache_io.py` 版本化讀寫；**可以共用的就共用、格式統一**，禁止各策略自建一套。共用基準：`cache/inst_momentum/price/`（法人動能三腳本共用股價）、`cache/inst_momentum/{year}/`（TWSE 法人/TAIEX）。
 - 新增快取前先查共用地圖（`cairn/backtest-data-pitfalls.md`）；股價語義不同（還原價 vs 原始價）不得合併。
+
+## 部署安全規則（硬規則）
+
+- **deploy 一律由「人工」執行，不要自動代跑！** 任何 agent（AI）**不得執行** `./deploy.sh` / `./deploy_source.sh` / `docker compose` 於 VM 重啟等高風險操作（2026-08-31 使用者明示）。
+- agent 的職責止於：改 `plans/`（或 root 源碼）→ 跑測試 → 更新 cairn → 告知「準備就緒，請人工執行 deploy」。詳見 `cairn/deploy-pipeline.md` 鐵則。
 
 ---
 
