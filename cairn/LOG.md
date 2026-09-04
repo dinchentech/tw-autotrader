@@ -1,5 +1,12 @@
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
 
+## 2026-09-03 · ponytail 家族裝為 user 級 DSH skill（全域）
+
+- `npx skills add MengYuil/dsh-ponytail` 失敗（repo 結構不符 Skills CLI，No valid skills found）→ 改複製**本機 ponytail** 到 `~/.agents/skills/`：`cp -r ~/ponytail/skills/ponytail* ~/.agents/skills/`。
+- 結果：ponytail(+audit/debt/gain/help/review) 共 6 個成為 **user 級 DSH skill**，本機**任何目錄**皆載入（catalog 已見）。
+- 用途：懶人資深工程師/YAGNI/最小化寫碼；觸發 `ponytail`/`lazy`/`yagni`，或 `/ponytail-review`(過度工程)、`/ponytail-audit`(全 repo)、`/ponytail-debt`(ponytail: 註解債單)、`/ponytail-gain`(省多少)。
+- 來源：原 `DietrichGebert/ponytail`(MIT)；本機 `/home/frank/ponytail/` 為私有工作目錄。已記於 `cairn/CURRENT.md`「可用 skill」。
+
 ## 2026-09-03 · WSL恢復.md：opencode → DSH 轉換
 
 - 依使用者指示，把 `WSL恢復.md` 的 AI agent 設定由 opencode 改成 DSH（DeepSeek Harness）：

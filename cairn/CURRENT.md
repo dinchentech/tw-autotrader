@@ -42,3 +42,7 @@ authoring_mode: ai_generated
 1. 本檔（現況）+ `cairn/LOG.md` 最新條目。
 2. 依任務 grep：策略 → `策略說明.md`；操作/參數/部署 → `使用手冊.md`；部署 → `cairn/deploy-pipeline.md`；資金 → `cairn/capital-ops.md`。
 3. 大文件勿全文，用 grep 找。
+
+## 可用 skill（DSH）
+- **ponytail 家族（user 級，全域）**：ponytail(+audit/debt/gain/help/review)——**懶人資深工程師/YAGNI/最小化**。觸發詞：`ponytail`、`lazy`、`yagni`、`minimal`；亦可 `/ponytail-review`(只抓過度工程)、`/ponytail-audit`(全 repo)、`/ponytail-debt`(ponytail: 註解債單)、`/ponytail-gain`(省了多少)。
+- 其他：`project-cairn`(知識沉澱)、`find-skills`(找/裝 skill)、`huashu-design`(HTML 原型/設計)、`vision`(看圖輔助)。
