@@ -1,5 +1,12 @@
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
 
+## 2026-09-06 · 確認部署容器送出統一 startup 訊息（用 docker log 鐵證）
+
+- 使用者對「監控中」格式(有的帶 `[]`、`ROTATEMODE`)存疑；多次驗證後用**容器 docker log 的 `>>> STARTUP_MSG >>>`** 讀到**實際送出的訊息字串**：`ROTATE_MODE=5`（有下劃線）＋**一律 `[strategy]`**（`2464[auto]...3017[keep_wait]...3653[keep_wait]`）。
+- **結論**：程式與部署 **100% 正確**——容器發的就是統一格式；使用者 TG 顯示的「`ROTATEMODE`＋部分無括號」**與實際送出內容不符**，差異在**顯示端/貼文**（客戶端快取/字元被吃/轉錄錯誤），**非程式問題**。VM 僅單一容器 `tw_autotrader_bot`，無其他發送源。
+- **保留**：`live_trader_multi.py` 的「⚙️ 啟動標記(唯一起始時間戳)」＋「`>>> STARTUP_MSG >>> print(repr(...))`」診斷輸出（使用者確認保留），可當唯一標記辨識此容器/此 build 真正送出之訊息。版本 v4.01。
+- VM 驗證方式：`ssh -i ~/.ssh/google_compute_engine -F /dev/null ... frank@35.194.221.238 "sudo docker logs tw_autotrader_bot 2>&1 | grep -a STARTUP_MSG"`。
+
 ## 2026-09-06 · 版本升 V4.01
 
 - `core/version.py` APP_VERSION 4.00 → **4.01**（單一來源）；`使用手冊.md` 版本標註 4.01 並補「V4.01 小更新」列；`consistency_check.py` 版本檢查改動態讀取（不再寫死）。
