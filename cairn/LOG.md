@@ -1,5 +1,10 @@
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
 
+## 2026-09-06 · 人工降溫改成 `.env` 三選項嚴格度（MIN_OVERHEAT）
+
+- 依使用者要求，把「過熱嚴格度」改為 **`.env` 控制、三選項**：`MIN_OVERHEAT`=**1**(命中任1項即剔,最嚴) / **2**(命中≥2項,預設/較嚴) / **3**(三項全中『且』,最寬、最貼近「且」規則)。選股工具 `OV_PARAMS["min_count"]` 讀 env 並 clamp 在 1/2/3。
+- 修改：`scripts/monthly_rebalance_picker.py`(移除 CLI、OV_PARAMS clamp、模式標籤)、`.env.example.txt`(MIN_OVERHEAT 註解)、`策略說明.md` 4.7(三選項說明)。`consistency_check` 全過。
+
 ## 2026-09-06 · 人工降溫：過熱過濾（A+B+C）實作進選股工具
 
 - 依使用者需求加入「人工降溫」過濾到 `monthly_rebalance_picker.py`(高獲利/正常)：三項旗標 **貼近52週高**(距高點≤`MAX_PCT_FROM_HIGH`%)、**YTD過大**(>`MAX_YTD_GAIN`%)、**高本益比**(P/E>`MAX_PER`)。命中 ≥`MIN_OVERHEAT`(預設2) 項 → **剔除**；命中 1 項 → **標⚠️偏高**並警告。

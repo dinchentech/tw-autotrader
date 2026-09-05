@@ -85,7 +85,7 @@ OV_PARAMS = {
     "max_from_high": float(os.getenv("MAX_PCT_FROM_HIGH", "7")),
     "max_ytd": float(os.getenv("MAX_YTD_GAIN", "100")),
     "max_per": float(os.getenv("MAX_PER", "45")),
-    "min_count": int(os.getenv("MIN_OVERHEAT", "2")),
+    "min_count": max(1, min(3, int(os.getenv("MIN_OVERHEAT", "2")))),   # 1=任一項 / 2=≥2項(預設) / 3=三項全中『且』
 }
 _PER_CACHE = {}
 _DL = None
@@ -342,7 +342,9 @@ def main():
         print(f"\n⚠️ 【人工降溫】選中但偏高（近52週高 / YTD 大漲 / 高本益比，命中任一）：")
         for w in _warned:
             print("   ", w)
-    print(f"   (設定: 近52週高上限 {OV_PARAMS['max_from_high']}% / YTD 上限 {OV_PARAMS['max_ytd']}% / P/E 上限 {OV_PARAMS['max_per']} / 命中 {OV_PARAMS['min_count']} 項即剔除)")
+    _mode_txt = {1: "任一項(最嚴)", 2: "命中≥2項(預設/較嚴)", 3: "三項全中『且』(最寬)"}[OV_PARAMS["min_count"]]
+    print(f"   (過熱嚴格度: {OV_PARAMS['min_count']}項 → {_mode_txt} | 近52週高上限 {OV_PARAMS['max_from_high']}% / "
+          f"YTD 上限 {OV_PARAMS['max_ytd']}% / P/E 上限 {OV_PARAMS['max_per']})")
 
     # 輸出 PC_ 設定（貼進 .env）
     chosen = args.strategy
