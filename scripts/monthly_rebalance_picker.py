@@ -78,6 +78,80 @@ def snap(df, d):
     return ssg._snap_date(df, d)
 
 
+# ── 人工降溫（過熱過濾）─────────────────────────────
+# 門檻(env，可調)：MAX_PCT_FROM_HIGH=離52週高點%上限、MAX_YTD_GAIN=YTD漲幅%上限、
+#                  MAX_PER=本益比上限、MIN_OVERHEAT=命中幾項才算過熱(預設2)
+OV_PARAMS = {
+    "max_from_high": float(os.getenv("MAX_PCT_FROM_HIGH", "7")),
+    "max_ytd": float(os.getenv("MAX_YTD_GAIN", "100")),
+    "max_per": float(os.getenv("MAX_PER", "45")),
+    "min_count": int(os.getenv("MIN_OVERHEAT", "2")),
+}
+_PER_CACHE = {}
+_DL = None
+
+
+def _get_dl():
+    global _DL
+    if _DL is None:
+        from FinMind.data import DataLoader
+        _DL = DataLoader()
+    return _DL
+
+
+def _get_per(sid, sel_date):
+    """FinMind TaiwanStockPER → 最近一筆 PER(≤sel_date)，快取；失敗回 None。"""
+    if sid in _PER_CACHE:
+        return _PER_CACHE[sid]
+    per = None
+    try:
+        dl = _get_dl()
+        end = pd.Timestamp(sel_date).strftime("%Y-%m-%d")
+        start = (pd.Timestamp(sel_date) - pd.Timedelta(days=45)).strftime("%Y-%m-%d")
+        d = dl.taiwan_stock_per_pbr(stock_id=sid, start_date=start, end_date=end)
+        if d is not None and len(d):
+            d = d.copy()
+            d["date"] = pd.to_datetime(d["date"])
+            d = d[d["date"] <= pd.Timestamp(sel_date)].sort_values("date")
+            per = float(d.iloc[-1]["PER"]) if len(d) else None
+    except Exception:
+        per = None
+    _PER_CACHE[sid] = per
+    return per
+
+
+def overheat_flags(sid, sel_date):
+    """回傳過熱旗標 dict(或 None)。過熱 = 近52週高點 + YTD 漲幅 + 高本益比。"""
+    df = data.get(sid)
+    if df is None:
+        return None
+    sd = snap(df, sel_date)
+    if sd is None or sd not in df.index:
+        return None
+    idx = df.index.get_loc(sd)
+    cp = float(df.loc[sd, "close"])
+    if cp <= 0:
+        return None
+    win = df.iloc[max(0, idx - 251):idx + 1]
+    hi = float(win["high"].max())
+    pct_from_high = (hi - cp) / hi * 100 if hi > 0 else 0.0
+    near_high = (hi > 0 and cp >= hi * (1 - OV_PARAMS["max_from_high"] / 100.0))
+    ys = df[df.index <= pd.Timestamp(str(sd.year) + "-01-01")]
+    ytd = (cp / float(ys.iloc[-1]["close"]) - 1) if len(ys) and float(ys.iloc[-1]["close"]) > 0 else 0.0
+    huge_ytd = ytd > OV_PARAMS["max_ytd"] / 100.0
+    per = _get_per(sid, sd) if (near_high or huge_ytd) else None  # 只在價量命中才抓PER(限流)
+    high_pe = per is not None and per > OV_PARAMS["max_per"]
+    cnt = int(near_high) + int(huge_ytd) + int(high_pe)
+    return {"sid": sid, "near_high": near_high, "huge_ytd": huge_ytd, "high_pe": high_pe,
+            "pct_from_high": round(pct_from_high, 1), "ytd": round(ytd * 100, 1),
+            "per": per, "count": cnt, "overheated": cnt >= OV_PARAMS["min_count"]}
+
+
+def is_overheated(sid, sel_date):
+    f = overheat_flags(sid, sel_date)
+    return bool(f and f["overheated"])
+
+
 # ── 選股規則（與回測相同，無事後之明）────────────────────
 def pick_high_profit(pool, sel_date, top_n, min_price, mom_days, inst_ok):
     cands = []
@@ -99,6 +173,8 @@ def pick_high_profit(pool, sel_date, top_n, min_price, mom_days, inst_ok):
             continue
         if not inst_ok(sid):
             continue
+        if is_overheated(sid, sel_date):   # 人工降溫：過熱(近52週高+高本益比+大漲) → 剔除
+            continue
         cands.append((sid, r))
     cands.sort(key=lambda x: -x[1])
     return [s for s, _ in cands[:top_n]]
@@ -117,6 +193,8 @@ def pick_normal(pool, sel_date, top_n, inst_ok):
             continue
         s = ssg.score_stock(sid, df, sd, dict(ssg.DEFAULT_PARAMS))
         if s is None:
+            continue
+        if is_overheated(sid, sel_date):   # 人工降溫：過熱 → 剔除
             continue
         scored.append(s)
     scored.sort(key=lambda x: -x["total"])
@@ -232,9 +310,10 @@ def main():
     print(f"  🟡 維持(已持倉, 不動): {keep or '無'}")
     print(f"  🔵 買入(新選中未持倉): {buy or '無'}")
 
-    # 每檔: 原固定策略建議 + 用 auto_sensing 路由看當下型態
+    # 每檔: 原固定策略建議 + 用 auto_sensing 路由看當下型態 + 過熱旗標
     print("\n📌 建議策略（'fixed'=原固定池, 'auto'=型態感知自動分派）")
     table = []
+    ov_flags = []
     for i, sid in enumerate(selected):
         df = data.get(sid)
         fixed = GROUPS[args.risk]["strats"][i % len(GROUPS[args.risk]["strats"])]
@@ -243,7 +322,27 @@ def main():
         sd = snap(df, sel_date) if df is not None else None
         px = float(df.loc[sd, "close"]) if sd is not None else 0.0
         table.append((sid, name, px, fixed, routed))
-        print(f"  {sid:>6} {name:<8} NT${px:>8,.0f}  fixed={fixed:<10} auto→{routed}")
+        ov = overheat_flags(sid, sel_date)
+        ov_flags.append((sid, name, ov))
+        ov_mark = ""
+        if ov:
+            parts = []
+            if ov["near_high"]: parts.append(f"貼近52週高({ov['pct_from_high']}%)")
+            if ov["huge_ytd"]: parts.append(f"YTD+{ov['ytd']}%")
+            if ov["high_pe"]: parts.append(f"P/E{ov['per']:.0f}")
+            if parts: ov_mark = "  ⚠️ 偏高:" + ",".join(parts)
+        print(f"  {sid:>6} {name:<8} NT${px:>8,.0f}  fixed={fixed:<10} auto→{routed}{ov_mark}")
+
+    # 過熱/偏高摘要：列出「被過熱排除」與「選中但偏高(任一旗標)」
+    _warned = []
+    for sid, name, ov in ov_flags:
+        if ov and (ov["near_high"] or ov["huge_ytd"] or ov["high_pe"]):
+            _warned.append(f"{sid} {name}(近高{ov['pct_from_high']}% / YTD+{ov['ytd']}% / P/E{ov['per']:.0f})")
+    if _warned:
+        print(f"\n⚠️ 【人工降溫】選中但偏高（近52週高 / YTD 大漲 / 高本益比，命中任一）：")
+        for w in _warned:
+            print("   ", w)
+    print(f"   (設定: 近52週高上限 {OV_PARAMS['max_from_high']}% / YTD 上限 {OV_PARAMS['max_ytd']}% / P/E 上限 {OV_PARAMS['max_per']} / 命中 {OV_PARAMS['min_count']} 項即剔除)")
 
     # 輸出 PC_ 設定（貼進 .env）
     chosen = args.strategy

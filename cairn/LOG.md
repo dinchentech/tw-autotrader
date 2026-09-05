@@ -1,5 +1,12 @@
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
 
+## 2026-09-06 · 人工降溫：過熱過濾（A+B+C）實作進選股工具
+
+- 依使用者需求加入「人工降溫」過濾到 `monthly_rebalance_picker.py`(高獲利/正常)：三項旗標 **貼近52週高**(距高點≤`MAX_PCT_FROM_HIGH`%)、**YTD過大**(>`MAX_YTD_GAIN`%)、**高本益比**(P/E>`MAX_PER`)。命中 ≥`MIN_OVERHEAT`(預設2) 項 → **剔除**；命中 1 項 → **標⚠️偏高**並警告。
+- **P/E 資料**：FinMind `TaiwanStockPER`（`DataLoader.taiwan_stock_per_pbr` → PER/PBR/殖利率；已實測 3008 PER≈39.4 與圖表一致）。**非快取，需 FinMind 配額**；選股只對「價量已命中」的候選才抓 P/E（限流 600/hr）。
+- 說明：`正常/高獲利`原本只看動能/均線/穩定度、**不會自動避開高點股**；本過濾補上。`高穩定`本就避開。實測(正常)選出 2006/2362/3515/4967/6214，其中 **2006/6214 各命中1項(貼近52週高)** 標⚠️偏高。3008(P/E39/YTD+186/距高7.4%) 僅命中 YTD 1項 → 警告不剔除。
+- `.env.example.txt`、`策略說明.md`(4.7 人工降溫) 已補；`consistency_check` 全過。門檻：`MAX_PCT_FROM_HIGH`/`MAX_YTD_GAIN`/`MAX_PER`/`MIN_OVERHEAT`(環境變數)。
+
 ## 2026-09-06 · git 提交慣例（維持：只推程式碼＋文件＋cairn）
 
 - 統一慣例：**進 git 的只有「程式碼＋文件(使用手冊/策略說明/報告)＋cairn」**；**runtime 產物與敏感檔刻意不進 git**（`data/*catalyst_scan*`、`logs/*`、`esun_sdk/`(含 `.p12`)、`deploy_to_vm.sh`、`docker-compose.yml.bak`、`grid_nm_results.md`、`DSH入門.md`、`plans/` 內 `ppt/*.txt` 等）。
