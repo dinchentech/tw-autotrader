@@ -135,12 +135,30 @@ def read_current_holdings():
             s = line.strip()
             if s.startswith("PC_") and "=" in s:
                 sym = s[3:].split("=", 1)[0]
+                val = s.split("=", 1)[1]
+                if "#" in val:                 # 去除行內註解（.env 常帶 # 註解→會破壞 JSON）
+                    val = val.split("#", 1)[0].strip()
                 try:
-                    cfg = json.loads(s.split("=", 1)[1])
+                    cfg = json.loads(val)
                     holdings[sym] = cfg
                 except Exception:
                     holdings[sym] = {"strategy": "?"}
     return holdings
+
+
+# ── 讀實際持倉（logs/holdings.json 中 qty>0 = 已持倉）────────
+def read_actual_holdings():
+    hp = Path("logs/holdings.json")
+    held = {}
+    if hp.exists():
+        try:
+            data_h = json.loads(hp.read_text(encoding="utf-8"))
+            for sid, h in data_h.items():
+                if isinstance(h, dict) and h.get("qty", 0) > 0:
+                    held[sid] = int(h["qty"])
+        except Exception:
+            pass
+    return held
 
 
 def main():
@@ -199,15 +217,20 @@ def main():
     else:
         selected = pick_normal(pool, sel_date, args.top_n, inst_ok)
 
-    current = read_current_holdings()
-    sell = [s for s in current if s not in selected]
-    keep = [s for s in selected if s in current]
-    buy = [s for s in selected if s not in current]
+    current = read_current_holdings()      # .env PC_ 監控/設定中
+    held = set(read_actual_holdings())     # logs/holdings.json 實際持倉(qty>0)
+    sel_set = set(selected)
+    # 規則：已持倉→不動（保留）；監控中未持倉且未再選中→汰換；新選中未持倉→買入
+    # keep_wait=全輪替腿，不列入汰換（由輪替引擎自己管理）
+    sell = sorted([s for s in current if s not in held and s not in sel_set
+                   and current[s].get('strategy') != 'keep_wait'])
+    keep = sorted(held)                    # 已持倉一律保留（即使掉出選股）
+    buy = sorted([s for s in selected if s not in held])
 
-    print(f"\n[{GROUPS[args.risk]['label']}] 選股完成 → 買入/維持/賣出")
-    print(f"  🟢 賣出: {sell or '無'}")
-    print(f"  🟡 維持: {keep or '無'}")
-    print(f"  🔵 買入: {buy or '無'}")
+    print(f"\n[{GROUPS[args.risk]['label']}] 選股完成 → 賣出/維持/買入")
+    print(f"  🟢 賣出(汰換未持倉且未選中): {sell or '無'}")
+    print(f"  🟡 維持(已持倉, 不動): {keep or '無'}")
+    print(f"  🔵 買入(新選中未持倉): {buy or '無'}")
 
     # 每檔: 原固定策略建議 + 用 auto_sensing 路由看當下型態
     print("\n📌 建議策略（'fixed'=原固定池, 'auto'=型態感知自動分派）")
