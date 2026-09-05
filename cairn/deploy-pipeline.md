@@ -9,6 +9,15 @@
 AI 的職責止於：改 `plans/` 源碼 → 跑測試 → 更新 cairn → 告知「準備就緒，請人工執行 deploy」。
 原因：deploy 涉及 VM 重啟、交易系統中斷、git push，屬高風險操作；2026-08-31 使用者明確指示。
 
+## ⚠️ GCP 認證（gcloud）規則：遇「未授權」先請使用者跑 `VM_auth`
+
+**連 VM / 查 VM 資料 / deploy 前，gcloud 憑證可能過期或未登入。此時不要 agent 自行登入**（`gcloud auth login` 涉及瀏覽器互動授權，屬使用者帳號），**先提醒使用者執行 `VM_auth`**：
+
+- `VM_auth` = 使用者 `~/.bashrc` alias：`alias VM_auth="gcloud auth login"`（2026-09-05 確認）。
+- **觸發情境**：`gcloud` / `gcloud compute ssh` / `gcloud compute instances list` 報「no active account」「Reauthentication failed」「cannot prompt during non-interactive execution」→ GCP 憑證已過期/未登入。
+- **agent 應做**：停下來告知「GCP 憑證已過期，請先執行 `VM_auth`（=`gcloud auth login`）授權後再繼續」。**不要自行代跑 `gcloud auth login`。**
+- **VM 連線**（授權後）：`ssh -i ~/.ssh/google_compute_engine -F /dev/null -o StrictHostKeyChecking=no frank@35.194.221.238`（VM=tw-autotrader、zone asia-east1-b、外部 IP 35.194.221.238、user frank、金鑰 google_compute_engine）。注意本機 `/etc/ssh/ssh_config.d/` 唯讀會擋 `gcloud compute ssh`，改用此原生 ssh 直連。
+
 ## 一句話
 
 **目前預設用 `deploy_source.sh`（C 方案，2026-08-30 起）**：把**源碼** `live_trader_multi.py` 直接 `docker build`（**不加密**）→ 上傳 GCS → VM 拉取重啟；過程先把源碼備份到 `plans/`（git 子模組，自動 commit/push）。

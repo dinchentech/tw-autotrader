@@ -75,6 +75,8 @@ inst_days = int(os.getenv("INST_DAYS", "21"))
 min_drawback = float(os.getenv("MIN_DRAW_BACK", "0"))
 # MIN_DRAW_BACK_UNLIMITED=1：無限期延後換股（回撤未恢復就一直續抱）；預設=最多延長一季
 min_drawback_unlimited = os.getenv("MIN_DRAW_BACK_UNLIMITED", "0") == "1"
+# MAX_PROFIT：提前獲利出場（比例制，0=停用）。持股價達買入價*(1+MAX_PROFIT/100) 即提前賣出、不等季末
+max_profit = float(os.getenv("MAX_PROFIT", "0")) / 100.0
 
 bt = ssg.backtest_dual_quarterly(data, params, top_n=TOP_N, mode=mode,
                                  auto_momentum=auto_mom, market_data=mkt,
@@ -82,7 +84,8 @@ bt = ssg.backtest_dual_quarterly(data, params, top_n=TOP_N, mode=mode,
                                  quarterly_pool=pools,
                                  inst_conf=inst_conf, inst_days=inst_days,
                                  min_drawback=min_drawback,
-                                 min_drawback_unlimited=min_drawback_unlimited)
+                                 min_drawback_unlimited=min_drawback_unlimited,
+                                 max_profit=max_profit)
 import math
 years = (pd.Timestamp(END) - pd.Timestamp(START)).days / 365.25
 ann = (bt["total_return"] + 1) ** (1 / years) - 1 if bt["total_return"] > -1 else -1

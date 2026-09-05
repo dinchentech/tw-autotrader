@@ -564,7 +564,7 @@ def _snap_date(df, target):
 def backtest_selector(data, params, top_n=4, verbose=False, mode="momentum", 
                        auto_momentum=False, market_data=None, quarter_months=None,
                        quarterly_pool=None, inst_conf=None, inst_days=21, min_drawback=0,
-                       min_drawback_unlimited=False):
+                       min_drawback_unlimited=False, max_profit=0.0, max_profit_by_year=None):
     """
     回測每季選股績效。
     每季末用 params 選股 → 持有到下季末 → 計算報酬。
@@ -577,6 +577,11 @@ def backtest_selector(data, params, top_n=4, verbose=False, mode="momentum",
         （自歷史峰值）> 此百分比，該季不賣不買、續抱原持股。
     min_drawback_unlimited: True = 無限期延後換股（回撤未恢復到門檻內就一直續抱）；
         False（預設）= 最多延長一季，下一季回撤仍超標則照常換股。
+    max_profit: 獲利落袋（0=停用）。>0 時，持股價達 buy_px*(1+max_profit) 即當日提前賣出
+        （不等季末），該股於當季即回籠現金（計入 next_quarter 再配置），
+        並從 current_holdings/last_shares 移除避免最後季/停輪替重複評價。比例制（0.15=15%）。
+    max_profit_by_year: 依年份切換 max_profit 的 dict（{2024:0.15,...}）。當季買入日年份命中
+        此 dict 時用該值；否則用全域 max_profit。供「權值年才停利」實驗（2024=15% 其他=0）。
     """
     import math
     quarter_dates = quarter_end_dates(quarter_months=quarter_months)
@@ -594,20 +599,24 @@ def backtest_selector(data, params, top_n=4, verbose=False, mode="momentum",
         is_last = (qi == len(quarter_dates) - 1)
 
         if is_last:
-            # 最後一季：評價現有持股，不換股
+            # 最後一季：不換股。上一非末季（qi=last-1）已把持股賣在最後交易日、完整價值存入
+            # capital（nxt_val）；此處直接用 capital 作為最終價值，避免 max_profit 早賣把
+            # current_holdings 縮減/清空後、從 0 重算導致價值歸零（2025-12-31 曾誤判 -100%）。
+            nxt_val = capital
             chosen = current_holdings
-            nxt_val = 0.0
-            alloc_per = capital / len(chosen) if chosen else 0
-            for sym in chosen:
-                if sym not in data:
-                    continue
-                df = data[sym]
-                val_date = _snap_date(df, qd)
-                if val_date is None:
-                    continue
-                px = float(df.loc[val_date, "close"])
-                shares = last_shares.get(sym, 0)
-                nxt_val += shares * px * (1 - COMMISSION_RATE - tax_rate(sym))
+            if chosen and nxt_val <= 0:
+                # 防禦：若 capital 異常（極少數 skip 情境），退回重新評價持股
+                nxt_val = 0.0
+                for sym in chosen:
+                    if sym not in data:
+                        continue
+                    df = data[sym]
+                    val_date = _snap_date(df, qd)
+                    if val_date is None:
+                        continue
+                    px = float(df.loc[val_date, "close"])
+                    shares = last_shares.get(sym, 0)
+                    nxt_val += shares * px * (1 - COMMISSION_RATE - tax_rate(sym))
 
             q_ret = (nxt_val - capital) / capital if capital > 0 else 0
             if verbose:
@@ -725,6 +734,7 @@ def backtest_selector(data, params, top_n=4, verbose=False, mode="momentum",
         alloc = capital / len(chosen)
         nxt_val = 0.0
         last_shares = {}
+        early_exit_syms = set()   # 本季提前獲利出場的標的（不再持有）
 
         for sym in chosen:
             if sym not in data:
@@ -746,10 +756,35 @@ def backtest_selector(data, params, top_n=4, verbose=False, mode="momentum",
                 continue
 
             shares = alloc / (buy_px * (1 + COMMISSION_RATE))
-            last_shares[sym] = shares
-            sell_px = float(df.loc[sell_date, "close"])
+
+            # ── MAX_PROFIT 提前獲利出場（0=停用）──────────────
+            # 在 [buy_date, sell_date] 內找首個 close ≥ buy_px*(1+max_profit) 的交易日，
+            # 提前賣出、回籠現金（現金保留至下次再配置）；未達標則等季末賣出。
+            # 支援依年份覆寫（max_profit_by_year）：當季買入日年份命中時用該年閾值。
+            mp_q = max_profit
+            if max_profit_by_year is not None:
+                yr_buy = getattr(buy_date, "year", None) or pd.Timestamp(buy_date).year
+                mp_q = max_profit_by_year.get(yr_buy, max_profit)
+            exit_date = sell_date
+            if mp_q > 0.0:
+                target = buy_px * (1 + mp_q)
+                window = df.loc[buy_date:sell_date, "close"]
+                hit = window[window >= target]
+                if len(hit) > 0:
+                    exit_date = hit.index[0]
+                    early_exit_syms.add(sym)
+
+            if sym not in early_exit_syms:
+                last_shares[sym] = shares
+            sell_px = float(df.loc[exit_date, "close"])
             proceeds = shares * sell_px * (1 - COMMISSION_RATE - tax_rate(sym))
             nxt_val += proceeds
+
+        # 提前出場的標的已回籠現金，從後續 MDB 停輪替 / 最後季的持倉追蹤中移除
+        if early_exit_syms:
+            current_holdings = [s for s in current_holdings if s not in early_exit_syms]
+            for s in early_exit_syms:
+                last_shares.pop(s, None)
 
         q_ret = (nxt_val - capital) / capital if capital > 0 else 0
         if verbose:
@@ -969,17 +1004,19 @@ def backtest_dual_quarterly(data, params, top_n=4, verbose=False, mode="momentum
                             auto_momentum=False, market_data=None,
                             qm_a=(2,5,8,11), qm_b=(3,6,9,12), quarterly_pool=None,
                             inst_conf=None, inst_days=21, min_drawback=0,
-                            min_drawback_unlimited=False):
+                            min_drawback_unlimited=False, max_profit=0.0, max_profit_by_year=None):
     """兩段季度排程 50/50 資金各半並行回測。日期用 module 的 START_DATE/END_DATE。"""
     bt_a = backtest_selector(data, params, top_n, verbose, mode, auto_momentum,
                               market_data, quarter_months=qm_a, quarterly_pool=quarterly_pool,
                               inst_conf=inst_conf, inst_days=inst_days, min_drawback=min_drawback,
-                              min_drawback_unlimited=min_drawback_unlimited)
+                              min_drawback_unlimited=min_drawback_unlimited, max_profit=max_profit,
+                              max_profit_by_year=max_profit_by_year)
     bt_b = backtest_selector(data, params, top_n, False, mode,
                               auto_momentum, market_data, quarter_months=qm_b,
                               quarterly_pool=quarterly_pool,
                               inst_conf=inst_conf, inst_days=inst_days, min_drawback=min_drawback,
-                              min_drawback_unlimited=min_drawback_unlimited)
+                              min_drawback_unlimited=min_drawback_unlimited, max_profit=max_profit,
+                              max_profit_by_year=max_profit_by_year)
     final_val = (bt_a["final_value"] + bt_b["final_value"]) / 2
     total_ret = (final_val - 500000) / 500000
     yearly = {}
