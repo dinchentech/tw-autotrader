@@ -1,5 +1,15 @@
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
 
+## 2026-09-05 · git push 在本機需繞過 system ssh 設定（權限擋 ssh）
+
+- **問題**：直接 `git push` 報 `Bad owner or permissions on /etc/ssh/ssh_config.d/20-systemd-ssh-proxy.conf`（該檔權限異常，ssh 讀取時拒絕），同先前 cairn 記錄的「VM ssh 直連」環境問題（系統 `/etc/ssh/ssh_config.d/` 唯讀）。
+- **解法**：用 `GIT_SSH_COMMAND` 繞過全域 ssh config，走原生 ssh＋指定金鑰：
+  ```
+  GIT_SSH_COMMAND="ssh -F /dev/null -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes -i ~/.ssh/id_ed25519" git push origin main
+  ```
+- **適用**：github（ssh）、`plans` submodule 的 push 皆同。已成功推 2 筆：`5141725`（V4.00 每月換股/auto/混合分析）與 `dab4c71`（MAX_PROFIT/GCP 認證規則/部署摘要/plans 指標 2e79508）。
+- **提交前已做**：僅暫存目標檔（勿 `git add -A`，工作樹有大量 runtime 產物/先前 session 未提交變更）；確認 `.env`、`esun_sdk/*.p12` 已 gitignore、暫存內容無密鑰/憑證；`plans` submodule 先確認「指標 commit 已推上 remote」（`Everything up-to-date`）再記錄指標，避免 clone 指向不存在 commit。
+
 ## 2026-09-05 · auto 策略 TG 通知標示「今日路由→底層策略」
 
 - 依使用者要求，`live_trader_multi.py` 在交易通知處，當 `sn=='auto'` 時以 `route_strategy(acd)` 判斷當日型態，把**底層路由策略帶進 TG/LINE 通知**（如 `策略: AUTO(路由→ma_cross)`）。僅用當日 K 線、無前瞻；`import route_strategy` 已接、`py_compile` 過、跨檔一致性檢查全通過。`策略說明.md` 4.5 補說明，`consistency_check.py` 可重跑驗證。
