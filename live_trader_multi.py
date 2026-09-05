@@ -87,6 +87,7 @@ def main():
   send_line_notification(f'''
 🤖 TW AutoTrader v{APP_VERSION} 雲端主機已成功啟動！開始全天候監控台股...''')
   send_telegram_message((f'''✅ *TW AutoTrader* v{APP_VERSION} 多股多策略系統已啟動
+⚙️ 啟動標記: {datetime.now().strftime('%Y%m%d-%H%M%S')}
 🔄 全輪替: ROTATE_MODE={ROTATE_MODE_VAL}（{_rotate_labels.get(ROTATE_MODE_VAL, "未知")}）
 📅 選股日: {"每月最後交易日" if ROTATE_TRADING_DAY_N == -1 else "每月第 " + str(ROTATE_TRADING_DAY_N) + " 個交易日"}
 📈 監控中: ''' + ', '.join((f"{s}[{c['strategy']}]" for (s, c) in PORTFOLIO_CONFIG.items()))))
