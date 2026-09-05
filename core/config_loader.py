@@ -15,6 +15,7 @@ STRATEGY_PARAM_KEYS = {
     "ma_cross": ["fast_period", "slow_period", "atr_period", "atr_threshold"],
     "breakout": ["lookback", "atr_period", "atr_threshold"],
     "keep_wait": [],
+    "auto": [],  # 自動感知策略：路由到 4 策略之一，無固定參數
     # 用戶自訂策略
     "g1_strategy_1": ["buy_price", "sell_price"],
     "g1_strategy_2": ["k_period", "k_threshold"],

@@ -15,6 +15,7 @@ SYS_TELEGRAM_CHAT_ID = os.getenv("SYS_TELEGRAM_CHAT_ID") or os.getenv("TELEGRAM_
 
 # 匯入共用設定載入器（V1.1 PC_<代號> JSON 格式）
 from core.config_loader import load_portfolio_config, STRATEGY_PARAM_KEYS, get_strategy_params
+from core.version import APP_VERSION
 
 PORTFOLIO_CONFIG = load_portfolio_config()
 
@@ -288,7 +289,7 @@ def _next_market_open(now: datetime) -> datetime:
     return now.replace(hour=8, minute=45) + timedelta(days=1)
 
 
-APP_VERSION = "2.03"
+# APP_VERSION 改由 core/version.py 單一提供（上方 import）
 BUILD_DATE = "2026-07-12 18:00:00"
 
 

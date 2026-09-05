@@ -21,6 +21,7 @@ from strategies.bollinger import bollinger_reverse_strategy
 from strategies.breakout import breakout_strategy
 from strategies.keep_wait import keep_wait_strategy
 from strategies.institutional_momentum import InstitutionalMomentumStrategy
+from strategies.auto_sensing import auto_sensing_strategy, route_strategy
 from utils.telegram import send_trade_alert, send_telegram_message
 from core.risk_manager import RiskManager
 from core.live_state import load_json, save_json, load_monthly_budget, save_monthly_budget, check_monthly_budget, update_monthly_spending, load_stock_allocation, save_stock_allocation, check_stock_cap, update_stock_allocation, load_holdings, save_holdings, update_holdings, load_last_trade_times, save_last_trade_times, load_daily_trades, save_daily_trades, load_processed_capital, save_processed_capital
@@ -29,7 +30,7 @@ from core.live_utils import get_next_market_open as _next_market_open, resolve_f
 from core.rotation_hold import is_rotation_buy, check_rotation_hold
 from core.live_broker import create_broker as _create_broker
 from core.live_capital import read_capital_file, check_capital_injections as _check_capital_injections, execute_keep_wait_on_profit_roll as _execute_keep_wait_on_profit_roll
-STRATEGY_FUNCS = {'vwap': vwap_deviation_strategy, 'ma_cross': ma_cross_strategy, 'bollinger': bollinger_reverse_strategy, 'breakout': breakout_strategy, 'keep_wait': keep_wait_strategy}
+STRATEGY_FUNCS = {'vwap': vwap_deviation_strategy, 'ma_cross': ma_cross_strategy, 'bollinger': bollinger_reverse_strategy, 'breakout': breakout_strategy, 'keep_wait': keep_wait_strategy, 'auto': auto_sensing_strategy}
 try:
   from user_strategies import USER_STRATEGY_MAP
   STRATEGY_FUNCS.update(USER_STRATEGY_MAP)
@@ -772,14 +773,22 @@ def main():
               stock_alloc[symbol]['total_buy_shares'] += position_size
               save_stock_allocation(stock_alloc)
             action_zh = ('買進' if (action == 'BUY') else '賣出')
+            # auto：把「今日型態路由到的底層策略」帶進通知（依 acd 最新 K 線即時判斷，無前瞻）
+            _strat_label = sn.upper()
+            if (sn == 'auto'):
+              try:
+                _routed = route_strategy(acd) if ('close' in acd.columns) else 'ma_cross'
+                _strat_label = f'AUTO(路由→{_routed})'
+              except Exception:
+                _strat_label = 'AUTO'
             notice_msg = f'''
 🔔 交易通知
 股票: {symbol}
 動作: {action_zh}
 價格: {px:.2f}
 股數: {position_size} 股
-策略: {sn.upper()}'''
-            send_trade_alert(symbol, action, px, position_size, sn.upper())
+策略: {_strat_label}'''
+            send_trade_alert(symbol, action, px, position_size, _strat_label)
             send_line_notification(notice_msg)
         except Exception as e:
           print(f'❌ {symbol} 錯誤: {e}')
