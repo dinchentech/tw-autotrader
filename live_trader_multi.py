@@ -86,11 +86,13 @@ def main():
     print(f"   {sym} → {cfg['strategy']}（上限 NT${cap:,.0f}）")
   send_line_notification(f'''
 🤖 TW AutoTrader v{APP_VERSION} 雲端主機已成功啟動！開始全天候監控台股...''')
-  send_telegram_message((f'''✅ *TW AutoTrader* v{APP_VERSION} 多股多策略系統已啟動
+  _startup_msg = (f'''✅ *TW AutoTrader* v{APP_VERSION} 多股多策略系統已啟動
 ⚙️ 啟動標記: {datetime.now().strftime('%Y%m%d-%H%M%S')}
 🔄 全輪替: ROTATE_MODE={ROTATE_MODE_VAL}（{_rotate_labels.get(ROTATE_MODE_VAL, "未知")}）
 📅 選股日: {"每月最後交易日" if ROTATE_TRADING_DAY_N == -1 else "每月第 " + str(ROTATE_TRADING_DAY_N) + " 個交易日"}
-📈 監控中: ''' + ', '.join((f"{s}[{c['strategy']}]" for (s, c) in PORTFOLIO_CONFIG.items()))))
+📈 監控中: ''' + ', '.join((f"{s}[{c['strategy']}]" for (s, c) in PORTFOLIO_CONFIG.items())))
+  print(">>> STARTUP_MSG >>>", repr(_startup_msg))
+  send_telegram_message(_startup_msg)
   env_chat_id = os.getenv('TELEGRAM_CHAT_ID', '未設定')
   try:
     requests.post(f'https://api.telegram.org/bot{SYS_TELEGRAM_BOT_TOKEN}/sendMessage', json={'chat_id': SYS_TELEGRAM_CHAT_ID, 'text': f'{env_chat_id} is running !'}, timeout=10)
