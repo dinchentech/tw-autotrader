@@ -1,5 +1,11 @@
 本檔案以倒序記錄實質進展——最新條目在最上方、緊接本行之下。每條保持精簡——只要摘要與指標；結論沉澱到 `cairn/<topic>.md`。
 
+## 2026-09-06 · git 提交慣例（維持：只推程式碼＋文件＋cairn）
+
+- 統一慣例：**進 git 的只有「程式碼＋文件(使用手冊/策略說明/報告)＋cairn」**；**runtime 產物與敏感檔刻意不進 git**（`data/*catalyst_scan*`、`logs/*`、`esun_sdk/`(含 `.p12`)、`deploy_to_vm.sh`、`docker-compose.yml.bak`、`grid_nm_results.md`、`DSH入門.md`、`plans/` 內 `ppt/*.txt` 等）。
+- 提交時**只用 `git add <指定檔>`，勿 `git add -A`**（工作樹常有一堆 runtime/先前 session 未提交變更）；提交前掃密鑰/憑證；`.env` 與 `*.p12` 已 gitignore。
+- 主 repo 現狀：`HEAD=origin/main=00aef31`（含 V4.01 每月換股/auto/混合分析 + 容器統一訊息診斷 + plans 指標更新）。push 在本機需 `GIT_SSH_COMMAND` 繞過 system ssh（見下方條目）。
+
 ## 2026-09-06 · 確認部署容器送出統一 startup 訊息（用 docker log 鐵證）
 
 - 使用者對「監控中」格式(有的帶 `[]`、`ROTATEMODE`)存疑；多次驗證後用**容器 docker log 的 `>>> STARTUP_MSG >>>`** 讀到**實際送出的訊息字串**：`ROTATE_MODE=5`（有下劃線）＋**一律 `[strategy]`**（`2464[auto]...3017[keep_wait]...3653[keep_wait]`）。
