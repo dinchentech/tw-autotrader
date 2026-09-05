@@ -25,12 +25,15 @@ def readf(p):
 print("═" * 60)
 print("1) 版本單一來源")
 ver = readf("core/version.py")
-chk("core/version.py = V4.00", 'APP_VERSION = "4.00"' in ver)
+_m = re.search(r'APP_VERSION\s*=\s*"([^"]+)"', ver)
+CUR_VER = _m.group(1) if _m else "?"
+chk("core/version.py 有 APP_VERSION 字串", CUR_VER != "?", CUR_VER)
+chk("core/version.py APP_VERSION", 'APP_VERSION = "' + CUR_VER + '"' in ver)
 helpers = readf("core/live_trader_helpers.py")
 chk("live_trader_helpers 用共用版本(import)", "from core.version import APP_VERSION" in helpers)
 chk("live_trader_helpers 無殘留 2.03", 'APP_VERSION = "2.03"' not in helpers)
 manual = readf("使用手冊.md")
-chk("使用手冊 版本=4.00", "**版本**：4.00" in manual or "版本：4.00" in manual)
+chk(f"使用手冊 版本={CUR_VER}", f"**版本**：{CUR_VER}" in manual or f"版本：{CUR_VER}" in manual)
 
 print("═" * 60)
 print("2) auto 策略接線")
