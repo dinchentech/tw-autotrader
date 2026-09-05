@@ -41,11 +41,20 @@ MIN_DRAW_BACK = float(os.getenv("MIN_DRAW_BACK", "30"))  # 股災防護：選股
 MDB_UNLIMITED = os.getenv("MDB_UNLIMITED", "0") == "1"   # 1=無限延長(>門檻就一直續抱)；0=最多延長一輪
 STRAT_MODE = os.getenv("STRAT_MODE", "group")            # group=策略綁組別；form=依個股型態自適應(四種開放)
 SWAP_MODE = os.getenv("SWAP_MODE", "full")               # full=每月掉出前N就賣(現狀)；addonly=只依訊號出場、不強賣仍持的(C)
+# ── 人工降溫（過熱過濾，2026-09-06 新增）──────────────────
+OVERHEAT = os.getenv("OVERHEAT", "1") == "1"             # 1=啟用過熱過濾(近52週高/YTD/高PE)；0=關(對照用)
+OH_MAX_FROM_HIGH = float(os.getenv("MAX_PCT_FROM_HIGH", "7"))  # 距52週高點≤此%＝貼近52週高
+OH_MAX_YTD = float(os.getenv("MAX_YTD_GAIN", "100"))          # YTD漲幅>此%＝過大
+OH_MAX_PER = float(os.getenv("MAX_PER", "45"))                # 本益比>此值＝明顯偏高
+OH_MIN_COUNT = max(1, min(3, int(os.getenv("MIN_OVERHEAT", "2"))))  # 1=任一 / 2=≥2(預設) / 3=三項全中『且』
+OH_USE_PER = os.getenv("OVERHEAT_USE_PER", "1") == "1"    # 1=用FinMind P/E(慢/限流)；0=僅價量(近52週高+YTD)
+MEGA_N = int(os.getenv("MEGA_N", "20"))                   # 權值股動能組：取當時市值前 N 大(權值股)範圍
 
 GROUPS = {
     "high_profit": {"label": "高獲利(高風險)", "strats": ["ma_cross", "breakout"]},
     "normal":      {"label": "正常",          "strats": ["bollinger", "ma_cross", "vwap", "breakout"]},
     "stable":      {"label": "高穩定(低風險)", "strats": ["bollinger", "vwap"]},
+    "megacap":     {"label": "權值股動能(補全輪替缺)", "strats": ["ma_cross", "breakout"]},
 }
 
 STRAT_FUNCS = {
@@ -164,6 +173,74 @@ def inst_ok(sid, sel_date):
 _INST_NET_CACHE = {}
 
 
+# ── 人工降溫（過熱過濾）helper ────────────────────────────
+_OH_PER_CACHE = {}
+_OH_DL = None
+
+
+def _oh_dl():
+    global _OH_DL
+    if _OH_DL is None:
+        from FinMind.data import DataLoader
+        _OH_DL = DataLoader()
+    return _OH_DL
+
+
+def _oh_get_per(sid, sel_date):
+    """FinMind TaiwanStockPER → 最近一筆 PER(≤sel_date)，快取；失敗回 None。"""
+    key = (sid, sel_date.strftime("%Y-%m"))
+    if key in _OH_PER_CACHE:
+        return _OH_PER_CACHE[key]
+    per = None
+    if OH_USE_PER:
+        try:
+            dl = _oh_dl()
+            end = pd.Timestamp(sel_date).strftime("%Y-%m-%d")
+            start = (pd.Timestamp(sel_date) - pd.Timedelta(days=45)).strftime("%Y-%m-%d")
+            d = dl.taiwan_stock_per_pbr(stock_id=sid, start_date=start, end_date=end)
+            if d is not None and len(d):
+                d = d.copy(); d["date"] = pd.to_datetime(d["date"])
+                d = d[d["date"] <= pd.Timestamp(sel_date)].sort_values("date")
+                per = float(d.iloc[-1]["PER"]) if len(d) else None
+        except Exception:
+            per = None
+    _OH_PER_CACHE[key] = per
+    return per
+
+
+def overheat_flags(sid, sel_date):
+    """過熱旗標（只算 ≤ sel_date，無前瞻）：貼近52週高 / YTD過大 / 高本益比。"""
+    if not OVERHEAT:
+        return None
+    df = data.get(sid)
+    if df is None:
+        return None
+    sd = snap(df, sel_date)
+    if sd is None or sd not in df.index:
+        return None
+    idx = df.index.get_loc(sd)
+    cp = float(df.loc[sd, "close"])
+    if cp <= 0:
+        return None
+    win = df.iloc[max(0, idx - 251):idx + 1]
+    hi = float(win["high"].max())
+    pct_from_high = (hi - cp) / hi * 100 if hi > 0 else 0.0
+    near_high = (hi > 0 and cp >= hi * (1 - OH_MAX_FROM_HIGH / 100.0))
+    ys = df[df.index <= pd.Timestamp(str(sd.year) + "-01-01")]
+    ytd = (cp / float(ys.iloc[-1]["close"]) - 1) if len(ys) and float(ys.iloc[-1]["close"]) > 0 else 0.0
+    huge_ytd = ytd > OH_MAX_YTD / 100.0
+    per = _oh_get_per(sid, sd) if (near_high or huge_ytd) else None
+    high_pe = per is not None and per > OH_MAX_PER
+    count = int(near_high) + int(huge_ytd) + int(high_pe)
+    return {"sid": sid, "near_high": near_high, "huge_ytd": huge_ytd, "high_pe": high_pe,
+            "count": count, "overheated": count >= OH_MIN_COUNT}
+
+
+def overheated(sid, sel_date):
+    f = overheat_flags(sid, sel_date)
+    return bool(f and f["overheated"])
+
+
 # ── 三組選股規則 ─────────────────────────────────────────
 def pick_high_profit(pool, sel_date):
     cands = []
@@ -183,6 +260,8 @@ def pick_high_profit(pool, sel_date):
             continue
         if not inst_ok(sid, sel_date):
             continue
+        if overheated(sid, sel_date):   # 人工降溫：過熱 → 剔除
+            continue
         cands.append((sid, r))
     cands.sort(key=lambda x: -x[1])
     return [s for s, _ in cands[:TOP_N]]
@@ -201,6 +280,8 @@ def pick_normal(pool, sel_date):
             continue
         s = ssg.score_stock(sid, df, sd, dict(ssg.DEFAULT_PARAMS))
         if s is None:
+            continue
+        if overheated(sid, sel_date):   # 人工降溫：過熱 → 剔除
             continue
         scored.append(s)
     scored.sort(key=lambda x: -x["total"])
@@ -230,7 +311,35 @@ def pick_stable(pool, sel_date):
     return [s for s, _ in cands[:TOP_N]]
 
 
-PICKERS = {"high_profit": pick_high_profit, "normal": pick_normal, "stable": pick_stable}
+def pick_megacap_momentum(pool, sel_date):
+    """權值股動能：從「當時市值前 MEGA_N 大」(權值股)挑動能最強，補全輪替未顧及的權值年(例2024)。"""
+    sub = pool[:MEGA_N]
+    cands = []
+    for sid in sub:
+        df = data.get(sid)
+        if df is None:
+            continue
+        sd = snap(df, sel_date)
+        if sd is None or sd not in df.index:
+            continue
+        cp = float(df.loc[sd, "close"])
+        if cp < MIN_PRICE:
+            continue
+        r = trailing_ret(df, sd, MOM_DAYS)
+        mp = ma_pos(df, sd, 20)
+        if r is None or mp is None or mp < 0:
+            continue
+        if not inst_ok(sid, sel_date):
+            continue
+        if overheated(sid, sel_date):
+            continue
+        cands.append((sid, r))
+    cands.sort(key=lambda x: -x[1])
+    return [s for s, _ in cands[:TOP_N]]
+
+
+PICKERS = {"high_profit": pick_high_profit, "normal": pick_normal, "stable": pick_stable,
+           "megacap": pick_megacap_momentum}
 
 
 # ── 訊號快取（全期一次算，rolling 皆回看歷史 → 無未來函數）──
@@ -481,6 +590,8 @@ def main():
     out = {"start": START, "end": END, "initial": INITIAL, "pool_n": POOL_N, "top_n": TOP_N,
            "momentum_days": MOM_DAYS, "inst_confirm": INST_CONFIRM, "inst_days": INST_DAYS,
            "min_draw_back": MIN_DRAW_BACK, "strat_mode": STRAT_MODE, "swap_mode": SWAP_MODE,
+           "overheat": OVERHEAT, "oh_max_from_high": OH_MAX_FROM_HIGH, "oh_max_ytd": OH_MAX_YTD,
+           "oh_max_per": OH_MAX_PER, "oh_min_count": OH_MIN_COUNT, "oh_use_per": OH_USE_PER,
            "groups": results,
            "benchmark_0050": {"final_value": round(bench.iloc[-1]), "total_return": round(b_total, 4),
                               "annualized": round(b_ann, 4), "sharpe": round(bp.get("sharpe", float("nan")), 2),
